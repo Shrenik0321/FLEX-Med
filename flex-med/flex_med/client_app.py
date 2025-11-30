@@ -7,8 +7,8 @@ import numpy as np
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
 from flex_med.task import (
-    get_resnet,     
-    get_mobilenet,
+    get_resnet,   
+    get_mobilenet,   
     load_private_dataset,
     load_public_dataset,
     get_public_logits,
@@ -17,74 +17,76 @@ from flex_med.task import (
     test as test_fn
 )
 
-# Flower ClientApp
 app = ClientApp()
 
 def get_model_path(partition_id):
-    """Get unique save path for each client's model."""
     return f"model_client_{partition_id}.pt"
+
+def load_model_for_client(partition_id):
+    """
+    Selects the architecture based on partition ID.
+    Even IDs -> ResNet
+    Odd IDs  -> MobileNet
+    """
+    if partition_id % 2 == 0:
+        print(f"[Client {partition_id}] Initializing ResNet-18")
+        return get_resnet()
+    else:
+        print(f"[Client {partition_id}] Initializing MobileNetV2")
+        return get_mobilenet()
 
 @app.train()
 def train(msg: Message, context: Context):
-    """Train the model on local data."""
-
     partition_id = context.node_config["partition-id"]
     num_partitions = context.node_config["num-partitions"]
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    model = Net()
+    # 1. Instantiate the specific model for this client
+    model = load_model_for_client(partition_id)
+    
     model_path = get_model_path(partition_id)
 
     if os.path.exists(model_path):
-        model.load_state_dict(torch.load(model_path))
-        print(f"[Client {partition_id}] Loaded model from: {model_path}")
+        # We must map location to device to avoid GPU/CPU mismatch on load
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        print(f"[Client {partition_id}] Loaded saved model state.")
     else:
-        print(f"[Client {partition_id}] Warning: No saved model. Using random weights.")
+        print(f"[Client {partition_id}] No saved model. Starting fresh.")
 
     model.to(device)
     distill_loss = 0.0
 
-    # Knowledge distillation
+    # 2. Knowledge Distillation (FedMD Core)
     if "arrays" in msg.content and msg.content["arrays"]:
         try:
-            # Extract consensus logits from server
             consensus_data = msg.content["arrays"]
-            consensus_logits = consensus_data[0]  # List format
+            consensus_logits = consensus_data[0]
             
-            # Check if consensus is non-zero (skip Round 1 which has zero consensus)
+            # Only distill if consensus is not all zeros (Round > 1)
             if np.any(consensus_logits != 0):
-                print(f"[Client {partition_id}] Consensus received! Starting distillation...")
-                
-                # Load public dataset for distillation
+                print(f"[Client {partition_id}] Consensus received. Distilling...")
                 public_loader = load_public_dataset(batch_size=64)
                 
-                # Distill consensus knowledge into local model
                 distill_loss = distill_knowledge(
                     model=model,
                     public_loader=public_loader,
                     consensus_logits=consensus_logits,
                     device=device,
-                    epochs=3,        # Distillation epochs
-                    lr=0.001,        # Distillation learning rate
-                    temperature=3.0  # Temperature for soft targets
+                    epochs=1,        # Keep epochs low for demo
+                    lr=0.001,
+                    temperature=2.0 
                 )
-                
-                print(f"[Client {partition_id}] ✓ Distillation complete. Loss: {distill_loss:.4f}")
-                
-                # Save model after distillation
-                torch.save(model.state_dict(), model_path)
+                print(f"[Client {partition_id}] Distillation Done. Loss: {distill_loss:.4f}")
             else:
-                print(f"[Client {partition_id}] Zero consensus (Round 1). Skipping distillation.")
-        
+                print(f"[Client {partition_id}] Round 1: Skipping distillation.")
         except Exception as e:
-            print(f"[Client {partition_id}] Error during distillation: {e}")
+            print(f"[Client {partition_id}] Distillation Error: {e}")
 
-    print(f"[Client {partition_id}] Starting private training...")
-
+    # 3. Private Training
+    print(f"[Client {partition_id}] Training on private data...")
     trainloader, _ = load_private_dataset(partition_id, num_partitions)
-
+    
     start_time = time.time()
-
     train_loss = train_fn(
         model=model,
         trainloader=trainloader,
@@ -92,65 +94,44 @@ def train(msg: Message, context: Context):
         lr=msg.content["config"]["lr"],
         device=device
     )
-    
     training_time = time.time() - start_time
 
-    # Save model after private training
+    # Save model state
     torch.save(model.state_dict(), model_path)
 
-    # Generate Logits - Public Dataset
-
+    # 4. Generate Logits on Public Dataset to send back
     public_loader = load_public_dataset(batch_size=64)
     public_logits = get_public_logits(model, public_loader, device)
 
     logits_record = ArrayRecord([public_logits])
-
     metrics = {
         "train_loss": train_loss,
         "distill_loss": distill_loss,
         "num-examples": len(trainloader.dataset),
         "training_time": training_time
     }
-    metric_record = MetricRecord(metrics)
-    content = RecordDict({"arrays": logits_record, "metrics": metric_record})
-    return Message(content=content, reply_to=msg)
+    
+    return Message(content=RecordDict({"arrays": logits_record, "metrics": MetricRecord(metrics)}), reply_to=msg)
 
 
 @app.evaluate()
 def evaluate(msg: Message, context: Context):
-    """Evaluate the model on local data."""
-
+    partition_id = context.node_config["partition-id"]
+    num_partitions = context.node_config["num-partitions"]
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    model = Net()
+    # Instantiate correct architecture
+    model = load_model_for_client(partition_id)
+    
     model_path = get_model_path(partition_id)
     if os.path.exists(model_path):
-        model.load_state_dict(torch.load(model_path))
-        print(f"[Client {partition_id}] Loaded model from: {model_path}")
-    else:
-        print(f"[Client {partition_id}] Warning: No saved model. Using random weights.")
+        model.load_state_dict(torch.load(model_path, map_location=device))
     
     model.to(device)
 
-    # Load the data
-    partition_id = context.node_config["partition-id"]
-    num_partitions = context.node_config["num-partitions"]
     _, valloader = load_private_dataset(partition_id, num_partitions)
 
-    # Call the evaluation function
-    eval_loss, eval_acc = test_fn(
-        model,
-        valloader,
-        device,
-    )
+    eval_loss, eval_acc = test_fn(model, valloader, device)
 
-    # Construct and return reply Message
-    metrics = {
-        "eval_loss": eval_loss,
-        "eval_acc": eval_acc,
-        "num-examples": len(valloader.dataset),
-    }
-
-    metric_record = MetricRecord(metrics)
-    content = RecordDict({"metrics": metric_record})
-    return Message(content=content, reply_to=msg)
+    metrics = {"eval_loss": eval_loss, "eval_acc": eval_acc, "num-examples": len(valloader.dataset)}
+    return Message(content=RecordDict({"metrics": MetricRecord(metrics)}), reply_to=msg)
