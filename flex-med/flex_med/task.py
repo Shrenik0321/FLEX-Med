@@ -40,25 +40,44 @@ def hf_apply_transform(batch, transform=PUBLIC_TRANSFORM):
     batch["img"] = [transform(img) for img in batch["img"]]
     return batch
 
-class Net(nn.Module):
-    """Model (simple CNN adapted from 'PyTorch: A 60 Minute Blitz')"""
+# <------------------------------------------ MODEL DEFINITIONS ------------------------------------------>
 
-    def __init__(self):
-        super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(3, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
+def get_resnet():
+    """
+    Returns a ResNet-18 modified for CIFAR-10 (32x32 images).
+    """
+    # Load standard ResNet18, not pretrained (we train from scratch or distill)
+    model = models.resnet18(weights=None)
+    
+    # 1. Modify the first convolution to handle 32x32 images
+    # Original: kernel_size=7, stride=2, padding=3 (meant for 224x224)
+    # Modified: kernel_size=3, stride=1, padding=1
+    model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
+    
+    # 2. Remove the first MaxPool layer to preserve spatial dimensions
+    model.maxpool = nn.Identity()
+    
+    # 3. Modify the final fully connected layer for 10 classes
+    model.fc = nn.Linear(model.fc.in_features, 10)
+    
+    return model
 
-    def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 16 * 5 * 5)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return self.fc3(x)
+def get_mobilenet():
+    """
+    Returns a MobileNetV2 modified for CIFAR-10.
+    """
+    model = models.mobilenet_v2(weights=None)
+    
+    # 1. Modify the first convolution layer
+    # Access the first layer of the features block
+    # Original stride is usually 2, we change to 1 for small images
+    model.features[0][0] = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=False)
+    
+    # 2. Modify the classifier
+    # MobileNetV2 classifier is a Sequential block, the last layer is Linear
+    model.classifier[1] = nn.Linear(model.classifier[1].in_features, 10)
+    
+    return model
 
 # <------------------------------------------ PUBLIC (ANCHOR) DATASET LOADER ------------------------------------------>
 

@@ -7,7 +7,8 @@ import numpy as np
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
 from flex_med.task import (
-    Net,
+    get_resnet,     
+    get_mobilenet,
     load_private_dataset,
     load_public_dataset,
     get_public_logits,

@@ -1,11 +1,10 @@
 """flex-med: A Flower / PyTorch app."""
 
-import torch
 import numpy as np
 from flwr.app import ArrayRecord, ConfigRecord, Context
 from flwr.serverapp import ServerApp
 from flwr.server import Grid
-from flex_med.task import FedMDStrategy, load_public_dataset, Net, get_public_logits
+from flex_med.task import FedMDStrategy, load_public_dataset
 
 # Create ServerApp
 app = ServerApp()
@@ -18,24 +17,34 @@ def main(grid: Grid, context: Context) -> None:
     num_rounds: int = context.run_config["num-server-rounds"]
     lr: float = context.run_config["lr"]
 
-    # Initialise consensus
+    # <--- DECOUPLING LOGIC STARTS HERE --->
+    
+    # 1. Load just the data loader to get the dataset size
+    # We do NOT load any model here.
     public_loader = load_public_dataset(batch_size=64)
     
-    dummy_model = Net()
-    device = torch.device("cpu")
+    # 2. Determine dimensions mathematically
+    # Rows = Number of samples in the public dataset
+    num_samples = len(public_loader.dataset)
     
-    # Generate logits to get shape
-    initial_logits_np = get_public_logits(dummy_model, public_loader, device)
+    # Columns = Number of classes (CIFAR-10 has 10 classes)
+    # You could also put this in pyproject.toml/context.run_config
+    num_classes = 10 
     
-    # Initialize with zeros (Round 1 will skip distillation)
-    zero_consensus = np.zeros_like(initial_logits_np)
+    print(f"[Server] Initializing consensus for {num_samples} samples and {num_classes} classes.")
+
+    # 3. Create the zero consensus matrix directly
+    # Shape: (5000, 10) if using the subset defined in task.py
+    zero_consensus = np.zeros((num_samples, num_classes), dtype=np.float32)
     
-    # Pack initial consensus (using list format)
+    # <--- DECOUPLING LOGIC ENDS HERE --->
+
+    # Pack initial consensus
     initial_arrays = ArrayRecord([zero_consensus])
 
     strategy = FedMDStrategy()
 
-    # Start strategy, run FedAvg for `num_rounds`
+    # Start strategy
     result = strategy.start(
         grid=grid,
         initial_arrays=initial_arrays,
@@ -43,8 +52,10 @@ def main(grid: Grid, context: Context) -> None:
         num_rounds=num_rounds,
     )
 
-    # Save final model to disk
-    print("\nSaving final model to disk...")
-    print("FedMD SERVER COMPLETED")
-    state_dict = result.arrays.to_torch_state_dict()
-    torch.save(state_dict, "final_model.pt")
+    # Save final result (Consensus Logits) to disk
+    # Note: We save the *logits*, not a model, because the server has no model.
+    print("\n[Server] FedMD Simulation Complete.")
+    print("[Server] Saving final consensus logits to 'final_consensus.npy'...")
+    
+    final_logits = result.arrays[0] # Extract numpy array
+    np.save("final_consensus.npy", final_logits)
