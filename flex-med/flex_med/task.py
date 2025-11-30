@@ -10,11 +10,9 @@ from torchvision.transforms import Compose, ToTensor, Normalize
 from flwr_datasets import FederatedDataset
 from flwr_datasets.partitioner import IidPartitioner
 from datasets import load_dataset
-from typing import List, Tuple, Optional, Iterable
+from typing import Tuple, Optional, Iterable
 import uuid
 import time
-
-# Flower imports
 from flwr.common import (
     Message,
     Metadata,
@@ -25,94 +23,229 @@ from flwr.common import (
 from flwr.server import Grid
 from flwr.serverapp.strategy import Strategy
 
-# class Net(nn.Module):
-#     """Model (simple CNN adapted from 'PyTorch: A 60 Minute Blitz')"""
+# <------------------------------------------ DATA TRANSFORMS ------------------------------------------>
 
-#     def __init__(self):
-#         super(Net, self).__init__()
-#         self.conv1 = nn.Conv2d(3, 6, 5)
-#         self.pool = nn.MaxPool2d(2, 2)
-#         self.conv2 = nn.Conv2d(6, 16, 5)
-#         self.fc1 = nn.Linear(16 * 5 * 5, 120)
-#         self.fc2 = nn.Linear(120, 84)
-#         self.fc3 = nn.Linear(84, 10)
+PUBLIC_TRANSFORM = Compose([
+    ToTensor(),
+    Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+])
 
-#     def forward(self, x):
-#         x = self.pool(F.relu(self.conv1(x)))
-#         x = self.pool(F.relu(self.conv2(x)))
-#         x = x.view(-1, 16 * 5 * 5)
-#         x = F.relu(self.fc1(x))
-#         x = F.relu(self.fc2(x))
-#         return self.fc3(x)
+CLIENT_TRANSFORM = Compose([
+    ToTensor(),
+    Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+])
 
+def hf_apply_transform(batch, transform=PUBLIC_TRANSFORM):
+    """Apply transform to HuggingFace dataset batch."""
+    batch["img"] = [transform(img) for img in batch["img"]]
+    return batch
 
-# fds = None  # Cache FederatedDataset
+class Net(nn.Module):
+    """Model (simple CNN adapted from 'PyTorch: A 60 Minute Blitz')"""
 
-# pytorch_transforms = Compose([ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    def __init__(self):
+        super(Net, self).__init__()
+        self.conv1 = nn.Conv2d(3, 6, 5)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.fc1 = nn.Linear(16 * 5 * 5, 120)
+        self.fc2 = nn.Linear(120, 84)
+        self.fc3 = nn.Linear(84, 10)
 
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = x.view(-1, 16 * 5 * 5)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        return self.fc3(x)
 
-# def apply_transforms(batch):
-#     """Apply transforms to the partition from FederatedDataset."""
-#     batch["img"] = [pytorch_transforms(img) for img in batch["img"]]
-#     return batch
+# <------------------------------------------ PUBLIC (ANCHOR) DATASET LOADER ------------------------------------------>
 
+def load_public_dataset(batch_size=64):
+    """
+    Loads the shared CIFAR-10 public dataset (anchor dataset).
+    Used for generating logits and consensus in FedMD.
+    """
+    ds = load_dataset("cifar10", split="train")
+    ds = ds.with_transform(lambda batch: hf_apply_transform(batch, PUBLIC_TRANSFORM))
+    loader = DataLoader(ds, batch_size=batch_size, shuffle=False)
+    return loader
+    
+# <------------------------------------------ PRIVATE DATASET LOADING FOR CLIENTS ------------------------------------------>
+_fds_cache = None
 
-# def load_data(partition_id: int, num_partitions: int):
-#     """Load partition CIFAR10 data."""
-#     # Only initialize `FederatedDataset` once
-#     global fds
-#     if fds is None:
-#         partitioner = IidPartitioner(num_partitions=num_partitions)
-#         fds = FederatedDataset(
-#             dataset="uoft-cs/cifar10",
-#             partitioners={"train": partitioner},
-#         )
-#     partition = fds.load_partition(partition_id)
-#     # Divide data on each node: 80% train, 20% test
-#     partition_train_test = partition.train_test_split(test_size=0.2, seed=42)
-#     # Construct dataloaders
-#     partition_train_test = partition_train_test.with_transform(apply_transforms)
-#     trainloader = DataLoader(partition_train_test["train"], batch_size=32, shuffle=True)
-#     testloader = DataLoader(partition_train_test["test"], batch_size=32)
-#     return trainloader, testloader
+def _apply_partition_transform(batch):
+    """Apply client-specific transform to private data."""
+    batch["img"] = [CLIENT_TRANSFORM(img) for img in batch["img"]]
+    return batch
 
+def load_private_dataset(partition_id: int, num_partitions: int, batch_size=32):
+    """
+    Loads a private CIFAR-10 partition for a specific client.
+    Different partition_id => different private dataset (simulates data heterogeneity).
+    """
+    global _fds_cache
+    
+    if _fds_cache is None:
+        partitioner = IidPartitioner(num_partitions=num_partitions)
+        _fds_cache = FederatedDataset(
+            dataset="uoft-cs/cifar10",
+            partitioners={"train": partitioner},
+        )
+    
+    partition = _fds_cache.load_partition(partition_id)
+    split = partition.train_test_split(test_size=0.2, seed=42)
+    split = split.with_transform(_apply_partition_transform)
+    
+    trainloader = DataLoader(split["train"], batch_size=batch_size, shuffle=True)
+    testloader = DataLoader(split["test"], batch_size=batch_size, shuffle=False)
+    
+    return trainloader, testloader
 
-# def train(net, trainloader, epochs, lr, device):
-#     """Train the model on the training set."""
-#     net.to(device)  # move model to GPU if available
-#     criterion = torch.nn.CrossEntropyLoss().to(device)
-#     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
-#     net.train()
-#     running_loss = 0.0
-#     for _ in range(epochs):
-#         for batch in trainloader:
-#             images = batch["img"].to(device)
-#             labels = batch["label"].to(device)
-#             optimizer.zero_grad()
-#             loss = criterion(net(images), labels)
-#             loss.backward()
-#             optimizer.step()
-#             running_loss += loss.item()
-#     avg_trainloss = running_loss / len(trainloader)
-#     return avg_trainloss
+# <------------------------------------------ DEFINE MODEL TRAINING ------------------------------------------>
 
+def train(model, trainloader, epochs, lr, device):
+    """Train model on private data (standard supervised learning)."""
+    model.to(device)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    
+    model.train()
+    total_loss = 0.0
+    
+    for _ in range(epochs):
+        for batch in trainloader:
+            images = batch["img"].to(device)
+            labels = batch["label"].to(device)
+            
+            optimizer.zero_grad()
+            loss = criterion(model(images), labels)
+            loss.backward()
+            optimizer.step()
+            
+            total_loss += loss.item()
+    
+    avg_loss = total_loss / (len(trainloader) * epochs)
+    return avg_loss
 
-# def test(net, testloader, device):
-#     """Validate the model on the test set."""
-#     net.to(device)
-#     criterion = torch.nn.CrossEntropyLoss()
-#     correct, loss = 0, 0.0
-#     with torch.no_grad():
-#         for batch in testloader:
-#             images = batch["img"].to(device)
-#             labels = batch["label"].to(device)
-#             outputs = net(images)
-#             loss += criterion(outputs, labels).item()
-#             correct += (torch.max(outputs.data, 1)[1] == labels).sum().item()
-#     accuracy = correct / len(testloader.dataset)
-#     loss = loss / len(testloader)
-#     return loss, accuracy
+# <------------------------------------------ DEFINE MODEL TESTING ------------------------------------------>
 
+def test(model, testloader, device):
+    """Evaluate model on validation data."""
+    model.to(device)
+    criterion = nn.CrossEntropyLoss()
+    
+    correct, total, total_loss = 0, 0, 0.0
+    
+    model.eval()
+    with torch.no_grad():
+        for batch in testloader:
+            images = batch["img"].to(device)
+            labels = batch["label"].to(device)
+            
+            outputs = model(images)
+            total_loss += criterion(outputs, labels).item()
+            
+            preds = outputs.argmax(dim=1)
+            correct += (preds == labels).sum().item()
+            total += labels.size(0)
+    
+    accuracy = correct / total if total > 0 else 0.0
+    loss = total_loss / len(testloader) if len(testloader) > 0 else 0.0
+        
+    return loss, accuracy
+
+# <------------------------------------------ STRATEGY HELPERS ------------------------------------------>
+
+def distill_knowledge(model, public_loader,consensus_logits,device, epochs, lr, temperature):
+    """
+    Distill consensus knowledge into the local model.
+    
+    This is the CORE of FedMD: instead of averaging weights,
+    we teach each model to mimic the consensus predictions.
+    
+    Args:
+        model: Local client model
+        public_loader: DataLoader for public dataset
+        consensus_logits: Aggregated logits from server (numpy array)
+        device: torch device (CPU or CUDA)
+        epochs: Number of distillation epochs
+        lr: Learning rate for distillation
+        temperature: Temperature for softmax (higher = softer targets)
+    
+    Returns:
+        Average distillation loss
+    """
+
+    model.to(device) # Move model to device
+    model.train() # Set model to training mode
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr) # Initialize optimizer - Used for the manipulation of model weights
+
+    # Convert consensus to tensor
+    consensus_tensor = torch.from_numpy(consensus_logits).float()
+
+    total_loss = 0.0
+    idx = 0
+
+    # Distillation Loop
+    for epoch in range(epochs):
+
+        # Sends the public dataset to the model
+        for batch in public_loader:
+            images = batch["img"].to(device)
+            batch_size = images.size(0)
+            
+            # Get consensus soft targets for this batch
+            batch_consensus = consensus_tensor[idx:idx+batch_size].to(device)
+            
+            # Forward pass
+            student_logits = model(images) # Model outputs its own logits for these public images
+            
+            # KL Divergence Loss (distillation loss)
+            # This teaches the model to match the consensus distribution
+            # The teacher gives soft probabilities and the student tried to match them
+
+            loss = F.kl_div(
+                F.log_softmax(student_logits / temperature, dim=1),
+                F.softmax(batch_consensus / temperature, dim=1),
+                reduction='batchmean'
+            ) * (temperature ** 2)
+            
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            
+            total_loss += loss.item()
+            idx += batch_size
+        
+        idx = 0  # Reset for next epoch
+
+    avg_loss = total_loss / (len(public_loader) * epochs)
+    return avg_loss
+
+def get_public_logits(model, public_loader, device):
+    """
+    Generate logits on the public dataset.
+    This is what clients send to the server (NOT model weights).
+    """
+    if public_loader is None:
+      raise ValueError("public_loader is None. Make sure load_public_dataset(...) returns a DataLoader.")
+
+    model.to(device)
+    model.eval()
+    
+    all_logits = []
+    with torch.no_grad():
+        for batch in public_loader:
+            images = batch["img"].to(device)
+            outputs = model(images)
+            all_logits.append(outputs.cpu().numpy())
+    
+    return np.concatenate(all_logits)
+
+# <------------------------------------------ DEFINE FEDMD STRATEGY ------------------------------------------>
 
 class FedMDStrategy(Strategy):
     def __init__(self):
@@ -303,103 +436,3 @@ class FedMDStrategy(Strategy):
     def summary(self) -> str:
         """Return strategy summary."""
         return "FLEX-Med: Federated Knowledge Distillation Strategy"
-
-
-def load_public_dataset(batch_size=64):
-    """
-    Loads the shared CIFAR-10 public dataset (anchor dataset).
-    Used for generating logits and consensus in FedMD.
-    """
-    ds = load_dataset("cifar10", split="train")
-    ds = ds.with_transform(lambda batch: hf_apply_transform(batch, PUBLIC_TRANSFORM))
-    loader = DataLoader(ds, batch_size=batch_size, shuffle=False)
-    return loader
-
-def load_CNMC_dataset():
-
-def load_ALLIDB2_dataset():
-
-def get_public_logits(model, public_loader, device):
-    """
-    Generate logits on the public dataset.
-    This is what clients send to the server (NOT model weights).
-    """
-    model.to(device)
-    model.eval()
-    
-    all_logits = []
-    with torch.no_grad():
-        for batch in public_loader:
-            images = batch["img"].to(device)
-            outputs = model(images)
-            all_logits.append(outputs.cpu().numpy())
-    
-    return np.concatenate(all_logits)
-
-
-def distill_knowledge():
-    """
-    Distill consensus knowledge into the local model.
-    
-    This is the CORE of FedMD: instead of averaging weights,
-    we teach each model to mimic the consensus predictions.
-    
-    Args:
-        model: Local client model
-        public_loader: DataLoader for public dataset
-        consensus_logits: Aggregated logits from server (numpy array)
-        device: torch device (CPU or CUDA)
-        epochs: Number of distillation epochs
-        lr: Learning rate for distillation
-        temperature: Temperature for softmax (higher = softer targets)
-    
-    Returns:
-        Average distillation loss
-    """
-
-    model.to(device) # Move model to device
-    model.train() # Set model to training mode
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr) # Initialize optimizer - Used for the manipulation of model weights
-
-    # Convert consensus to tensor
-    consensus_tensor = torch.from_numpy(consensus_logits).float()
-
-    total_loss = 0.0
-    idx = 0
-
-    # Distillation Loop
-    for epoch in range(epochs):
-
-        # Sends the public dataset to the model
-        for batch in public_loader:
-            images = batch["img"].to(device)
-            batch_size = images.size(0)
-            
-            # Get consensus soft targets for this batch
-            batch_consensus = consensus_tensor[idx:idx+batch_size].to(device)
-            
-            # Forward pass
-            student_logits = model(images) # Model outputs its own logits for these public images
-            
-            # KL Divergence Loss (distillation loss)
-            # This teaches the model to match the consensus distribution
-            # The teacher gives soft probabilities and the student tried to match them
-
-            loss = F.kl_div(
-                F.log_softmax(student_logits / temperature, dim=1),
-                F.softmax(batch_consensus / temperature, dim=1),
-                reduction='batchmean'
-            ) * (temperature ** 2)
-            
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            
-            total_loss += loss.item()
-            idx += batch_size
-        
-        idx = 0  # Reset for next epoch
-
-    avg_loss = total_loss / (len(public_loader) * epochs)
-    return avg_loss

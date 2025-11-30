@@ -6,9 +6,7 @@ import time
 import numpy as np
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
-
-# Import helper functions
-from fedmd_impl.task import (
+from flex_med.task import (
     Net,
     load_private_dataset,
     load_public_dataset,
@@ -106,32 +104,6 @@ def train(msg: Message, context: Context):
 
     logits_record = ArrayRecord([public_logits])
 
-    # # Load the model and initialize it with the received weights
-    # model = Net()
-    # model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
-    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    # model.to(device)
-
-    # # Load the data
-    # partition_id = context.node_config["partition-id"]
-    # num_partitions = context.node_config["num-partitions"]
-    # trainloader, _ = load_data(partition_id, num_partitions)
-
-    # # Call the training function
-    # train_loss = train_fn(
-    #     model,
-    #     trainloader,
-    #     context.run_config["local-epochs"],
-    #     msg.content["config"]["lr"],
-    #     device,
-    # )
-
-    # # Construct and return reply Message
-    # model_record = ArrayRecord(model.state_dict())
-    # metrics = {
-    #     "train_loss": train_loss,
-    #     "num-examples": len(trainloader.dataset),
-    # }
     metrics = {
         "train_loss": train_loss,
         "distill_loss": distill_loss,
@@ -147,11 +119,7 @@ def train(msg: Message, context: Context):
 def evaluate(msg: Message, context: Context):
     """Evaluate the model on local data."""
 
-    # Load the model and initialize it with the received weights
-    # model = Net()
-    # model.load_state_dict(msg.content["arrays"].to_torch_state_dict())
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    # model.to(device)
 
     model = Net()
     model_path = get_model_path(partition_id)
@@ -166,7 +134,6 @@ def evaluate(msg: Message, context: Context):
     # Load the data
     partition_id = context.node_config["partition-id"]
     num_partitions = context.node_config["num-partitions"]
-    # _, valloader = load_data(partition_id, num_partitions)
     _, valloader = load_private_dataset(partition_id, num_partitions)
 
     # Call the evaluation function

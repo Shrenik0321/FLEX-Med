@@ -5,28 +5,18 @@ import numpy as np
 from flwr.app import ArrayRecord, ConfigRecord, Context
 from flwr.serverapp import ServerApp
 from flwr.server import Grid
-from fedmd_impl.task import FedMD, load_public_dataset, Net, get_public_logits
+from flex_med.task import FedMDStrategy, load_public_dataset, Net, get_public_logits
 
 # Create ServerApp
 app = ServerApp()
-
 
 @app.main()
 def main(grid: Grid, context: Context) -> None:
     """Main entry point for the ServerApp."""
 
     # Read run config
-    # fraction_train: float = context.run_config["fraction-train"]
     num_rounds: int = context.run_config["num-server-rounds"]
     lr: float = context.run_config["lr"]
-    # local_epochs: int = context.run_config.get("local-epochs", 1)
-
-    # # Load global model
-    # global_model = Net()
-    # arrays = ArrayRecord(global_model.state_dict())
-
-    # # Initialize FedAvg strategy
-    # strategy = FedAvg(fraction_train=fraction_train)
 
     # Initialise consensus
     public_loader = load_public_dataset(batch_size=64)
@@ -43,7 +33,7 @@ def main(grid: Grid, context: Context) -> None:
     # Pack initial consensus (using list format)
     initial_arrays = ArrayRecord([zero_consensus])
 
-    strategy = FedMD()
+    strategy = FedMDStrategy()
 
     # Start strategy, run FedAvg for `num_rounds`
     result = strategy.start(
