@@ -364,7 +364,7 @@ class FedMDStrategy(Strategy):
             
             # Method 1: Direct access (cleaner)
             try:
-                client_logits = client_arrays[0]
+                client_logits = client_arrays["0"].numpy()
                 logits_list.append(client_logits)
             except (KeyError, IndexError):
                 # Method 2: Fallback to manual deserialization

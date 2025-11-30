@@ -60,7 +60,7 @@ def train(msg: Message, context: Context):
     if "arrays" in msg.content and msg.content["arrays"]:
         try:
             consensus_data = msg.content["arrays"]
-            consensus_logits = consensus_data[0]
+            consensus_logits = consensus_data["0"].numpy()
             
             # Only distill if consensus is not all zeros (Round > 1)
             if np.any(consensus_logits != 0):

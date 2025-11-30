@@ -57,5 +57,5 @@ def main(grid: Grid, context: Context) -> None:
     print("\n[Server] FedMD Simulation Complete.")
     print("[Server] Saving final consensus logits to 'final_consensus.npy'...")
     
-    final_logits = result.arrays[0] # Extract numpy array
+    final_logits = result.arrays["0"].numpy() # Extract numpy array
     np.save("final_consensus.npy", final_logits)
