@@ -4,6 +4,7 @@ import torch
 import numpy as np
 import io
 import torch.nn as nn
+from torchvision import models
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, ToTensor, Normalize
