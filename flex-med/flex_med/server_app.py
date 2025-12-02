@@ -1,4 +1,4 @@
-"""flex-med: A Flower / PyTorch app."""
+"""flex-med: Server Application."""
 
 import numpy as np
 from flwr.app import ArrayRecord, ConfigRecord, Context
@@ -20,21 +20,22 @@ def main(grid: Grid, context: Context) -> None:
     # <--- DECOUPLING LOGIC STARTS HERE --->
     
     # 1. Load just the data loader to get the dataset size
-    # We do NOT load any model here.
-    public_loader = load_public_dataset(batch_size=64)
+    # We set batch_size=1 because we only need the total length (len(dataset))
+    # This reads from the /content/fed_data/public_anchor folder we created
+    print("[Server] Loading Public Anchor metadata...")
+    public_loader = load_public_dataset(batch_size=1)
     
     # 2. Determine dimensions mathematically
     # Rows = Number of samples in the public dataset
     num_samples = len(public_loader.dataset)
     
-    # Columns = Number of classes (CIFAR-10 has 10 classes)
-    # You could also put this in pyproject.toml/context.run_config
-    num_classes = 10 
+    # Columns = Number of classes (0: Healthy, 1: ALL)
+    num_classes = 2 
     
     print(f"[Server] Initializing consensus for {num_samples} samples and {num_classes} classes.")
 
     # 3. Create the zero consensus matrix directly
-    # Shape: (5000, 10) if using the subset defined in task.py
+    # Shape: (Total_Public_Images, 2)
     zero_consensus = np.zeros((num_samples, num_classes), dtype=np.float32)
     
     # <--- DECOUPLING LOGIC ENDS HERE --->
@@ -53,9 +54,13 @@ def main(grid: Grid, context: Context) -> None:
     )
 
     # Save final result (Consensus Logits) to disk
-    # Note: We save the *logits*, not a model, because the server has no model.
+    # This file represents the "Universal Knowledge" distilled from all hospitals
     print("\n[Server] FedMD Simulation Complete.")
     print("[Server] Saving final consensus logits to 'final_consensus.npy'...")
     
-    final_logits = result.arrays["0"].numpy() # Extract numpy array
-    np.save("final_consensus.npy", final_logits)
+    try:
+        final_logits = result.arrays["0"].numpy() # Extract numpy array
+        np.save("final_consensus.npy", final_logits)
+        print("[Server] Save successful.")
+    except Exception as e:
+        print(f"[Server] Error saving consensus: {e}")

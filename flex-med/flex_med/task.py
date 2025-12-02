@@ -2,15 +2,12 @@
 
 import torch
 import numpy as np
-import io
+import os
 import torch.nn as nn
-from torchvision import models
+from torchvision import models, datasets, transforms
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, ToTensor, Normalize
-from flwr_datasets import FederatedDataset
-from flwr_datasets.partitioner import IidPartitioner
-from datasets import load_dataset
 from typing import Tuple, Optional, Iterable
 import uuid
 import time
@@ -24,20 +21,40 @@ from flwr.common import (
 from flwr.server import Grid
 from flwr.serverapp.strategy import Strategy
 
+# <------------------------------------------ CONFIGURATION ------------------------------------------>
+
+# Paths to the data created by the stratification script
+DATA_ROOT = "/content/drive/MyDrive/College/Datasets/fed_data"
+PUBLIC_PATH = os.path.join(DATA_ROOT, "public_anchor")
+CLIENT_0_PATH = os.path.join(DATA_ROOT, "client_allidb") # ResNet (ALL-IDB2)
+CLIENT_1_PATH = os.path.join(DATA_ROOT, "client_cnmc")   # MobileNet (CNMC)
+
+# Model Constraints
+NUM_CLASSES = 2   # 0: Hem (Healthy), 1: ALL (Leukemia)
+IMG_SIZE = 128    # Resize all inputs to 128x128 for consistency
+
 # <------------------------------------------ DATA TRANSFORMS ------------------------------------------>
 
-PUBLIC_TRANSFORM = Compose([
+# Standardize inputs: Resize -> Tensor -> ImageNet Normalization
+# We use this for Public Data and Validation
+COMMON_TRANSFORM = Compose([
+    transforms.Resize((IMG_SIZE, IMG_SIZE)),
     ToTensor(),
-    Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+    Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 
-CLIENT_TRANSFORM = Compose([
+# Augmentation for Private Training
+# Helps models learn robust features from small medical datasets
+PRIVATE_TRAIN_TRANSFORM = Compose([
+    transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    transforms.RandomHorizontalFlip(),
+    transforms.RandomRotation(15),
     ToTensor(),
-    Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+    Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 
-def hf_apply_transform(batch, transform=PUBLIC_TRANSFORM):
-    """Apply transform to HuggingFace dataset batch."""
+def hf_apply_transform(batch, transform=COMMON_TRANSFORM):
+    """(Legacy Helper) Not used with ImageFolder, but kept for compatibility if needed."""
     batch["img"] = [transform(img) for img in batch["img"]]
     return batch
 
@@ -45,38 +62,37 @@ def hf_apply_transform(batch, transform=PUBLIC_TRANSFORM):
 
 def get_resnet():
     """
-    Returns a ResNet-18 modified for CIFAR-10 (32x32 images).
+    Returns a ResNet-18 for Binary Classification (ALL vs Healthy).
     """
-    # Load standard ResNet18, not pretrained (we train from scratch or distill)
+    # Load standard ResNet18
     model = models.resnet18(weights=None)
     
-    # 1. Modify the first convolution to handle 32x32 images
-    # Original: kernel_size=7, stride=2, padding=3 (meant for 224x224)
-    # Modified: kernel_size=3, stride=1, padding=1
-    model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-    
-    # 2. Remove the first MaxPool layer to preserve spatial dimensions
-    model.maxpool = nn.Identity()
-    
-    # 3. Modify the final fully connected layer for 10 classes
-    model.fc = nn.Linear(model.fc.in_features, 10)
+    # Reset the final fully connected layer for 2 classes
+    # ResNet18 fc in_features is usually 512
+    model.fc = nn.Linear(model.fc.in_features, NUM_CLASSES)
     
     return model
 
 def get_mobilenet():
     """
-    Returns a MobileNetV2 modified for CIFAR-10.
+    Returns a MobileNetV2 for Binary Classification.
     """
     model = models.mobilenet_v2(weights=None)
     
-    # 1. Modify the first convolution layer
-    # Access the first layer of the features block
-    # Original stride is usually 2, we change to 1 for small images
-    model.features[0][0] = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=False)
+    # MobileNetV2 classifier is a Sequential block. 
+    # Index [1] is the Linear layer.
+    model.classifier[1] = nn.Linear(model.classifier[1].in_features, NUM_CLASSES)
     
-    # 2. Modify the classifier
-    # MobileNetV2 classifier is a Sequential block, the last layer is Linear
-    model.classifier[1] = nn.Linear(model.classifier[1].in_features, 10)
+    return model
+
+def get_densenet():
+    """
+    Returns a DenseNet-121 for Binary Classification.
+    """
+    model = models.densenet121(weights=None)
+    
+    # DenseNet classifier is a single Linear layer
+    model.classifier = nn.Linear(model.classifier.in_features, NUM_CLASSES)
     
     return model
 
@@ -84,66 +100,84 @@ def get_mobilenet():
 
 def load_public_dataset(batch_size=64):
     """
-    Loads the shared CIFAR-10 public dataset (anchor dataset).
+    Loads the Mixed Public Anchor dataset (CNMC + ALL-IDB subset).
     Used for generating logits and consensus in FedMD.
     """
-    ds = load_dataset("cifar10", split="train")
-    ds = ds.with_transform(lambda batch: hf_apply_transform(batch, PUBLIC_TRANSFORM))
-    loader = DataLoader(ds, batch_size=batch_size, shuffle=False)
+    if not os.path.exists(PUBLIC_PATH):
+        raise FileNotFoundError(f"Public data not found at {PUBLIC_PATH}. Run the data setup script first.")
+
+    # ImageFolder automatically uses subfolders 'all' and 'hem' as labels 0 and 1
+    dataset = datasets.ImageFolder(root=PUBLIC_PATH, transform=COMMON_TRANSFORM)
+    
+    # Shuffle=False is CRITICAL for FedMD so all clients see images in the same order
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=2)
     return loader
     
 # <------------------------------------------ PRIVATE DATASET LOADING FOR CLIENTS ------------------------------------------>
-_fds_cache = None
-
-def _apply_partition_transform(batch):
-    """Apply client-specific transform to private data."""
-    batch["img"] = [CLIENT_TRANSFORM(img) for img in batch["img"]]
-    return batch
 
 def load_private_dataset(partition_id: int, num_partitions: int, batch_size=32):
     """
-    Loads a private CIFAR-10 partition for a specific client.
-    Different partition_id => different private dataset (simulates data heterogeneity).
+    Loads private medical data based on the Client ID.
+    
+    ID 0: ALL-IDB2 (ResNet)
+    ID 1: CNMC (MobileNet)
+    ID 2: None (DenseNet Free-Rider)
     """
-    global _fds_cache
+    data_path = None
     
-    if _fds_cache is None:
-        partitioner = IidPartitioner(num_partitions=num_partitions)
-        _fds_cache = FederatedDataset(
-            dataset="uoft-cs/cifar10",
-            partitioners={"train": partitioner},
-        )
+    if partition_id == 0:
+        data_path = CLIENT_0_PATH # ALL-IDB2
+    elif partition_id == 1:
+        data_path = CLIENT_1_PATH # CNMC
+    elif partition_id == 2:
+        # DenseNet (Free Rider) has NO private training data
+        return None, None
+
+    if not os.path.exists(data_path):
+        raise FileNotFoundError(f"Client {partition_id} data not found at {data_path}")
+
+    # Load the Full Dataset from folder
+    full_dataset = datasets.ImageFolder(root=data_path, transform=PRIVATE_TRAIN_TRANSFORM)
     
-    partition = _fds_cache.load_partition(partition_id)
-    split = partition.train_test_split(test_size=0.2, seed=42)
-    split = split.with_transform(_apply_partition_transform)
+    # Create a Train/Test split (e.g., 80% Train, 20% Test)
+    train_size = int(0.8 * len(full_dataset))
+    test_size = len(full_dataset) - train_size
     
-    trainloader = DataLoader(split["train"], batch_size=batch_size, shuffle=True)
-    testloader = DataLoader(split["test"], batch_size=batch_size, shuffle=False)
+    # We use a fixed seed generator for reproducibility of splits
+    generator = torch.Generator().manual_seed(42)
+    train_ds, test_ds = torch.utils.data.random_split(full_dataset, [train_size, test_size], generator=generator)
+    
+    # Note: Ideally, test_ds should use COMMON_TRANSFORM (no augmentation), 
+    # but for simplicity in this script, we use the same transform.
+    
+    trainloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=2)
+    testloader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=2)
     
     return trainloader, testloader
 
 # <------------------------------------------ DEFINE MODEL TRAINING ------------------------------------------>
 
 def train(model, trainloader, epochs, lr, device):
-    """Train model on private data (standard supervised learning)."""
+    """Train model on private data."""
+    if trainloader is None:
+        return 0.0  # Skip training for Free Rider
+        
     model.to(device)
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
     
     model.train()
     total_loss = 0.0
     
     for _ in range(epochs):
-        for batch in trainloader:
-            images = batch["img"].to(device)
-            labels = batch["label"].to(device)
+        for images, labels in trainloader:
+            images = images.to(device)
+            labels = labels.to(device)
             
             optimizer.zero_grad()
             loss = criterion(model(images), labels)
             loss.backward()
             optimizer.step()
-            
             total_loss += loss.item()
     
     avg_loss = total_loss / (len(trainloader) * epochs)
@@ -160,9 +194,9 @@ def test(model, testloader, device):
     
     model.eval()
     with torch.no_grad():
-        for batch in testloader:
-            images = batch["img"].to(device)
-            labels = batch["label"].to(device)
+        for images, labels in testloader:
+            images = images.to(device)
+            labels = labels.to(device)
             
             outputs = model(images)
             total_loss += criterion(outputs, labels).item()
@@ -178,30 +212,14 @@ def test(model, testloader, device):
 
 # <------------------------------------------ STRATEGY HELPERS ------------------------------------------>
 
-def distill_knowledge(model, public_loader,consensus_logits,device, epochs, lr, temperature):
+def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr, temperature):
     """
     Distill consensus knowledge into the local model.
-    
-    This is the CORE of FedMD: instead of averaging weights,
-    we teach each model to mimic the consensus predictions.
-    
-    Args:
-        model: Local client model
-        public_loader: DataLoader for public dataset
-        consensus_logits: Aggregated logits from server (numpy array)
-        device: torch device (CPU or CUDA)
-        epochs: Number of distillation epochs
-        lr: Learning rate for distillation
-        temperature: Temperature for softmax (higher = softer targets)
-    
-    Returns:
-        Average distillation loss
     """
-
     model.to(device) # Move model to device
     model.train() # Set model to training mode
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr) # Initialize optimizer - Used for the manipulation of model weights
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr) 
 
     # Convert consensus to tensor
     consensus_tensor = torch.from_numpy(consensus_logits).float()
@@ -211,22 +229,22 @@ def distill_knowledge(model, public_loader,consensus_logits,device, epochs, lr, 
 
     # Distillation Loop
     for epoch in range(epochs):
-
         # Sends the public dataset to the model
-        for batch in public_loader:
-            images = batch["img"].to(device)
+        for images, _ in public_loader: # Ignore the folder labels, we use Consensus!
+            images = images.to(device)
             batch_size = images.size(0)
             
+            # Safe indexing in case loader drops last incomplete batch
+            if idx + batch_size > len(consensus_tensor):
+                break
+
             # Get consensus soft targets for this batch
             batch_consensus = consensus_tensor[idx:idx+batch_size].to(device)
             
             # Forward pass
-            student_logits = model(images) # Model outputs its own logits for these public images
+            student_logits = model(images) 
             
             # KL Divergence Loss (distillation loss)
-            # This teaches the model to match the consensus distribution
-            # The teacher gives soft probabilities and the student tried to match them
-
             loss = F.kl_div(
                 F.log_softmax(student_logits / temperature, dim=1),
                 F.softmax(batch_consensus / temperature, dim=1),
@@ -248,18 +266,17 @@ def distill_knowledge(model, public_loader,consensus_logits,device, epochs, lr, 
 def get_public_logits(model, public_loader, device):
     """
     Generate logits on the public dataset.
-    This is what clients send to the server (NOT model weights).
     """
     if public_loader is None:
-      raise ValueError("public_loader is None. Make sure load_public_dataset(...) returns a DataLoader.")
+      raise ValueError("public_loader is None.")
 
     model.to(device)
     model.eval()
     
     all_logits = []
     with torch.no_grad():
-        for batch in public_loader:
-            images = batch["img"].to(device)
+        for images, _ in public_loader:
+            images = images.to(device)
             outputs = model(images)
             all_logits.append(outputs.cpu().numpy())
     
@@ -277,20 +294,12 @@ class FedMDStrategy(Strategy):
         results: Iterable[Message],
         **kwargs
     ):
-        """
-        Aggregate evaluation results for ServerApp Strategy.
-
-        Returns:
-            MetricRecord (dict) or None.
-        """
+        """Aggregate evaluation results."""
         results_list = list(results)
 
         if not results_list:
             print(f"[Server] Round {server_round}: No evaluation results")
-            return {
-                "loss": None,
-                "metrics": {}
-            }
+            return {"loss": None, "metrics": {}}
 
         print(f"[Server] Round {server_round}: Aggregating evaluation from {len(results_list)} clients")
 
@@ -298,10 +307,8 @@ class FedMDStrategy(Strategy):
         total_acc = 0.0
         total_examples = 0
 
-        # Aggregate weighted metrics
         for msg in results_list:
             metrics = msg.content.get("metrics", {})
-
             eval_loss = metrics.get("eval_loss", 0.0)
             eval_acc = metrics.get("eval_acc", 0.0)
             num_examples = metrics.get("num-examples", 0)
@@ -310,20 +317,14 @@ class FedMDStrategy(Strategy):
             total_acc += eval_acc * num_examples
             total_examples += num_examples
 
-        # If no examples provided
         if total_examples == 0:
-            return {
-                "loss": None,
-                "metrics": {}
-            }
+            return {"loss": None, "metrics": {}}
 
-        # Compute weighted average
         avg_loss = total_loss / total_examples
         avg_acc = total_acc / total_examples
 
         print(f"[Server] Aggregated Eval - Loss: {avg_loss:.4f}, Acc: {avg_acc:.4f}")
 
-        # This is the required MetricRecord format
         return {
             "loss": avg_loss,
             "metrics": {
@@ -339,18 +340,10 @@ class FedMDStrategy(Strategy):
         results: Iterable[Message],
         **kwargs
     ) -> Tuple[Optional[ArrayRecord], dict]:
-        """
-        Aggregate logits from all clients into consensus logits.
+        """Aggregate logits from all clients into consensus logits."""
         
-        This is the heart of FedMD: instead of averaging weights,
-        we average predictions (logits) on the public dataset.
-        """
-
-        # Convert iterator to list
         results_list = list(results)
-
         print(f"\n[Server] Round {server_round}: Aggregating Logits")
-        print(f"[Server] Received responses from {len(results_list)} clients")
 
         if not results_list:
             print("[Server] Warning: No results to aggregate!")
@@ -361,23 +354,19 @@ class FedMDStrategy(Strategy):
 
         for msg in results_list:
             client_arrays = msg.content["arrays"]
-            
-            # Method 1: Direct access (cleaner)
             try:
+                # Extract logits from ArrayRecord (key "0")
                 client_logits = client_arrays["0"].numpy()
                 logits_list.append(client_logits)
-            except (KeyError, IndexError):
-                # Method 2: Fallback to manual deserialization
-                logits_wrapper = client_arrays["0"]
-                bytes_io = io.BytesIO(logits_wrapper.data)
-                client_logits = np.load(bytes_io, allow_pickle=False)
-                logits_list.append(client_logits)
+            except (KeyError, IndexError) as e:
+                print(f"Error extracting logits: {e}")
         
         # Compute consensus (simple average)
-        consensus_logits = np.mean(logits_list, axis=0)
-        
-        print(f"[Server] Consensus logits shape: {consensus_logits.shape}")
-        print(f"[Server] Consensus created from {len(logits_list)} clients")
+        if len(logits_list) > 0:
+            consensus_logits = np.mean(logits_list, axis=0)
+            print(f"[Server] Consensus logits shape: {consensus_logits.shape}")
+        else:
+            return None, {}
         
         # Pack consensus for next round
         arrays_aggregated = ArrayRecord([consensus_logits])
@@ -385,74 +374,45 @@ class FedMDStrategy(Strategy):
         metrics_aggregated = {
             "consensus_round": server_round,
             "num_clients": len(logits_list),
-            "consensus_mean": float(consensus_logits.mean()),
-            "consensus_std": float(consensus_logits.std())
         }
         
         return arrays_aggregated, metrics_aggregated
 
-    def configure_evaluate(
-        self,
-        server_round: int,
-        arrays: ArrayRecord,
-        config: ConfigRecord,
-        grid: Grid
-    ) -> Iterable[Message]:
-        """Configure evaluation round (optional for FedMD)."""
-        # Skip evaluation for now - clients evaluate locally
+    def configure_evaluate(self, server_round, arrays, config, grid) -> Iterable[Message]:
         return [] 
 
-    def configure_train(
-        self,
-        server_round: int,
-        arrays: ArrayRecord,
-        config: ConfigRecord,
-        grid: Grid
-    ) -> Iterable[Message]:
-        """
-        Configure the next round of federated training.
-        
-        Sends consensus logits to all available clients.
-        Clients will use these for knowledge distillation.
-        """
+    def configure_train(self, server_round, arrays, config, grid) -> Iterable[Message]:
+        """Configure the next round of federated training."""
         print(f"\n{'='*60}")
         print(f"[Server] Round {server_round}: Configuring Training")
         print(f"{'='*60}")
         
-        # Get all available node IDs
         node_ids = list(grid.get_node_ids())
-        print(f"[Server] Available nodes: {node_ids}")
-        
-        # Create messages for each client using grid.create_message()
         messages = []
         for node_id in node_ids:
-          # Package consensus logits and config
-          content = RecordDict({
-              "arrays": arrays,  # Consensus logits from previous round
-              "config": config   # Training configuration
-          })
+            content = RecordDict({
+                "arrays": arrays,  # Consensus logits
+                "config": config   # Training config
+            })
             
-          # Use grid.create_message() which automatically sets run_id and src_node_id
-          msg = Message(
-            metadata=Metadata(
-              run_id=0,                        # <--- FIX: Use 0 for Simulation
-              message_id=str(uuid.uuid4()),    # Generate unique ID
-              src_node_id=0,                   # Sender ID (Server)
-              dst_node_id=node_id,             # Recipient ID (Client)
-              reply_to_message_id="",          # No reply needed
-              group_id=str(server_round),      # Group by round
-              ttl=86400.0,                     # TTL in seconds (1 day)
-              message_type="train",            # Action type
-              created_at=time.time(),          # Action type
-            ),
-            content=content,
-          )
-
-          messages.append(msg)
+            msg = Message(
+                metadata=Metadata(
+                    run_id=0,
+                    message_id=str(uuid.uuid4()),
+                    src_node_id=0,
+                    dst_node_id=node_id,
+                    reply_to_message_id="",
+                    group_id=str(server_round),
+                    ttl=86400.0,
+                    message_type="train",
+                    created_at=time.time(),
+                ),
+                content=content,
+            )
+            messages.append(msg)
         
         print(f"[Server] Sent consensus to {len(messages)} clients")
         return messages
 
     def summary(self) -> str:
-        """Return strategy summary."""
         return "FLEX-Med: Federated Knowledge Distillation Strategy"
