@@ -4,8 +4,8 @@ from supabase import create_client, Client
 # <--- CONFIGURATION --->
 # Replace these with your actual Supabase Project URL and Anon Key
 # You can find these in Supabase Dashboard -> Project Settings -> API
-SUPABASE_URL = "https://xyzcompany.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI..."
+SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+SUPABASE_KEY = os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
 
 def init_supabase() -> Client:
     """Initialize the Supabase client."""
@@ -25,7 +25,7 @@ def get_client_config(supabase: Client, partition_id: int):
         print(f"[DB] Fetching config for Partition ID: {partition_id}...")
         
         # This matches the SQL: SELECT * FROM client_configs WHERE partition_id = X
-        response = supabase.table("client_configs") \
+        response = supabase.table("clients") \
             .select("*") \
             .eq("partition_id", partition_id) \
             .execute()
