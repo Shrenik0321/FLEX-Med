@@ -22,7 +22,7 @@ app = ClientApp()
 
 def get_model_path(partition_id):
     """Unique path for saving each client's model."""
-    return f"model_client_{partition_id}.pt"
+    return f"/content/drive/MyDrive/College/models/model_client_{partition_id}.pt"
 
 def load_model_for_client(partition_id):
     """
