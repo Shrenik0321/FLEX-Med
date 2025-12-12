@@ -59,7 +59,7 @@ export default function ClientDetailsPage({
       setIsSaving(true);
       setSaveMessage(null);
 
-      const response = await fetch(`/api/clients/${client.id}`, {
+      const response = await fetch(`http://localhost:8000/api/clients/${client.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -115,16 +115,13 @@ export default function ClientDetailsPage({
       formData.append("file", selectedImage);
 
       // Send POST request with FormData
-      const response = await fetch(
-        "https://f7e41b172747.ngrok-free.app/inference",
-        {
-          method: "POST",
-          headers: {
-            "ngrok-skip-browser-warning": "true",
-          },
-          body: formData,
-        }
-      );
+      const response = await fetch("http://localhost:8000/predict/upload", {
+        method: "POST",
+        headers: {
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: formData,
+      });
 
       if (!response.ok) {
         const errorText = await response.text();

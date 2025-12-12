@@ -25,7 +25,7 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
     setError(null);
 
     try {
-      const response = await fetch("/api/clients", {
+      const response = await fetch("http://localhost:8000/api/clients", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

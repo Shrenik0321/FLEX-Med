@@ -97,7 +97,7 @@ export default function ClientsListPage({
   useEffect(() => {
     const fetchClients = async () => {
       try {
-        const response = await fetch("/api/clients");
+        const response = await fetch("http://localhost:8000/api/clients");
         if (!response.ok) throw new Error("Failed to fetch");
         const data = await response.json();
         setClients(data);
@@ -124,7 +124,7 @@ export default function ClientsListPage({
 
     setIsDeleting(true);
     try {
-      const response = await fetch(`/api/clients/${deleteModal.clientId}`, {
+      const response = await fetch(`http://localhost:8000/api/clients/${deleteModal.clientId}`, {
         method: "DELETE",
       });
 
