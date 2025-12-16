@@ -8,14 +8,41 @@ export default function FederatedPage() {
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "running" | "error">("idle");
 
+  // Static DB Data to simulate the database fetch
+  const activeClients = [
+    {
+      client_name: "Clinic - A",
+      client_email: "s.shrenikdeep@gmail.com",
+      status: "Training",
+      model_type: "resnet18",
+      id: 0, // Changed to 0 to match Flower's 0-indexed partitions
+    },
+    {
+      client_name: "Clinic - B",
+      client_email: "s.shrenikdeep@gmail.com",
+      status: "Active",
+      model_type: "mobilenet_v2",
+      id: 1,
+    },
+    {
+      client_name: "Clinic - C (Free Rider)",
+      client_email: "freerider@clinic.com",
+      status: "Active",
+      model_type: "densenet121",
+      id: 2,
+    },
+  ];
+
   const handleStart = async () => {
     try {
       setIsStarting(true);
       setStatus("running");
 
-      await fetch("https://0da24409e971.ngrok-free.app/start_fl", {
+      // We pass the activeClients list to the API
+      await fetch("https://426a2dbb35c1.ngrok-free.app/start_fl", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(activeClients),
       });
 
       setLastRun(new Date().toLocaleString());

@@ -42,6 +42,7 @@ export default function ClientDetailsPage({
   const [isRunningInference, setIsRunningInference] = useState(false);
   const [inferenceResult, setInferenceResult] = useState<any>(null);
   const [inferenceError, setInferenceError] = useState<string | null>(null);
+  const [selectedXAITechnique, setSelectedXAITechnique] = useState("LIME");
 
   const tabs = [
     { id: "overview", label: "Overview" },
@@ -59,16 +60,19 @@ export default function ClientDetailsPage({
       setIsSaving(true);
       setSaveMessage(null);
 
-      const response = await fetch(`http://localhost:8000/api/clients/${client.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          client_name: formState.client_name,
-          client_email: formState.client_email,
-          status: formState.status,
-          model_type: formState.model_type,
-        }),
-      });
+      const response = await fetch(
+        `http://localhost:8000/api/clients/${client.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            client_name: formState.client_name,
+            client_email: formState.client_email,
+            status: formState.status,
+            model_type: formState.model_type,
+          }),
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Failed to update client");
@@ -131,6 +135,25 @@ export default function ClientDetailsPage({
       }
 
       const result = await response.json();
+
+      // Mock XAI Data if not present
+      if (!result.xai_analysis) {
+        result.xai_analysis = {
+          LIME: {
+            description:
+              "LIME (Local Interpretable Model-agnostic Explanations) highlights the regions of the image that most contributed to the prediction. Green areas indicate positive influence, while red areas indicate negative influence.",
+            explanation:
+              "The model focused primarily on the central density and the irregular patterns in the upper left quadrant. These features are strong indicators for the predicted class.",
+          },
+          "Grad-CAM": {
+            description:
+              "Grad-CAM (Gradient-weighted Class Activation Mapping) uses the gradients of the target concept to produce a coarse localization map highlighting important regions in the image.",
+            explanation:
+              "The heatmap shows high activation around the suspicious nodule, confirming that the model is looking at the correct pathology rather than background artifacts.",
+          },
+        };
+      }
+
       setInferenceResult(result);
     } catch (error) {
       console.error("Inference error:", error);
@@ -467,19 +490,120 @@ export default function ClientDetailsPage({
               </div>
             </div>
 
-            <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                XAI Heatmap
-              </h2>
-              <div className="bg-gradient-to-r from-blue-300 via-red-400 to-yellow-300 rounded-lg h-48 flex items-center justify-center">
-                <p className="text-white font-medium text-sm bg-black bg-opacity-50 px-4 py-2 rounded">
-                  Coming Soon
-                </p>
+            {/* XAI Section */}
+            {inferenceResult && inferenceResult.xai_analysis && (
+              <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Explainable AI (XAI) Analysis
+                  </h2>
+                  <div className="relative">
+                    <select
+                      value={selectedXAITechnique}
+                      onChange={(e) => setSelectedXAITechnique(e.target.value)}
+                      className="appearance-none bg-white border border-[#E2E8F0] text-gray-700 py-2 px-4 pr-8 rounded-lg leading-tight focus:outline-none focus:bg-white focus:border-[#B80028] text-sm font-medium"
+                    >
+                      <option value="LIME">LIME</option>
+                      <option value="Grad-CAM">Grad-CAM</option>
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                      <svg
+                        className="fill-current h-4 w-4"
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 20 20"
+                      >
+                        <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Visualization */}
+                  <div className="flex flex-col items-center justify-center bg-gray-50 rounded-lg p-4 border border-dashed border-gray-300 min-h-[300px]">
+                    {imagePreview ? (
+                      <div className="relative w-full h-full max-h-[300px] flex items-center justify-center overflow-hidden rounded-md group">
+                        {/* Base Image */}
+                        <img
+                          src={imagePreview}
+                          alt="Original"
+                          className="absolute inset-0 w-full h-full object-contain opacity-50 blur-[2px] group-hover:blur-0 group-hover:opacity-100 transition-all duration-300"
+                        />
+
+                        {/* Overlay Mockup - Just to demonstrate visual change */}
+                        <div
+                          className={`absolute inset-0 flex items-center justify-center pointer-events-none ${
+                            selectedXAITechnique === "LIME"
+                              ? "bg-green-500/20 mix-blend-overlay"
+                              : "bg-red-500/20 mix-blend-overlay"
+                          }`}
+                        >
+                          <span className="bg-black/70 text-white px-3 py-1 rounded-full text-xs font-semibold backdrop-blur-sm z-10">
+                            {selectedXAITechnique} Overlay Visualization
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-gray-400 text-sm">
+                        No visualization available
+                      </p>
+                    )}
+                    <p className="mt-2 text-xs text-gray-500 italic">
+                      * Hover image to see original
+                    </p>
+                  </div>
+
+                  {/* Explanation Text */}
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                        Technique Description
+                      </h3>
+                      <p className="text-sm text-gray-600 leading-relaxed">
+                        {
+                          inferenceResult.xai_analysis[selectedXAITechnique]
+                            ?.description
+                        }
+                      </p>
+                    </div>
+
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                        Model Interpretation
+                      </h3>
+                      <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
+                        <p className="text-sm text-blue-900 leading-relaxed font-medium">
+                          {
+                            inferenceResult.xai_analysis[selectedXAITechnique]
+                              ?.explanation
+                          }
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-gray-100">
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                        Key Influencing Factors
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          "Texture Irregularity",
+                          "Density",
+                          "Shape Asymmetry",
+                        ].map((tag) => (
+                          <span
+                            key={tag}
+                            className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-md"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <p className="text-xs text-[#718096] mt-3">
-                Feature importance visualization showing model decision drivers.
-              </p>
-            </div>
+            )}
           </div>
         )}
 
