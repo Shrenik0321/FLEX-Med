@@ -145,3 +145,15 @@ def predict_random(settings: Optional[Settings] = None) -> dict:
         "sample_index": idx,
     }
 
+def get_gradcam_target_layers(model: torch.nn.Module, model_name: str):
+    """
+    Resolve target layers for Grad-CAM based on architecture.
+    """
+    if "ResNet" in model_name:
+        return [model.layer4[-1]]
+    elif "MobileNet" in model_name:
+        return [model.features[-1]]
+    elif "DenseNet" in model_name:
+        return [model.features[-1]]
+    else:
+        raise ValueError(f"Unsupported model for Grad-CAM: {model_name}")

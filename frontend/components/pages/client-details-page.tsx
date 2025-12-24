@@ -43,6 +43,8 @@ export default function ClientDetailsPage({
   const [inferenceResult, setInferenceResult] = useState<any>(null);
   const [inferenceError, setInferenceError] = useState<string | null>(null);
   const [selectedXAITechnique, setSelectedXAITechnique] = useState("LIME");
+  const [gradcamImage, setGradcamImage] = useState<string | null>(null);
+  const [limeImage, setLimeImage] = useState<string | null>(null);
 
   const tabs = [
     { id: "overview", label: "Overview" },
@@ -93,6 +95,8 @@ export default function ClientDetailsPage({
       setSelectedImage(file);
       setInferenceResult(null);
       setInferenceError(null);
+      setGradcamImage(null);
+      setLimeImage(null);
 
       // Create preview
       const reader = new FileReader();
@@ -113,13 +117,14 @@ export default function ClientDetailsPage({
       setIsRunningInference(true);
       setInferenceError(null);
       setInferenceResult(null);
+      setGradcamImage(null);
 
       // Create FormData and append the image file
       const formData = new FormData();
       formData.append("file", selectedImage);
 
       // Send POST request with FormData
-      const response = await fetch("http://localhost:8000/predict/upload", {
+      const response = await fetch("http://localhost:8000/predict/upload-xai", {
         method: "POST",
         headers: {
           "ngrok-skip-browser-warning": "true",
@@ -135,6 +140,18 @@ export default function ClientDetailsPage({
       }
 
       const result = await response.json();
+
+      // Extract Grad-CAM image if available
+      if (result?.xai?.gradcam?.image_base64) {
+        setGradcamImage(
+          `data:image/png;base64,${result.xai.gradcam.image_base64}`
+        );
+      }
+
+      // Extract LIME image if available
+      if (result?.xai?.lime?.image_base64) {
+        setLimeImage(`data:image/png;base64,${result.xai.lime.image_base64}`);
+      }
 
       // Mock XAI Data if not present
       if (!result.xai_analysis) {
@@ -375,6 +392,8 @@ export default function ClientDetailsPage({
                         setImagePreview(null);
                         setInferenceResult(null);
                         setInferenceError(null);
+                        setGradcamImage(null);
+                        setLimeImage(null);
                       }}
                       className="absolute top-2 right-2 px-3 py-1 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
                       type="button"
@@ -521,7 +540,26 @@ export default function ClientDetailsPage({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   {/* Visualization */}
                   <div className="flex flex-col items-center justify-center bg-gray-50 rounded-lg p-4 border border-dashed border-gray-300 min-h-[300px]">
-                    {imagePreview ? (
+                    {selectedXAITechnique === "Grad-CAM" && gradcamImage ? (
+                      // Show actual Grad-CAM heatmap image from API
+                      <div className="w-full h-full max-h-[300px] flex items-center justify-center overflow-hidden rounded-md">
+                        <img
+                          src={gradcamImage}
+                          alt="Grad-CAM Heatmap"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                    ) : selectedXAITechnique === "LIME" && limeImage ? (
+                      // Show actual LIME visualization image from API
+                      <div className="w-full h-full max-h-[300px] flex items-center justify-center overflow-hidden rounded-md">
+                        <img
+                          src={limeImage}
+                          alt="LIME Explanation"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                    ) : imagePreview ? (
+                      // Show mock overlay if actual XAI images are not available
                       <div className="relative w-full h-full max-h-[300px] flex items-center justify-center overflow-hidden rounded-md group">
                         {/* Base Image */}
                         <img
@@ -548,9 +586,11 @@ export default function ClientDetailsPage({
                         No visualization available
                       </p>
                     )}
-                    <p className="mt-2 text-xs text-gray-500 italic">
-                      * Hover image to see original
-                    </p>
+                    {!limeImage && !gradcamImage && imagePreview && (
+                      <p className="mt-2 text-xs text-gray-500 italic">
+                        * Hover image to see original
+                      </p>
+                    )}
                   </div>
 
                   {/* Explanation Text */}

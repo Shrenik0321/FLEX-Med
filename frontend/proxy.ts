@@ -1,8 +1,12 @@
-import { updateSession } from "@/lib/supabase/proxy";
+// import { updateSession } from "@/lib/supabase/proxy";
 import { type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
-  return await updateSession(request);
+  // Auth temporarily disabled
+  // return await updateSession(request);
+
+  // Just pass through without auth check
+  return;
 }
 
 export const config = {

@@ -15,7 +15,7 @@ export default function FederatedPage() {
       client_email: "s.shrenikdeep@gmail.com",
       status: "Training",
       model_type: "resnet18",
-      id: 0, // Changed to 0 to match Flower's 0-indexed partitions
+      id: 0,
     },
     {
       client_name: "Clinic - B",
@@ -23,13 +23,6 @@ export default function FederatedPage() {
       status: "Active",
       model_type: "mobilenet_v2",
       id: 1,
-    },
-    {
-      client_name: "Clinic - C (Free Rider)",
-      client_email: "freerider@clinic.com",
-      status: "Active",
-      model_type: "densenet121",
-      id: 2,
     },
   ];
 
@@ -39,7 +32,7 @@ export default function FederatedPage() {
       setStatus("running");
 
       // We pass the activeClients list to the API
-      await fetch("https://426a2dbb35c1.ngrok-free.app/start_fl", {
+      await fetch("https://be0aac47dc98.ngrok-free.app/start_fl", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(activeClients),
