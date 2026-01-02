@@ -58,31 +58,31 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
       {/* Header */}
       <button
         onClick={onBack}
-        className="flex items-center gap-2 text-[#B80028] hover:text-red-700 mb-6 font-medium"
+        className="flex items-center gap-2 text-primary hover:text-red-700 mb-6 font-medium"
       >
         <ArrowLeft size={18} />
         Back to Clients
       </button>
 
-      <h1 className="text-3xl font-semibold text-gray-900 mb-2">
+      <h1 className="text-3xl font-semibold text-foreground mb-2">
         Add New Client
       </h1>
-      <p className="text-[#718096] mb-8">
+      <p className="text-muted-foreground mb-8">
         Register and configure a new healthcare client for federated learning
       </p>
 
       {/* Form */}
       <div className="max-w-2xl">
-        <div className="bg-white rounded-lg p-8 flex-card-shadow space-y-6">
+        <div className="bg-card rounded-lg p-8 shadow-sm border border-border space-y-6">
           {/* Organization Info */}
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
               <span className="flex-red-dot" />
               Organization Information
             </h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">
+                <label className="block text-sm font-medium text-foreground mb-2">
                   Organization Name
                 </label>
                 <input
@@ -90,7 +90,7 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
                   placeholder="e.g., City Medical Center"
                   value={clientName}
                   onChange={(e) => setClientName(e.target.value)}
-                  className="w-full px-4 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
+                  className="w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
                 />
               </div>
             </div>
@@ -98,18 +98,18 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
 
           {/* Model Selection */}
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
               <span className="flex-red-dot" />
               Select Model
             </h2>
             <div>
-              <label className="block text-sm font-medium text-gray-900 mb-2">
+              <label className="block text-sm font-medium text-foreground mb-2">
                 CNN Model Architecture
               </label>
               <select
                 value={modelType}
                 onChange={(e) => setModelType(e.target.value)}
-                className="w-full px-4 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
+                className="w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
               >
                 <option value="">Select a PyTorch CNN model...</option>
                 <optgroup label="ResNet">
@@ -214,29 +214,29 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
 
           {/* Data Upload */}
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
               <span className="flex-red-dot" />
               Initial Dataset
             </h2>
             {hasDataset ? (
-              <div className="relative border-2 border-solid border-[#B80028] bg-[rgba(184,0,40,0.02)] rounded-lg p-8 text-center transition-all">
+              <div className="relative border-2 border-solid border-primary bg-primary/5 rounded-lg p-8 text-center transition-all">
                 <button
                   onClick={() => setHasDataset(false)}
-                  className="absolute top-4 right-4 p-1 text-[#B80028] hover:bg-red-100 rounded-full transition-colors"
+                  className="absolute top-4 right-4 p-1 text-primary hover:bg-red-100 rounded-full transition-colors"
                   title="Remove dataset"
                 >
                   <X size={20} />
                 </button>
-                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm border border-red-100">
-                  <FileJson className="text-[#B80028]" size={32} />
+                <div className="w-16 h-16 bg-card rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm border border-red-100">
+                  <FileJson className="text-primary" size={32} />
                 </div>
-                <h3 className="font-semibold text-gray-900 mb-1">
+                <h3 className="font-semibold text-foreground mb-1">
                   Dataset Configured
                 </h3>
-                <p className="text-sm text-[#718096]">
+                <p className="text-sm text-muted-foreground">
                   client_allidb (Default Local Dataset)
                 </p>
-                <div className="flex items-center justify-center gap-2 mt-4 text-sm text-[#B80028] font-medium">
+                <div className="flex items-center justify-center gap-2 mt-4 text-sm text-primary font-medium">
                   <Check size={16} />
                   Ready for training
                 </div>
@@ -244,18 +244,18 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
             ) : (
               <div
                 onClick={() => setHasDataset(true)}
-                className="border-2 border-dashed border-[#E2E8F0] rounded-lg p-8 text-center hover:border-[#B80028] hover:bg-[rgba(184,0,40,0.02)] transition-all cursor-pointer group"
+                className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary hover:bg-primary/5 transition-all cursor-pointer group"
               >
-                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-white group-hover:shadow-sm transition-all">
+                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-card group-hover:shadow-sm transition-all">
                   <Upload
-                    className="text-[#718096] group-hover:text-[#B80028] transition-colors"
+                    className="text-muted-foreground group-hover:text-primary transition-colors"
                     size={32}
                   />
                 </div>
-                <p className="font-medium text-gray-900 group-hover:text-[#B80028] transition-colors">
+                <p className="font-medium text-foreground group-hover:text-primary transition-colors">
                   Click to configure local dataset
                 </p>
-                <p className="text-xs text-[#718096] mt-2">
+                <p className="text-xs text-muted-foreground mt-2">
                   Uses default path: /content/drive/MyDrive/...
                 </p>
               </div>
@@ -273,14 +273,14 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
           <div className="flex gap-3 pt-4">
             <button
               onClick={onBack}
-              className="px-6 py-2 border border-[#E2E8F0] text-gray-900 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+              className="px-6 py-2 border border-border text-foreground rounded-lg font-medium hover:bg-gray-50 transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={handleSubmit}
               disabled={loading}
-              className="px-6 py-2 bg-white border border-[#B80028] text-[#B80028] rounded-lg font-medium hover:bg-[rgba(184,0,40,0.08)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-2 bg-card border border-primary text-primary rounded-lg font-medium hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? "Registering..." : "Register Client"}
             </button>

@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
-import Sidebar from "@/components/sidebar";
-// import { AuthButton } from "@/components/auth-button";
+import Sidebar from "@/components/layout/sidebar";
+// import { AuthButton } from "@/components/auth/auth-button";
 // import { EnvVarWarning } from "@/components/env-var-warning";
-import { ThemeSwitcher } from "@/components/theme-switcher";
+import { ThemeSwitcher } from "@/components/layout/theme-switcher";
+import { Toaster } from "sonner";
 // import { hasEnvVars } from "@/lib/utils";
 // import { Suspense } from "react";
 
@@ -35,9 +36,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <div className="flex flex-col h-screen bg-[#F7F8FA]">
+          <div className="flex flex-col h-screen bg-background">
             {/* Top Navigation Bar */}
-            <nav className="w-full flex justify-center border-b border-b-foreground/10 bg-white">
+            <nav className="w-full flex justify-center border-b border-b-border bg-card">
               <div className="w-full flex justify-between items-center p-3 px-5 text-sm">
                 <div className="flex gap-5 items-center font-semibold">
                   <span>FlexMed Dashboard</span>
@@ -62,6 +63,7 @@ export default function RootLayout({
               <div className="flex-1 overflow-auto">{children}</div>
             </div>
           </div>
+          <Toaster position="top-right" />
         </ThemeProvider>
       </body>
     </html>

@@ -187,7 +187,7 @@ export default function ClientDetailsPage({
       {/* Header */}
       <button
         onClick={onBack}
-        className="flex items-center gap-2 text-[#B80028] hover:text-red-700 mb-6 font-medium"
+        className="flex items-center gap-2 text-primary hover:text-red-700 mb-6 font-medium"
       >
         <ArrowLeft size={18} />
         Back to Clients
@@ -195,31 +195,31 @@ export default function ClientDetailsPage({
 
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-semibold text-gray-900">
+          <h1 className="text-3xl font-semibold text-foreground">
             {client.client_name}
           </h1>
-          <p className="text-[#718096] mt-2">{client.client_email}</p>
+          <p className="text-muted-foreground mt-2">{client.client_email}</p>
         </div>
-        <span className="inline-block px-3 py-1 rounded-full text-sm font-medium border border-[#B80028] text-[#B80028] bg-[rgba(184,0,40,0.05)]">
+        <span className="inline-block px-3 py-1 rounded-full text-sm font-medium border border-primary text-primary bg-[rgba(184,0,40,0.05)]">
           {formState.status || "Unknown"}
         </span>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-8 border-b border-[#E2E8F0] mb-8">
+      <div className="flex gap-8 border-b border-border mb-8">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`pb-4 text-sm font-medium transition-colors relative ${
               activeTab === tab.id
-                ? "text-gray-900"
-                : "text-[#718096] hover:text-gray-900"
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {tab.label}
             {activeTab === tab.id && (
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#B80028]" />
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary" />
             )}
           </button>
         ))}
@@ -230,15 +230,15 @@ export default function ClientDetailsPage({
         {activeTab === "overview" && (
           <div className="space-y-6">
             {/* Editable Client Profile */}
-            <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+            <div className="bg-card rounded-lg p-6 shadow-sm border border-border">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">
+                <h2 className="text-lg font-semibold text-foreground">
                   Client Profile
                 </h2>
                 <button
                   onClick={handleSave}
                   disabled={isSaving}
-                  className="px-4 py-2 bg-white border border-[#B80028] text-[#B80028] rounded-lg text-sm font-medium hover:bg-[rgba(184,0,40,0.08)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-card border border-primary text-primary rounded-lg text-sm font-medium hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSaving ? "Saving..." : "Save Changes"}
                 </button>
@@ -255,7 +255,7 @@ export default function ClientDetailsPage({
                     onChange={(e) =>
                       handleChange("client_name", e.target.value)
                     }
-                    className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
+                    className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
                   />
                 </div>
                 <div>
@@ -268,7 +268,7 @@ export default function ClientDetailsPage({
                     onChange={(e) =>
                       handleChange("client_email", e.target.value)
                     }
-                    className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
+                    className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
                   />
                 </div>
                 <div>
@@ -278,7 +278,7 @@ export default function ClientDetailsPage({
                   <select
                     value={formState.status}
                     onChange={(e) => handleChange("status", e.target.value)}
-                    className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
+                    className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
                   >
                     <option value="Training">Training</option>
                     <option value="Completed">Completed</option>
@@ -293,19 +293,19 @@ export default function ClientDetailsPage({
                     type="text"
                     value={formState.model_type}
                     onChange={(e) => handleChange("model_type", e.target.value)}
-                    className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
+                    className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
                   />
                 </div>
               </div>
 
               {saveMessage && (
-                <p className="mt-4 text-xs text-[#718096]">{saveMessage}</p>
+                <p className="mt-4 text-xs text-muted-foreground">{saveMessage}</p>
               )}
             </div>
 
             {/* Client Summary */}
-            <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            <div className="bg-card rounded-lg p-6 shadow-sm border border-border">
+              <h2 className="text-lg font-semibold text-foreground mb-4">
                 Client Summary
               </h2>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -328,11 +328,11 @@ export default function ClientDetailsPage({
                   },
                 ].map((item, idx) => (
                   <div key={idx}>
-                    <p className="text-[#718096] text-xs uppercase tracking-wider flex items-center gap-1">
+                    <p className="text-muted-foreground text-xs uppercase tracking-wider flex items-center gap-1">
                       <span>{item.icon}</span>
                       {item.label}
                     </p>
-                    <p className="text-xl font-semibold text-gray-900 mt-1">
+                    <p className="text-xl font-semibold text-foreground mt-1">
                       {item.value}
                     </p>
                   </div>
@@ -344,11 +344,11 @@ export default function ClientDetailsPage({
 
         {activeTab === "inference" && (
           <div className="space-y-6">
-            <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            <div className="bg-card rounded-lg p-6 shadow-sm border border-border">
+              <h2 className="text-lg font-semibold text-foreground mb-4">
                 Run Inference
               </h2>
-              <p className="text-sm text-[#718096] mb-4">
+              <p className="text-sm text-muted-foreground mb-4">
                 Upload an image from{" "}
                 <span className="font-medium">{client.client_name}</span> to the
                 configured model endpoint and inspect the prediction and
@@ -361,9 +361,9 @@ export default function ClientDetailsPage({
                 </label>
 
                 {!imagePreview ? (
-                  <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-[#E2E8F0] rounded-lg cursor-pointer hover:border-[#B80028] transition-colors">
+                  <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary transition-colors">
                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      <Upload className="w-10 h-10 mb-3 text-[#718096]" />
+                      <Upload className="w-10 h-10 mb-3 text-muted-foreground" />
                       <p className="mb-2 text-sm text-gray-500">
                         <span className="font-semibold">Click to upload</span>{" "}
                         or drag and drop
@@ -384,7 +384,7 @@ export default function ClientDetailsPage({
                     <img
                       src={imagePreview}
                       alt="Preview"
-                      className="w-full h-auto max-h-96 object-contain rounded-lg border border-[#E2E8F0]"
+                      className="w-full h-auto max-h-96 object-contain rounded-lg border border-border"
                     />
                     <button
                       onClick={() => {
@@ -395,7 +395,7 @@ export default function ClientDetailsPage({
                         setGradcamImage(null);
                         setLimeImage(null);
                       }}
-                      className="absolute top-2 right-2 px-3 py-1 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+                      className="absolute top-2 right-2 px-3 py-1 bg-card border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
                       type="button"
                     >
                       Remove
@@ -413,15 +413,15 @@ export default function ClientDetailsPage({
               <button
                 onClick={handleRunInference}
                 disabled={!selectedImage || isRunningInference}
-                className="px-4 py-2 bg-white border border-[#B80028] text-[#B80028] rounded-lg text-sm font-medium hover:bg-[rgba(184,0,40,0.08)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-card border border-primary text-primary rounded-lg text-sm font-medium hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 type="button"
               >
                 {isRunningInference ? "Running Inference..." : "Run Inference"}
               </button>
             </div>
 
-            <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            <div className="bg-card rounded-lg p-6 shadow-sm border border-border">
+              <h2 className="text-lg font-semibold text-foreground mb-4">
                 {inferenceResult ? "Prediction Results" : "Awaiting Results"}
               </h2>
               <div className="space-y-4">
@@ -436,7 +436,7 @@ export default function ClientDetailsPage({
                           ?.toLowerCase()
                           .includes("hem")
                           ? "border-green-500 bg-green-50"
-                          : "border-[#B80028] bg-[rgba(184,0,40,0.05)]"
+                          : "border-primary bg-[rgba(184,0,40,0.05)]"
                       }`}
                     >
                       <p className="text-xs text-gray-600 mb-1">Prediction</p>
@@ -449,7 +449,7 @@ export default function ClientDetailsPage({
                             ?.toLowerCase()
                             .includes("hem")
                             ? "text-green-700"
-                            : "text-[#B80028]"
+                            : "text-primary"
                         }`}
                       >
                         {inferenceResult.prediction}
@@ -490,7 +490,7 @@ export default function ClientDetailsPage({
                               <span className="text-sm text-gray-700">
                                 {className}
                               </span>
-                              <span className="text-sm font-medium text-gray-900">
+                              <span className="text-sm font-medium text-foreground">
                                 {(prob * 100).toFixed(1)}%
                               </span>
                             </div>
@@ -511,16 +511,16 @@ export default function ClientDetailsPage({
 
             {/* XAI Section */}
             {inferenceResult && inferenceResult.xai_analysis && (
-              <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+              <div className="bg-card rounded-lg p-6 shadow-sm border border-border">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900">
+                  <h2 className="text-lg font-semibold text-foreground">
                     Explainable AI (XAI) Analysis
                   </h2>
                   <div className="relative">
                     <select
                       value={selectedXAITechnique}
                       onChange={(e) => setSelectedXAITechnique(e.target.value)}
-                      className="appearance-none bg-white border border-[#E2E8F0] text-gray-700 py-2 px-4 pr-8 rounded-lg leading-tight focus:outline-none focus:bg-white focus:border-[#B80028] text-sm font-medium"
+                      className="appearance-none bg-card border border-border text-gray-700 py-2 px-4 pr-8 rounded-lg leading-tight focus:outline-none focus:bg-card focus:border-primary text-sm font-medium"
                     >
                       <option value="LIME">LIME</option>
                       <option value="Grad-CAM">Grad-CAM</option>
@@ -596,7 +596,7 @@ export default function ClientDetailsPage({
                   {/* Explanation Text */}
                   <div className="space-y-6">
                     <div>
-                      <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                      <h3 className="text-sm font-semibold text-foreground mb-2">
                         Technique Description
                       </h3>
                       <p className="text-sm text-gray-600 leading-relaxed">
@@ -608,7 +608,7 @@ export default function ClientDetailsPage({
                     </div>
 
                     <div>
-                      <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                      <h3 className="text-sm font-semibold text-foreground mb-2">
                         Model Interpretation
                       </h3>
                       <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
@@ -648,12 +648,12 @@ export default function ClientDetailsPage({
         )}
 
         {activeTab === "training" && (
-          <div className="bg-white rounded-lg p-6 shadow-sm border border-gray-200">
+          <div className="bg-card rounded-lg p-6 shadow-sm border border-border">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">
+              <h2 className="text-lg font-semibold text-foreground">
                 Training Logs
               </h2>
-              <button className="flex items-center gap-2 px-4 py-2 border border-[#B80028] text-[#B80028] rounded-lg hover:bg-[rgba(184,0,40,0.08)] transition-colors text-sm font-medium">
+              <button className="flex items-center gap-2 px-4 py-2 border border-primary text-primary rounded-lg hover:bg-primary/10 transition-colors text-sm font-medium">
                 <Download size={16} />
                 Export Report
               </button>
@@ -683,13 +683,13 @@ export default function ClientDetailsPage({
               ].map((log, idx) => (
                 <div
                   key={idx}
-                  className="flex gap-3 px-4 py-3 text-sm border border-[#E2E8F0] rounded-lg"
+                  className="flex gap-3 px-4 py-3 text-sm border border-border rounded-lg"
                 >
-                  <span className="text-[#718096] min-w-fit">{log.time}</span>
+                  <span className="text-muted-foreground min-w-fit">{log.time}</span>
                   <span
                     className={`font-medium ${
                       log.level === "ERROR"
-                        ? "text-[#B80028]"
+                        ? "text-primary"
                         : log.level === "WARNING"
                         ? "text-orange-600"
                         : "text-gray-600"
@@ -697,7 +697,7 @@ export default function ClientDetailsPage({
                   >
                     {log.level}
                   </span>
-                  <span className="text-gray-900">{log.message}</span>
+                  <span className="text-foreground">{log.message}</span>
                 </div>
               ))}
             </div>

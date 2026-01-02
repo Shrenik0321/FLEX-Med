@@ -35,25 +35,25 @@ export default function PublicDatasetPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-semibold text-gray-900 mb-2">
+      <h1 className="text-3xl font-semibold text-foreground mb-2">
         Public Dataset
       </h1>
-      <p className="text-[#718096] mb-8">
+      <p className="text-muted-foreground mb-8">
         Upload and manage public datasets for federated learning training.
       </p>
 
       {/* Form */}
       <div className="max-w-2xl">
-        <div className="bg-white rounded-lg p-8 flex-card-shadow space-y-6">
+        <div className="bg-card rounded-lg p-8 shadow-sm border border-border space-y-6">
           {/* Dataset Info */}
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
               <span className="flex-red-dot" />
               Dataset Information
             </h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">
+                <label className="block text-sm font-medium text-foreground mb-2">
                   Dataset Name
                 </label>
                 <input
@@ -61,18 +61,18 @@ export default function PublicDatasetPage() {
                   placeholder="e.g., Pneumonia MNIST"
                   value={datasetName}
                   onChange={(e) => setDatasetName(e.target.value)}
-                  className="w-full px-4 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
+                  className="w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-card"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">
+                <label className="block text-sm font-medium text-foreground mb-2">
                   Description
                 </label>
                 <textarea
                   placeholder="Brief description of the dataset..."
                   value={datasetDescription}
                   onChange={(e) => setDatasetDescription(e.target.value)}
-                  className="w-full px-4 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent min-h-[100px]"
+                  className="w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent min-h-[100px] bg-card"
                 />
               </div>
             </div>
@@ -80,19 +80,19 @@ export default function PublicDatasetPage() {
 
           {/* Data Upload */}
           <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
               <span className="flex-red-dot" />
               Upload Files
             </h2>
             <div
-              className="border-2 border-dashed border-[#E2E8F0] rounded-lg p-8 text-center hover:border-[#B80028] hover:bg-[rgba(184,0,40,0.02)] transition-colors cursor-pointer"
+              className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer"
               onClick={() => alert("File selection dialog would open here")}
             >
-              <Upload className="mx-auto text-[#718096] mb-3" size={32} />
-              <p className="font-medium text-gray-900">
+              <Upload className="mx-auto text-muted-foreground mb-3" size={32} />
+              <p className="font-medium text-foreground">
                 Drop files here or click to upload
               </p>
-              <p className="text-xs text-[#718096] mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Supported formats: CSV, JSON, Parquet, or Zip archives
               </p>
             </div>
@@ -112,14 +112,14 @@ export default function PublicDatasetPage() {
                 setDatasetName("");
                 setDatasetDescription("");
               }}
-              className="px-6 py-2 border border-[#E2E8F0] text-gray-900 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+              className="px-6 py-2 border border-border text-foreground rounded-lg font-medium hover:bg-muted transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={handleSubmit}
               disabled={loading}
-              className="px-6 py-2 bg-white border border-[#B80028] text-[#B80028] rounded-lg font-medium hover:bg-[rgba(184,0,40,0.08)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-2 bg-card border border-primary text-primary rounded-lg font-medium hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? "Uploading..." : "Upload Dataset"}
             </button>

@@ -2,6 +2,7 @@
 
 import { Search, Trash2, MoreVertical, Play } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
+import { toast } from "sonner";
 
 // Helper to format ISO date strings to dd/mm/yy
 function formatDate(dateString: string): string {
@@ -46,8 +47,8 @@ function DeleteConfirmationModal({
 
   return (
     <div className="fixed inset-0 bg-gray-900 bg-opacity-30 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
+      <div className="bg-card rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+        <h2 className="text-xl font-semibold text-foreground mb-4">
           Confirm Deletion
         </h2>
         <p className="text-gray-700 mb-6">
@@ -66,7 +67,7 @@ function DeleteConfirmationModal({
           <button
             onClick={onConfirm}
             disabled={isDeleting}
-            className="px-4 py-2 bg-[#B80028] text-white rounded-lg font-medium hover:bg-[#9a0022] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-[#9a0022] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isDeleting ? "Deleting..." : "Delete"}
           </button>
@@ -124,7 +125,7 @@ function ActionDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+        <div className="absolute right-0 mt-2 w-48 bg-card rounded-lg shadow-lg border border-border py-1 z-50">
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -142,7 +143,7 @@ function ActionDropdown({
               onDelete(client);
               setIsOpen(false);
             }}
-            className="w-full px-4 py-2 text-left text-sm text-[#B80028] hover:bg-red-50 flex items-center gap-2 transition-colors"
+            className="w-full px-4 py-2 text-left text-sm text-primary hover:bg-red-50 flex items-center gap-2 transition-colors"
           >
             <Trash2 size={16} />
             Delete
@@ -219,7 +220,7 @@ export default function ClientsListPage({
       setDeleteModal({ isOpen: false, clientId: null, clientName: "" });
     } catch (error) {
       console.error("Failed to delete client:", error);
-      alert("Failed to delete client. Please try again.");
+      toast.error("Failed to delete client. Please try again.");
     } finally {
       setIsDeleting(false);
     }
@@ -253,10 +254,10 @@ export default function ClientsListPage({
         )
       );
 
-      alert(`Training started for ${client.client_name}`);
+      toast.success(`Training started for ${client.client_name}`);
     } catch (error) {
       console.error("Failed to start training:", error);
-      alert("Failed to start training. Please try again.");
+      toast.error("Failed to start training. Please try again.");
     }
   };
 
@@ -279,14 +280,14 @@ export default function ClientsListPage({
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-semibold text-gray-900">Clients</h1>
-          <p className="text-[#718096] mt-2">
+          <h1 className="text-3xl font-semibold text-foreground">Clients</h1>
+          <p className="text-muted-foreground mt-2">
             Manage all your healthcare clients and their ML deployments
           </p>
         </div>
         <button
           onClick={onAddClick}
-          className="px-4 py-2 bg-white border border-[#B80028] text-[#B80028] rounded-lg font-medium hover:bg-[rgba(184,0,40,0.08)] transition-colors"
+          className="px-4 py-2 bg-card border border-primary text-primary rounded-lg font-medium hover:bg-primary/10 transition-colors"
         >
           Add New Client
         </button>
@@ -296,7 +297,7 @@ export default function ClientsListPage({
       <div className="mb-6">
         <div className="relative">
           <Search
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#718096]"
+            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground"
             size={18}
           />
           <input
@@ -304,32 +305,29 @@ export default function ClientsListPage({
             placeholder="Search clients..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
+            className="w-full pl-10 pr-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
           />
         </div>
       </div>
 
       {/* Clients Table */}
-      <div className="bg-white rounded-lg flex-card-shadow">
+      <div className="bg-card rounded-lg shadow-sm border border-border">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-[#E2E8F0]">
-              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">
+            <tr className="border-b border-border">
+              <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
                 Name
               </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">
-                Email
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">
+              <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
                 Status
               </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">
+              <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
                 Models
               </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">
+              <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
                 Created At
               </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">
+              <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
                 Action
               </th>
             </tr>
@@ -339,31 +337,28 @@ export default function ClientsListPage({
               <tr
                 key={client.id}
                 onClick={() => onSelectClient(client)}
-                className="cursor-pointer border-b border-[#E2E8F0] hover:bg-[rgba(184,0,40,0.03)] transition-colors"
+                className="cursor-pointer border-b border-border hover:bg-[rgba(184,0,40,0.03)] transition-colors"
               >
-                <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                <td className="px-6 py-4 text-sm font-medium text-foreground">
                   {client.client_name}
-                </td>
-                <td className="px-6 py-4 text-sm text-[#718096]">
-                  {client.client_email}
                 </td>
                 <td className="px-6 py-4 text-sm">
                   <span
                     className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${
                       client.status === "Training"
-                        ? "border-[#B80028] text-[#B80028] bg-[rgba(184,0,40,0.05)]"
+                        ? "border-primary text-primary bg-[rgba(184,0,40,0.05)]"
                         : client.status === "Completed"
                         ? "border-green-500 text-green-700 bg-green-50"
-                        : "border-[#718096] text-[#718096] bg-gray-50"
+                        : "border-[#718096] text-muted-foreground bg-gray-50"
                     }`}
                   >
                     {client.status}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-900">
+                <td className="px-6 py-4 text-sm text-foreground">
                   {client.model_type}
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-900">
+                <td className="px-6 py-4 text-sm text-foreground">
                   {formatDate(client.created_at)}
                 </td>
                 <td className="px-6 py-4 text-sm">
