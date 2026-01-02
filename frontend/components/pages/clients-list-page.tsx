@@ -1,7 +1,7 @@
 "use client";
 
-import { Search, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Search, Trash2, MoreVertical, Play } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
 
 // Helper to format ISO date strings to dd/mm/yy
 function formatDate(dateString: string): string {
@@ -76,6 +76,83 @@ function DeleteConfirmationModal({
   );
 }
 
+// Action Dropdown Component
+interface ActionDropdownProps {
+  client: Client;
+  onDelete: (client: Client) => void;
+  onStartTraining: (client: Client) => void;
+}
+
+function ActionDropdown({
+  client,
+  onDelete,
+  onStartTraining,
+}: ActionDropdownProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }}
+        className="p-1 hover:bg-gray-100 rounded transition-colors"
+        title="Actions"
+      >
+        <MoreVertical size={18} className="text-gray-600" />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onStartTraining(client);
+              setIsOpen(false);
+            }}
+            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
+          >
+            <Play size={16} className="text-green-600" />
+            Start Training
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(client);
+              setIsOpen(false);
+            }}
+            className="w-full px-4 py-2 text-left text-sm text-[#B80028] hover:bg-red-50 flex items-center gap-2 transition-colors"
+          >
+            <Trash2 size={16} />
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ClientsListPage({
   onAddClick,
   onSelectClient,
@@ -124,9 +201,12 @@ export default function ClientsListPage({
 
     setIsDeleting(true);
     try {
-      const response = await fetch(`http://localhost:8000/api/clients/${deleteModal.clientId}`, {
-        method: "DELETE",
-      });
+      const response = await fetch(
+        `http://localhost:8000/api/clients/${deleteModal.clientId}`,
+        {
+          method: "DELETE",
+        }
+      );
 
       if (!response.ok) throw new Error("Failed to delete");
 
@@ -147,6 +227,37 @@ export default function ClientsListPage({
 
   const handleDeleteCancel = () => {
     setDeleteModal({ isOpen: false, clientId: null, clientName: "" });
+  };
+
+  const handleStartTraining = async (client: Client) => {
+    try {
+      const response = await fetch(
+        `http://localhost:8000/api/clients/${client.id}/start_local_train`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) throw new Error("Failed to start training");
+
+      const data = await response.json();
+      console.log("Training started:", data);
+
+      // Optionally update the client's status to "Training"
+      setClients((prevClients) =>
+        prevClients.map((c) =>
+          c.id === client.id ? { ...c, status: "Training" } : c
+        )
+      );
+
+      alert(`Training started for ${client.client_name}`);
+    } catch (error) {
+      console.error("Failed to start training:", error);
+      alert("Failed to start training. Please try again.");
+    }
   };
 
   if (loading) {
@@ -199,7 +310,7 @@ export default function ClientsListPage({
       </div>
 
       {/* Clients Table */}
-      <div className="bg-white rounded-lg overflow-hidden flex-card-shadow">
+      <div className="bg-white rounded-lg flex-card-shadow">
         <table className="w-full">
           <thead>
             <tr className="border-b border-[#E2E8F0]">
@@ -256,16 +367,11 @@ export default function ClientsListPage({
                   {formatDate(client.created_at)}
                 </td>
                 <td className="px-6 py-4 text-sm">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteClick(client);
-                    }}
-                    className="text-[#B80028] hover:text-[#9a0022] transition-colors"
-                    title="Delete client"
-                  >
-                    <Trash2 size={18} />
-                  </button>
+                  <ActionDropdown
+                    client={client}
+                    onDelete={handleDeleteClick}
+                    onStartTraining={handleStartTraining}
+                  />
                 </td>
               </tr>
             ))}

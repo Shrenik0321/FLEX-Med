@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import predict, clients
+from app.routes import predict, clients, federated
 
 app = FastAPI(title="FLEX-Med Backend", version="0.1.0")
 
@@ -19,10 +19,7 @@ app.add_middleware(
 def healthcheck():
     return {"status": "ok"}
 
-@app.get("/test")
-def test():
-    return {"message": "HELLO WORLD"}
-
 app.include_router(predict.router)
 app.include_router(clients.router, prefix="/api")
+app.include_router(federated.router, prefix="/api")
 

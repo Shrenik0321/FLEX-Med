@@ -1,14 +1,15 @@
-"""flex-med: A Flower / PyTorch app."""
+"""flex-med: A Flower / PyTorch app with JSON-based client configuration."""
 
 import torch
 import numpy as np
 import os
+import json
 import torch.nn as nn
 from torchvision import models, datasets, transforms
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, ToTensor, Normalize
-from typing import Tuple, Optional, Iterable
+from typing import Tuple, Optional, Iterable, Dict, List
 import uuid
 import time
 from flwr.common import (
@@ -23,20 +24,90 @@ from flwr.serverapp.strategy import Strategy
 
 # <------------------------------------------ CONFIGURATION ------------------------------------------>
 
-# Paths to the data created by the stratification script
-DATA_ROOT = "/content/drive/MyDrive/College/Datasets/fed_data"
+# Path to client configuration file - now configurable via environment variable
+CONFIG_FILE_PATH = os.getenv(
+    "FLEX_MED_CONFIG_FILE",
+    "/content/drive/MyDrive/College/FLEX-Med/flex-med/flex_med/data.json"
+)
+
+# Public dataset path (remains constant) - now configurable
+DATA_ROOT = os.getenv(
+    "FLEX_MED_DATA_ROOT",
+    "/content/drive/MyDrive/College/Datasets/fed_data"
+)
 PUBLIC_PATH = os.path.join(DATA_ROOT, "public_anchor")
-CLIENT_0_PATH = os.path.join(DATA_ROOT, "client_allidb") # ResNet (ALL-IDB2)
-CLIENT_1_PATH = os.path.join(DATA_ROOT, "client_cnmc")   # MobileNet (CNMC)
 
 # Model Constraints
 NUM_CLASSES = 2   # 0: Hem (Healthy), 1: ALL (Leukemia)
 IMG_SIZE = 128    # Resize all inputs to 128x128 for consistency
 
+# <------------------------------------------ CLIENT CONFIGURATION LOADER ------------------------------------------>
+
+def load_client_config(config_path: str = CONFIG_FILE_PATH) -> List[Dict]:
+    """
+    Load client configuration from JSON file.
+    
+    Returns:
+        List of client configurations with metadata
+    """
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Configuration file not found at {config_path}")
+    
+    with open(config_path, 'r') as f:
+        clients = json.load(f)
+    
+    print(f"[Config] Loaded {len(clients)} client configurations")
+    for client in clients:
+        print(f"  - Client {client['id']}: {client['client_name']} ({client['model_type']}) - "
+              f"Data: {'Yes' if client['has_local_data'] else 'No'}")
+    
+    return clients
+
+def get_client_by_partition_id(partition_id: int, config_path: str = CONFIG_FILE_PATH) -> Dict:
+    """
+    Get client configuration by partition ID.
+    
+    Args:
+        partition_id: The partition ID (0, 1, 2, ...)
+        config_path: Path to the configuration file
+    
+    Returns:
+        Dictionary containing client configuration
+    """
+    clients = load_client_config(config_path)
+    
+    if partition_id >= len(clients):
+        raise ValueError(f"Partition ID {partition_id} exceeds number of clients ({len(clients)})")
+    
+    return clients[partition_id]
+
+def load_model_checkpoint(model, model_path, device):
+    """
+    Load model from checkpoint, handling both formats:
+    - Direct state_dict
+    - Checkpoint with metadata
+    """
+    checkpoint = torch.load(model_path, map_location=device)
+    
+    if isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
+        # Load from checkpoint with metadata
+        model.load_state_dict(checkpoint['state_dict'])
+        
+        # Return metadata if available
+        metadata = {
+            'model_type': checkpoint.get('model_type'),
+            'num_classes': checkpoint.get('num_classes'),
+            'round': checkpoint.get('round'),
+        }
+        return model, metadata
+    else:
+        # Direct state_dict
+        model.load_state_dict(checkpoint)
+        return model, {}
+
 # <------------------------------------------ DATA TRANSFORMS ------------------------------------------>
 
 # Standardize inputs: Resize -> Tensor -> ImageNet Normalization
-# We use this for Public Data and Validation
 COMMON_TRANSFORM = Compose([
     transforms.Resize((IMG_SIZE, IMG_SIZE)),
     ToTensor(),
@@ -44,7 +115,6 @@ COMMON_TRANSFORM = Compose([
 ])
 
 # Augmentation for Private Training
-# Helps models learn robust features from small medical datasets
 PRIVATE_TRAIN_TRANSFORM = Compose([
     transforms.Resize((IMG_SIZE, IMG_SIZE)),
     transforms.RandomHorizontalFlip(),
@@ -53,60 +123,62 @@ PRIVATE_TRAIN_TRANSFORM = Compose([
     Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 
-def hf_apply_transform(batch, transform=COMMON_TRANSFORM):
-    """(Legacy Helper) Not used with ImageFolder, but kept for compatibility if needed."""
-    batch["img"] = [transform(img) for img in batch["img"]]
-    return batch
-
 # <------------------------------------------ MODEL DEFINITIONS ------------------------------------------>
 
+def get_model_by_type(model_type: str):
+    """
+    Returns a model based on the model_type string.
+    
+    Args:
+        model_type: String identifier ('resnet18', 'mobilenet_v2', 'densenet121')
+    
+    Returns:
+        PyTorch model initialized for binary classification
+    """
+    model_type = model_type.lower()
+    
+    if model_type == 'resnet18':
+        model = models.resnet18(weights=None)
+        model.fc = nn.Linear(model.fc.in_features, NUM_CLASSES)
+        return model
+    
+    elif model_type == 'mobilenet_v2':
+        model = models.mobilenet_v2(weights=None)
+        model.classifier[1] = nn.Linear(model.classifier[1].in_features, NUM_CLASSES)
+        return model
+    
+    elif model_type == 'densenet121':
+        model = models.densenet121(weights=None)
+        model.classifier = nn.Linear(model.classifier.in_features, NUM_CLASSES)
+        return model
+    
+    else:
+        raise ValueError(f"Unsupported model type: {model_type}. "
+                        f"Supported types: resnet18, mobilenet_v2, densenet121")
+
+# Legacy functions for backward compatibility
 def get_resnet():
-    """
-    Returns a ResNet-18 for Binary Classification (ALL vs Healthy).
-    """
-    # Load standard ResNet18
-    model = models.resnet18(weights=None)
-    
-    # Reset the final fully connected layer for 2 classes
-    # ResNet18 fc in_features is usually 512
-    model.fc = nn.Linear(model.fc.in_features, NUM_CLASSES)
-    
-    return model
+    """Returns a ResNet-18 for Binary Classification."""
+    return get_model_by_type('resnet18')
 
 def get_mobilenet():
-    """
-    Returns a MobileNetV2 for Binary Classification.
-    """
-    model = models.mobilenet_v2(weights=None)
-    
-    # MobileNetV2 classifier is a Sequential block. 
-    # Index [1] is the Linear layer.
-    model.classifier[1] = nn.Linear(model.classifier[1].in_features, NUM_CLASSES)
-    
-    return model
+    """Returns a MobileNetV2 for Binary Classification."""
+    return get_model_by_type('mobilenet_v2')
 
 def get_densenet():
-    """
-    Returns a DenseNet-121 for Binary Classification.
-    """
-    model = models.densenet121(weights=None)
-    
-    # DenseNet classifier is a single Linear layer
-    model.classifier = nn.Linear(model.classifier.in_features, NUM_CLASSES)
-    
-    return model
+    """Returns a DenseNet-121 for Binary Classification."""
+    return get_model_by_type('densenet121')
 
 # <------------------------------------------ PUBLIC (ANCHOR) DATASET LOADER ------------------------------------------>
 
 def load_public_dataset(batch_size=64):
     """
-    Loads the Mixed Public Anchor dataset (CNMC + ALL-IDB subset).
+    Loads the Mixed Public Anchor dataset.
     Used for generating logits and consensus in FedMD.
     """
     if not os.path.exists(PUBLIC_PATH):
-        raise FileNotFoundError(f"Public data not found at {PUBLIC_PATH}. Run the data setup script first.")
+        raise FileNotFoundError(f"Public data not found at {PUBLIC_PATH}")
 
-    # ImageFolder automatically uses subfolders 'all' and 'hem' as labels 0 and 1
     dataset = datasets.ImageFolder(root=PUBLIC_PATH, transform=COMMON_TRANSFORM)
     
     # Shuffle=False is CRITICAL for FedMD so all clients see images in the same order
@@ -115,52 +187,60 @@ def load_public_dataset(batch_size=64):
     
 # <------------------------------------------ PRIVATE DATASET LOADING FOR CLIENTS ------------------------------------------>
 
-def load_private_dataset(partition_id: int, num_partitions: int, batch_size=32):
+def load_private_dataset(partition_id: int, num_partitions: int, batch_size=32, 
+                        config_path: str = CONFIG_FILE_PATH):
     """
-    Loads private medical data based on the Client ID.
+    Loads private medical data based on the Client ID using data.json configuration.
     
-    ID 0: ALL-IDB2 (ResNet)
-    ID 1: CNMC (MobileNet)
-    ID 2: None (DenseNet Free-Rider)
+    Args:
+        partition_id: Client ID (0, 1, 2, ...)
+        num_partitions: Total number of partitions (not used but kept for compatibility)
+        batch_size: Batch size for data loaders
+        config_path: Path to the configuration file
+    
+    Returns:
+        Tuple of (trainloader, testloader) or (None, None) if client has no data
     """
-    data_path = None
+    # Get client configuration
+    client_config = get_client_by_partition_id(partition_id, config_path)
     
-    if partition_id == 0:
-        data_path = CLIENT_0_PATH # ALL-IDB2
-    elif partition_id == 1:
-        data_path = CLIENT_1_PATH # CNMC
-    elif partition_id == 2:
-        # DenseNet (Free Rider) has NO private training data
+    # Check if client has local data
+    if not client_config['has_local_data'] or client_config['dataset_path'] is None:
+        print(f"[Client {partition_id}] {client_config['client_name']}: No private data (Free Rider)")
         return None, None
-
+    
+    data_path = client_config['dataset_path']
+    
     if not os.path.exists(data_path):
-        raise FileNotFoundError(f"Client {partition_id} data not found at {data_path}")
+        print(f"[Warning] Client {partition_id} data path does not exist: {data_path}")
+        return None, None
 
     # Load the Full Dataset from folder
     full_dataset = datasets.ImageFolder(root=data_path, transform=PRIVATE_TRAIN_TRANSFORM)
     
-    # Create a Train/Test split (e.g., 80% Train, 20% Test)
+    print(f"[Client {partition_id}] Loaded {len(full_dataset)} samples from {data_path}")
+    
+    # Create a Train/Test split (80% Train, 20% Test)
     train_size = int(0.8 * len(full_dataset))
     test_size = len(full_dataset) - train_size
     
-    # We use a fixed seed generator for reproducibility of splits
+    # Fixed seed for reproducibility
     generator = torch.Generator().manual_seed(42)
-    train_ds, test_ds = torch.utils.data.random_split(full_dataset, [train_size, test_size], generator=generator)
-    
-    # Note: Ideally, test_ds should use COMMON_TRANSFORM (no augmentation), 
-    # but for simplicity in this script, we use the same transform.
+    train_ds, test_ds = torch.utils.data.random_split(
+        full_dataset, [train_size, test_size], generator=generator
+    )
     
     trainloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=2)
     testloader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=2)
     
     return trainloader, testloader
 
-# <------------------------------------------ DEFINE MODEL TRAINING ------------------------------------------>
+# <------------------------------------------ MODEL TRAINING & TESTING ------------------------------------------>
 
 def train(model, trainloader, epochs, lr, device):
     """Train model on private data."""
     if trainloader is None:
-        return 0.0  # Skip training for Free Rider
+        return 0.0  # Skip training for clients without data
         
     model.to(device)
     criterion = nn.CrossEntropyLoss()
@@ -182,8 +262,6 @@ def train(model, trainloader, epochs, lr, device):
     
     avg_loss = total_loss / (len(trainloader) * epochs)
     return avg_loss
-
-# <------------------------------------------ DEFINE MODEL TESTING ------------------------------------------>
 
 def test(model, testloader, device):
     """Evaluate model on validation data."""
@@ -210,41 +288,33 @@ def test(model, testloader, device):
         
     return loss, accuracy
 
-# <------------------------------------------ STRATEGY HELPERS ------------------------------------------>
+# <------------------------------------------ KNOWLEDGE DISTILLATION ------------------------------------------>
 
 def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr, temperature):
     """
     Distill consensus knowledge into the local model.
     """
-    model.to(device) # Move model to device
-    model.train() # Set model to training mode
+    model.to(device)
+    model.train()
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr) 
-
-    # Convert consensus to tensor
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     consensus_tensor = torch.from_numpy(consensus_logits).float()
 
     total_loss = 0.0
     idx = 0
 
-    # Distillation Loop
     for epoch in range(epochs):
-        # Sends the public dataset to the model
-        for images, _ in public_loader: # Ignore the folder labels, we use Consensus!
+        for images, _ in public_loader:
             images = images.to(device)
             batch_size = images.size(0)
             
-            # Safe indexing in case loader drops last incomplete batch
             if idx + batch_size > len(consensus_tensor):
                 break
 
-            # Get consensus soft targets for this batch
             batch_consensus = consensus_tensor[idx:idx+batch_size].to(device)
+            student_logits = model(images)
             
-            # Forward pass
-            student_logits = model(images) 
-            
-            # KL Divergence Loss (distillation loss)
+            # KL Divergence Loss
             loss = F.kl_div(
                 F.log_softmax(student_logits / temperature, dim=1),
                 F.softmax(batch_consensus / temperature, dim=1),
@@ -258,17 +328,15 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
             total_loss += loss.item()
             idx += batch_size
         
-        idx = 0  # Reset for next epoch
+        idx = 0
 
     avg_loss = total_loss / (len(public_loader) * epochs)
     return avg_loss
 
 def get_public_logits(model, public_loader, device):
-    """
-    Generate logits on the public dataset.
-    """
+    """Generate logits on the public dataset."""
     if public_loader is None:
-      raise ValueError("public_loader is None.")
+        raise ValueError("public_loader is None.")
 
     model.to(device)
     model.eval()
@@ -282,11 +350,78 @@ def get_public_logits(model, public_loader, device):
     
     return np.concatenate(all_logits)
 
-# <------------------------------------------ DEFINE FEDMD STRATEGY ------------------------------------------>
+# <------------------------------------------ FEDMD STRATEGY ------------------------------------------>
 
 class FedMDStrategy(Strategy):
-    def __init__(self):
+    """
+    Federated Model Distillation (FedMD) Strategy with support for heterogeneous models.
+    
+    This strategy implements knowledge distillation across different model architectures
+    using a shared public dataset as the transfer medium.
+    """
+    
+    def __init__(self, config_path: str = CONFIG_FILE_PATH):
+        """
+        Initialize FedMD Strategy with client configuration.
+        
+        Args:
+            config_path: Path to the client configuration JSON file
+        """
         super().__init__()
+        self.config_path = config_path
+        self.client_configs = load_client_config(config_path)
+        self.num_clients = len(self.client_configs)
+        
+        # Track evaluation metrics across rounds
+        self.eval_history = []
+        
+        print(f"\n[Strategy] Initialized with {self.num_clients} clients:")
+        for i, client in enumerate(self.client_configs):
+            print(f"  Client {i}: {client['client_name']} - {client['model_type']} - "
+                  f"Data: {'✓' if client['has_local_data'] else '✗'}")
+
+    def configure_evaluate(
+        self, 
+        server_round: int, 
+        arrays: Optional[ArrayRecord],
+        config: ConfigRecord,
+        grid: Grid
+    ) -> Iterable[Message]:
+        """
+        Configure evaluation for all clients.
+        This should be called after each training round.
+        """
+        print(f"\n[Server] Round {server_round}: Configuring Evaluation")
+        
+        node_ids = list(grid.get_node_ids())
+        messages = []
+        
+        # Send evaluation request to all clients
+        for i, node_id in enumerate(node_ids):
+            client_name = self.client_configs[i]['client_name'] if i < len(self.client_configs) else f"Client {i}"
+            
+            content = RecordDict({
+                "config": ConfigRecord({"round": server_round})
+            })
+            
+            msg = Message(
+                metadata=Metadata(
+                    run_id=0,
+                    message_id=str(uuid.uuid4()),
+                    src_node_id=0,
+                    dst_node_id=node_id,
+                    reply_to_message_id="",
+                    group_id=str(server_round),
+                    ttl=86400.0,
+                    message_type="evaluate",
+                    created_at=time.time(),
+                ),
+                content=content,
+            )
+            messages.append(msg)
+            print(f"  → Sending eval request to {client_name} (Node {node_id})")
+        
+        return messages
 
     def aggregate_evaluate(
         self,
@@ -294,15 +429,20 @@ class FedMDStrategy(Strategy):
         results: Iterable[Message],
         **kwargs
     ):
-        """Aggregate evaluation results."""
+        """Aggregate evaluation results with detailed tracking."""
         results_list = list(results)
 
         if not results_list:
             print(f"[Server] Round {server_round}: No evaluation results")
             return {"loss": None, "metrics": {}}
 
-        print(f"[Server] Round {server_round}: Aggregating evaluation from {len(results_list)} clients")
+        print(f"\n[Server] Round {server_round}: Aggregating Evaluation Results")
+        print("="*60)
 
+        # Separate results by client type
+        clients_with_data = []
+        free_riders = []
+        
         total_loss = 0.0
         total_acc = 0.0
         total_examples = 0
@@ -312,18 +452,62 @@ class FedMDStrategy(Strategy):
             eval_loss = metrics.get("eval_loss", 0.0)
             eval_acc = metrics.get("eval_acc", 0.0)
             num_examples = metrics.get("num-examples", 0)
-
+            client_id = metrics.get("client_id", -1)
+            has_data = metrics.get("has_local_data", 0)
+            
+            # Track by client type
+            client_info = {
+                "client_id": client_id,
+                "loss": eval_loss,
+                "acc": eval_acc,
+                "examples": num_examples
+            }
+            
+            if has_data:
+                clients_with_data.append(client_info)
+            else:
+                free_riders.append(client_info)
+            
+            # Aggregate (weighted by number of examples)
             total_loss += eval_loss * num_examples
             total_acc += eval_acc * num_examples
             total_examples += num_examples
 
+        # Compute weighted averages
         if total_examples == 0:
             return {"loss": None, "metrics": {}}
 
         avg_loss = total_loss / total_examples
         avg_acc = total_acc / total_examples
 
-        print(f"[Server] Aggregated Eval - Loss: {avg_loss:.4f}, Acc: {avg_acc:.4f}")
+        # Print detailed results
+        print(f"\n[Server] Clients with Private Data ({len(clients_with_data)}):")
+        for c in clients_with_data:
+            client_name = self.client_configs[c['client_id']]['client_name']
+            print(f"  {client_name:15} - Loss: {c['loss']:.4f}, Acc: {c['acc']:.4f} ({c['examples']} samples)")
+        
+        if free_riders:
+            print(f"\n[Server] Free Riders ({len(free_riders)}):")
+            for c in free_riders:
+                client_name = self.client_configs[c['client_id']]['client_name']
+                print(f"  {client_name:15} - Loss: {c['loss']:.4f}, Acc: {c['acc']:.4f} (public data)")
+        
+        print(f"\n[Server] Overall Metrics:")
+        print(f"  - Average Loss: {avg_loss:.4f}")
+        print(f"  - Average Accuracy: {avg_acc:.4f} ({avg_acc*100:.2f}%)")
+        print(f"  - Total Examples: {total_examples}")
+        print("="*60)
+
+        # Store history for later analysis
+        round_metrics = {
+            "round": server_round,
+            "avg_loss": avg_loss,
+            "avg_acc": avg_acc,
+            "total_examples": total_examples,
+            "clients_with_data": clients_with_data,
+            "free_riders": free_riders
+        }
+        self.eval_history.append(round_metrics)
 
         return {
             "loss": avg_loss,
@@ -331,6 +515,8 @@ class FedMDStrategy(Strategy):
                 "eval_acc": avg_acc,
                 "num_clients": len(results_list),
                 "total_examples": total_examples,
+                "clients_with_data": len(clients_with_data),
+                "free_riders": len(free_riders)
             }
         }
 
@@ -340,7 +526,11 @@ class FedMDStrategy(Strategy):
         results: Iterable[Message],
         **kwargs
     ) -> Tuple[Optional[ArrayRecord], dict]:
-        """Aggregate logits from all clients into consensus logits."""
+        """
+        Aggregate logits from all clients into consensus logits with weighted averaging.
+        
+        Uses dataset size as weights to give more influence to clients with more data.
+        """
         
         results_list = list(results)
         print(f"\n[Server] Round {server_round}: Aggregating Logits")
@@ -351,35 +541,53 @@ class FedMDStrategy(Strategy):
 
         # Collect logits from all clients
         logits_list = []
+        client_info = []
+        weights = []
 
-        for msg in results_list:
+        for i, msg in enumerate(results_list):
             client_arrays = msg.content["arrays"]
             try:
-                # Extract logits from ArrayRecord (key "0")
                 client_logits = client_arrays["0"].numpy()
                 logits_list.append(client_logits)
+                
+                # Track which client contributed
+                if i < len(self.client_configs):
+                    client_info.append(self.client_configs[i]['client_name'])
+                
+                # Extract weight from metrics (number of training examples)
+                metrics = msg.content.get("metrics", {})
+                num_examples = metrics.get("num-examples", 1)
+                # Weight by number of training examples (clients with more data have more influence)
+                weights.append(max(num_examples, 1))  # Ensure non-zero weight
+                
             except (KeyError, IndexError) as e:
-                print(f"Error extracting logits: {e}")
+                print(f"Error extracting logits from client {i}: {e}")
         
-        # Compute consensus (simple average)
+        # Compute consensus with weighted average
         if len(logits_list) > 0:
-            consensus_logits = np.mean(logits_list, axis=0)
-            print(f"[Server] Consensus logits shape: {consensus_logits.shape}")
+            # Normalize weights
+            total_weight = sum(weights)
+            normalized_weights = [w / total_weight for w in weights]
+            
+            # Weighted average of logits
+            consensus_logits = np.average(logits_list, axis=0, weights=normalized_weights)
+            
+            print(f"[Server] Consensus shape: {consensus_logits.shape}")
+            print(f"[Server] Contributors: {', '.join(client_info)}")
+            print(f"[Server] Weights: {[f'{w:.3f}' for w in normalized_weights]}")
         else:
             return None, {}
         
-        # Pack consensus for next round
         arrays_aggregated = ArrayRecord([consensus_logits])
         
         metrics_aggregated = {
             "consensus_round": server_round,
             "num_clients": len(logits_list),
+            "client_names": client_info,
+            "weights": normalized_weights,
         }
         
         return arrays_aggregated, metrics_aggregated
-
-    def configure_evaluate(self, server_round, arrays, config, grid) -> Iterable[Message]:
-        return [] 
 
     def configure_train(self, server_round, arrays, config, grid) -> Iterable[Message]:
         """Configure the next round of federated training."""
@@ -389,10 +597,13 @@ class FedMDStrategy(Strategy):
         
         node_ids = list(grid.get_node_ids())
         messages = []
-        for node_id in node_ids:
+        
+        for i, node_id in enumerate(node_ids):
+            client_name = self.client_configs[i]['client_name'] if i < len(self.client_configs) else f"Client {i}"
+            
             content = RecordDict({
-                "arrays": arrays,  # Consensus logits
-                "config": config   # Training config
+                "arrays": arrays,
+                "config": config
             })
             
             msg = Message(
@@ -410,9 +621,15 @@ class FedMDStrategy(Strategy):
                 content=content,
             )
             messages.append(msg)
+            print(f"  → Sending to {client_name} (Node {node_id})")
         
-        print(f"[Server] Sent consensus to {len(messages)} clients")
         return messages
+    
+    def save_evaluation_history(self, filepath="evaluation_history.json"):
+        """Save evaluation history for analysis."""
+        with open(filepath, 'w') as f:
+            json.dump(self.eval_history, f, indent=2)
+        print(f"[Strategy] Evaluation history saved to {filepath}")
 
     def summary(self) -> str:
-        return "FLEX-Med: Federated Knowledge Distillation Strategy"
+        return f"FLEX-Med: Federated Knowledge Distillation Strategy ({self.num_clients} clients)"

@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, Users, Plus, Brain, Settings } from "lucide-react";
+import { Home, Users, Plus, Brain, Settings, Database } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -11,6 +11,7 @@ export default function Sidebar() {
     { id: "/", label: "Home", icon: Home },
     { id: "/clients", label: "Clients", icon: Users },
     { id: "/federated", label: "Fed Learning", icon: Brain },
+    { id: "/public-dataset", label: "Public Dataset", icon: Database },
     { id: "/settings", label: "Settings", icon: Settings },
   ];
 

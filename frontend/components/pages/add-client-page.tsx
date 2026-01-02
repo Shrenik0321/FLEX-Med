@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Upload } from "lucide-react";
+import { ArrowLeft, Upload, Check, X, FileJson } from "lucide-react";
 import { useState } from "react";
 
 interface AddClientPageProps {
@@ -9,14 +9,13 @@ interface AddClientPageProps {
 
 export default function AddClientPage({ onBack }: AddClientPageProps) {
   const [clientName, setClientName] = useState("");
-  const [email, setEmail] = useState("");
-  const [organizationType, setOrganizationType] = useState("Hospital");
   const [modelType, setModelType] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasDataset, setHasDataset] = useState(false);
 
   const handleSubmit = async () => {
-    if (!clientName || !email || !modelType) {
+    if (!clientName || !modelType) {
       setError("Please fill in all required fields");
       return;
     }
@@ -32,9 +31,9 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
         },
         body: JSON.stringify({
           client_name: clientName,
-          client_email: email,
-          status: "Training",
           model_type: modelType,
+          has_local_data: hasDataset,
+          dataset_path: hasDataset ? undefined : null,
         }),
       });
 
@@ -93,33 +92,6 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
                   onChange={(e) => setClientName(e.target.value)}
                   className="w-full px-4 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  placeholder="admin@organization.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">
-                  Organization Type
-                </label>
-                <select
-                  value={organizationType}
-                  onChange={(e) => setOrganizationType(e.target.value)}
-                  className="w-full px-4 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
-                >
-                  <option>Hospital</option>
-                  <option>Clinic</option>
-                  <option>Research Lab</option>
-                  <option>Diagnostic Center</option>
-                </select>
               </div>
             </div>
           </div>
@@ -246,15 +218,48 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
               <span className="flex-red-dot" />
               Initial Dataset
             </h2>
-            <div className="border-2 border-dashed border-[#E2E8F0] rounded-lg p-8 text-center hover:border-[#B80028] hover:bg-[rgba(184,0,40,0.02)] transition-colors cursor-pointer">
-              <Upload className="mx-auto text-[#718096] mb-3" size={32} />
-              <p className="font-medium text-gray-900">
-                Drop files here or click to upload
-              </p>
-              <p className="text-xs text-[#718096] mt-1">
-                CSV, JSON, or Parquet files supported
-              </p>
-            </div>
+            {hasDataset ? (
+              <div className="relative border-2 border-solid border-[#B80028] bg-[rgba(184,0,40,0.02)] rounded-lg p-8 text-center transition-all">
+                <button
+                  onClick={() => setHasDataset(false)}
+                  className="absolute top-4 right-4 p-1 text-[#B80028] hover:bg-red-100 rounded-full transition-colors"
+                  title="Remove dataset"
+                >
+                  <X size={20} />
+                </button>
+                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm border border-red-100">
+                  <FileJson className="text-[#B80028]" size={32} />
+                </div>
+                <h3 className="font-semibold text-gray-900 mb-1">
+                  Dataset Configured
+                </h3>
+                <p className="text-sm text-[#718096]">
+                  client_allidb (Default Local Dataset)
+                </p>
+                <div className="flex items-center justify-center gap-2 mt-4 text-sm text-[#B80028] font-medium">
+                  <Check size={16} />
+                  Ready for training
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => setHasDataset(true)}
+                className="border-2 border-dashed border-[#E2E8F0] rounded-lg p-8 text-center hover:border-[#B80028] hover:bg-[rgba(184,0,40,0.02)] transition-all cursor-pointer group"
+              >
+                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-white group-hover:shadow-sm transition-all">
+                  <Upload
+                    className="text-[#718096] group-hover:text-[#B80028] transition-colors"
+                    size={32}
+                  />
+                </div>
+                <p className="font-medium text-gray-900 group-hover:text-[#B80028] transition-colors">
+                  Click to configure local dataset
+                </p>
+                <p className="text-xs text-[#718096] mt-2">
+                  Uses default path: /content/drive/MyDrive/...
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Error Message */}

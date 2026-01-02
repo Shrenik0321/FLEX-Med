@@ -8,34 +8,15 @@ export default function FederatedPage() {
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "running" | "error">("idle");
 
-  // Static DB Data to simulate the database fetch
-  const activeClients = [
-    {
-      client_name: "Clinic - A",
-      client_email: "s.shrenikdeep@gmail.com",
-      status: "Training",
-      model_type: "resnet18",
-      id: 0,
-    },
-    {
-      client_name: "Clinic - B",
-      client_email: "s.shrenikdeep@gmail.com",
-      status: "Active",
-      model_type: "mobilenet_v2",
-      id: 1,
-    },
-  ];
-
   const handleStart = async () => {
     try {
       setIsStarting(true);
       setStatus("running");
 
-      // We pass the activeClients list to the API
-      await fetch("https://be0aac47dc98.ngrok-free.app/start_fl", {
+      // We trigger the API which internal fetches clients from DB
+      await fetch("http://localhost:8000/api/start_fl", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(activeClients),
       });
 
       setLastRun(new Date().toLocaleString());
