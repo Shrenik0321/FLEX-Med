@@ -18,9 +18,7 @@ if FED_LEARNING_PATH.exists():
 
 from flex_med.task import (  # type: ignore  # added to sys.path above
     COMMON_TRANSFORM,
-    get_efficientnet,
-    get_mobilenet,
-    get_resnet,
+    get_model_by_type,
 )
 
 MODEL_CACHE: Optional["ModelBundle"] = None
@@ -28,7 +26,6 @@ MODEL_CACHE: Optional["ModelBundle"] = None
 
 class ModelBundle:
     """Container for the model and related metadata."""
-
     def __init__(self, model: torch.nn.Module, device: torch.device, class_names, model_name: str):
         self.model = model
         self.device = device
@@ -47,29 +44,28 @@ class ModelBundle:
         return self.class_names[idx], confidence, idx, all_probs
 
 
-def _select_model(model_path: Path) -> Tuple[torch.nn.Module, str]:
+def select_model(model_path: Path) -> Tuple[torch.nn.Module, str]:
     """Pick architecture based on filename convention. Returns (model, model_name)."""
     name = model_path.name
     # Fallback to ResNet
-    model = get_resnet()
+    model = get_model_by_type('resnet18')
     model_name = "ResNet18"
     if "model_client_" in name:
         try:
             client_id = int(name.split("model_client_")[1].split(".")[0])
             mod = client_id % 3
             if mod == 0:
-                model = get_resnet()
+                model = get_model_by_type('resnet18')
                 model_name = "ResNet18"
             elif mod == 1:
-                model = get_mobilenet()
+                model = get_model_by_type('mobilenet_v2')
                 model_name = "MobileNetV2"
             else:
-                model = get_efficientnet()
+                model = get_model_by_type('efficientnet_b3')
                 model_name = "EfficientNet-B3"
         except Exception:
             pass
     return model, model_name
-
 
 def load_model(settings: Settings) -> ModelBundle:
     """Load and cache the model."""
@@ -82,7 +78,7 @@ def load_model(settings: Settings) -> ModelBundle:
         device_str = "cpu"
     device = torch.device(device_str)
 
-    model, model_name = _select_model(settings.model_path)
+    model, model_name = select_model(settings.model_path)
     checkpoint = torch.load(settings.model_path, map_location=device)
     model.load_state_dict(checkpoint)
     model.eval()
@@ -90,7 +86,6 @@ def load_model(settings: Settings) -> ModelBundle:
 
     MODEL_CACHE = ModelBundle(model=model, device=device, class_names=settings.class_names, model_name=model_name)
     return MODEL_CACHE
-
 
 def predict_image(image: Image.Image, settings: Optional[Settings] = None) -> dict:
     """Run prediction on a PIL image."""
@@ -107,7 +102,6 @@ def predict_image(image: Image.Image, settings: Optional[Settings] = None) -> di
         "device": str(bundle.device),
         "all_probabilities": all_probs,
     }
-
 
 def predict_random(settings: Optional[Settings] = None) -> dict:
     """Pick a random image from the configured folder and predict."""

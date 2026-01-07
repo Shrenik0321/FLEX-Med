@@ -1,97 +1,82 @@
-"""flex-med: Server Application with JSON-based configuration."""
-
 import numpy as np
 import json
 import os
 from flwr.app import ArrayRecord, ConfigRecord, Context
 from flwr.serverapp import ServerApp
 from flwr.server import Grid
-from flex_med.task import FedMDStrategy, load_public_dataset, CONFIG_FILE_PATH, CHECKPOINT_DIR, load_checkpoint
+from flex_med.task import FLEXMedStrategy, load_public_dataset, CLIENT_INFO_FILE_PATH, NUM_CLASSES, MODEL_CHECKPOINT_FILE_PATH, load_checkpoint
 
-# Create ServerApp
 app = ServerApp()
 
 @app.main()
 def main(grid: Grid, context: Context) -> None:
-    """
-    Main entry point for the ServerApp.
-    
-    This version uses data.json for client configuration.
-    Note: num-supernodes is configured in the FastAPI endpoint before this runs.
-    """
-    
-    print("\n" + "="*70)
-    print("FLEX-MED: Federated Learning for Medical Image Classification")
-    print("="*70)
 
-    # ===== STEP 1: LOAD CONFIGURATION =====
-    print("\n[Server] Step 1: Loading Configuration...")
-    
-    # Load run configuration
+    # <------------------------------------------ FEDERATED LEARNING CONFIGURATION ------------------------------------------>
+
+    # Extract FL hyperparameters from run configuration (defined in pyproject.toml)
+    # Args: num-server-rounds - Total number of FL training rounds
+    #       lr - Learning rate for client-side training
+    #       local-epochs - Number of epochs per client per round
     num_rounds: int = context.run_config["num-server-rounds"]
     lr: float = context.run_config["lr"]
-    local_epochs: int = context.run_config.get("local-epochs", 1) 
-    
-    print(f"  - Number of rounds: {num_rounds}")
-    print(f"  - Learning rate: {lr}")
-    
-    # Load client configuration from JSON
-    if os.path.exists(CONFIG_FILE_PATH):
-        with open(CONFIG_FILE_PATH, 'r') as f:
-            client_configs = json.load(f)
-        
-        num_clients = len(client_configs)
-        print(f"  - Number of clients: {num_clients}")
-        
-        print("\n[Server] Client Overview:")
-        for i, client in enumerate(client_configs):
-            data_status = "✓ Has Data" if client['has_local_data'] else "✗ Free Rider"
-            print(f"  Client {i}: {client['client_name']:15} | {client['model_type']:15} | {data_status}")
-    else:
-        print(f"  ⚠ Warning: Configuration file not found at {CONFIG_FILE_PATH}")
-        print("  Continuing with default settings...")
-    
-    # ===== STEP 2: INITIALIZE PUBLIC DATASET & CONSENSUS =====
-    print("\n[Server] Step 2: Initializing Consensus Matrix...")
+    local_epochs: int = context.run_config.get("local-epochs", 1)
 
-    # Load public dataset metadata
+    print(f"\n[SERVER] Starting Federated Learning ({num_rounds} rounds, lr={lr})")
+
+    # <------------------------------------------ CLIENT CONFIGURATION LOADING ------------------------------------------>
+
+    # Load client metadata from data.json containing model types, dataset paths, etc.
+    # Used to display client overview and verify configuration before training starts
+    if os.path.exists(CLIENT_INFO_FILE_PATH):
+        with open(CLIENT_INFO_FILE_PATH, 'r') as f:
+            client_configs = json.load(f)
+
+        num_clients = len(client_configs)
+        print(f"[SERVER] Loaded {num_clients} clients:")
+        for i, client in enumerate(client_configs):
+            data_status = "✓" if client['has_local_data'] else "✗"
+            print(f"  [{i}] {client['client_name']:15} | {client['model_type']:15} | {data_status}")
+    else:
+        print(f"[SERVER] ⚠ Configuration file not found: {CLIENT_INFO_FILE_PATH}")
+
+    # <------------------------------------------ CONSENSUS MATRIX INITIALIZATION ------------------------------------------>
+
+    # Initialize consensus matrix for FedMD knowledge distillation
+    # Matrix shape: (num_public_samples, num_classes) stores soft predictions
+    # Round 1: Zero matrix (no consensus yet), Round 2+: Aggregated logits from previous round
     public_loader = load_public_dataset(batch_size=1)
     num_samples = len(public_loader.dataset)
-    num_classes = 2  # Binary classification: Healthy vs Leukemia
+    num_classes = NUM_CLASSES
 
-    print(f"  - Public dataset samples: {num_samples}")
-    print(f"  - Number of classes: {num_classes}")
-    print(f"  - Consensus matrix shape: ({num_samples}, {num_classes})")
+    print(f"[SERVER] Consensus matrix: ({num_samples}, {num_classes})")
 
-    # Check for existing checkpoint
-    checkpoint = load_checkpoint(CHECKPOINT_DIR)
+    # Check for checkpoint to enable resumption from interruptions
+    checkpoint = load_checkpoint(MODEL_CHECKPOINT_FILE_PATH)
 
     if checkpoint:
-        # Resume from checkpoint
         initial_consensus = checkpoint['consensus_logits']
-        print(f"  ✓ Restored consensus from checkpoint (Round {checkpoint['round']})")
-        print(f"    - Shape: {initial_consensus.shape}")
+        print(f"[SERVER] ✓ Resuming from checkpoint (Round {checkpoint['round']})")
     else:
-        # Create zero consensus matrix for Round 1
         initial_consensus = np.zeros((num_samples, num_classes), dtype=np.float32)
-        print(f"  ✓ Zero consensus matrix initialized (fresh start)")
+        print(f"[SERVER] ✓ Starting fresh training")
 
     initial_arrays = ArrayRecord([initial_consensus])
 
-    # ===== STEP 3: INITIALIZE STRATEGY =====
-    print("\n[Server] Step 3: Initializing FedMD Strategy...")
+    # <------------------------------------------ STRATEGY INITIALIZATION ------------------------------------------>
 
-    strategy = FedMDStrategy(config_path=CONFIG_FILE_PATH, checkpoint_dir=CHECKPOINT_DIR)
+    # Initialize FedMD strategy with weighted consensus aggregation
+    # Strategy handles: client selection, consensus aggregation, evaluation coordination
+    strategy = FLEXMedStrategy(config_path=CLIENT_INFO_FILE_PATH, checkpoint_dir=MODEL_CHECKPOINT_FILE_PATH)
 
-    print(f"  ✓ Strategy initialized with {strategy.num_clients} clients")
+    # <------------------------------------------ FEDERATED LEARNING EXECUTION ------------------------------------------>
 
-    if checkpoint:
-        print(f"  ✓ Training will resume from round {strategy.start_round}")
+    print(f"\n{'='*70}")
+    print(f"[SERVER] Executing Federated Learning")
+    print(f"{'='*70}\n")
 
-    # ===== STEP 4: START FEDERATED LEARNING =====
-    print("\n[Server] Step 4: Starting Federated Learning...")
-    print("="*70)
-    
+    # Start FL rounds with FedMD two-phase training:
+    # Phase 1 (Distillation): Clients learn from consensus on public dataset
+    # Phase 2 (Private Training): Clients train on their local private data
     result = strategy.start(
         grid=grid,
         initial_arrays=initial_arrays,
@@ -99,32 +84,34 @@ def main(grid: Grid, context: Context) -> None:
         num_rounds=num_rounds,
     )
 
-    # ===== STEP 5: SAVE RESULTS =====
-    print("\n" + "="*70)
-    print("[Server] Federated Learning Complete!")
-    print("="*70)
+    # <------------------------------------------ RESULTS PERSISTENCE ------------------------------------------>
 
-    print("\n[Server] Step 5: Saving Results...")
+    print(f"\n{'='*70}")
+    print(f"[SERVER] Federated Learning Complete")
+    print(f"{'='*70}\n")
 
-    # Save final consensus logits
+    print(f"[SERVER] Saving results...")
+
+    # Save final consensus logits (aggregated soft predictions on public dataset)
+    # Used for: model interpretation, future rounds, checkpoint resumption
     consensus_save_path = "final_consensus.npy"
     final_logits = None
     try:
         final_logits = result.arrays["0"].numpy()
         np.save(consensus_save_path, final_logits)
-        print(f"  ✓ Final consensus saved to: {consensus_save_path}")
-        print(f"    - Shape: {final_logits.shape}")
-        print(f"    - Size: {os.path.getsize(consensus_save_path) / 1024:.2f} KB")
+        print(f"  ✓ Consensus saved: {consensus_save_path}")
     except Exception as e:
         print(f"  ✗ Error saving consensus: {e}")
-    
-    # Save metrics summary
+
+    # Save training summary with configuration and client details
+    # Includes: hyperparameters, client list, model types, data availability
     metrics_save_path = "training_summary.json"
     try:
         summary = {
             "num_rounds": num_rounds,
             "num_clients": strategy.num_clients,
             "learning_rate": lr,
+            "local_epochs": local_epochs,
             "public_dataset_size": num_samples,
             "num_classes": num_classes,
             "clients": [
@@ -138,48 +125,28 @@ def main(grid: Grid, context: Context) -> None:
                 for i, client in enumerate(client_configs)
             ]
         }
-        
+
         with open(metrics_save_path, 'w') as f:
             json.dump(summary, f, indent=2)
-        
-        print(f"  ✓ Training summary saved to: {metrics_save_path}")
-    except Exception as e:
-        print(f"  ⚠ Could not save training summary: {e}")
 
-    # Save final checkpoint
+        print(f"  ✓ Summary saved: {metrics_save_path}")
+    except Exception as e:
+        print(f"  ✗ Error saving summary: {e}")
+
+    # Save final checkpoint for resumption or analysis
+    # Contains: consensus logits, evaluation history, training metrics
     if final_logits is not None and strategy.eval_history:
         try:
             from flex_med.task import save_checkpoint
             save_checkpoint(
-                checkpoint_dir=CHECKPOINT_DIR,
+                checkpoint_dir=MODEL_CHECKPOINT_FILE_PATH,
                 current_round=num_rounds,
                 consensus_logits=final_logits,
                 eval_history=strategy.eval_history,
                 training_metrics=summary
             )
-            print(f"  ✓ Final checkpoint saved")
+            print(f"  ✓ Checkpoint saved: {MODEL_CHECKPOINT_FILE_PATH}")
         except Exception as e:
-            print(f"  ⚠ Could not save final checkpoint: {e}")
+            print(f"  ✗ Error saving checkpoint: {e}")
 
-    # ===== STEP 6: UPDATE CLIENT METRICS (OPTIONAL) =====
-    print("\n[Server] Step 6: Updating Client Metrics...")
-    
-    # This is where you could update the data.json file with post-FL metrics
-    # For now, we'll just print what would be updated
-    print("  Note: To update data.json with post-FL metrics, implement metric tracking")
-    print("        during the evaluation phase.")
-    
-    print("\n" + "="*70)
-    print("FLEX-MED: Process Complete")
-    print("="*70)
-    print("\nNext Steps:")
-    print("  1. Check final_consensus.npy for the distilled knowledge")
-    print("  2. Review individual client models in their respective paths")
-    print("  3. Analyze training_summary.json for experiment details")
-    print(f"  4. Find checkpoints in {CHECKPOINT_DIR}")
-    print("  5. Use the trained models for inference on new data")
-    print("\nCheckpoint Information:")
-    print(f"  - Checkpoints saved to: {CHECKPOINT_DIR}")
-    print("  - Resume training by running the same command")
-    print("  - Training will automatically resume from the last checkpoint")
-    print("\n" + "="*70 + "\n")
+    print(f"\n[SERVER] Training complete!\n")

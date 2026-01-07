@@ -1,5 +1,3 @@
-"""flex-med: Client Application with improved model saving."""
-
 import torch
 import os
 import time
@@ -15,125 +13,106 @@ from flex_med.task import (
     distill_knowledge,
     train as train_fn,
     test as test_fn,
-    load_model_checkpoint,
-    CONFIG_FILE_PATH,
+    load_existing_model,
+    CLIENT_INFO_FILE_PATH,
     NUM_CLASSES
 )
 
 app = ClientApp()
 
+# <------------------------------------------ MODEL CHECKPOINT UTILITIES ------------------------------------------>
+
+# Saves model with metadata for tracking training progress and configuration
+# Args: model - PyTorch model to save
+#       model_path - File path for saving checkpoint
+#       model_type - Architecture identifier (e.g., 'resnet18', 'mobilenet_v2')
+#       client_id - Numeric client identifier
+#       round_num - Optional FL round number for tracking training progress
+# Returns: None (saves checkpoint to disk)
 def save_model_checkpoint(model, model_path, model_type, client_id, round_num=None):
-    """
-    Save model with metadata for better tracking and debugging.
-    
-    Args:
-        model: The PyTorch model
-        model_path: Where to save
-        model_type: Architecture type (e.g., 'resnet18')
-        client_id: Client ID
-        round_num: Optional training round number
-    """
     checkpoint = {
         'model_type': model_type,
         'num_classes': NUM_CLASSES,
         'state_dict': model.state_dict(),
         'client_id': client_id,
     }
-    
+
     if round_num is not None:
         checkpoint['round'] = round_num
-    
+
     torch.save(checkpoint, model_path)
 
-
-
-def load_model_for_client(partition_id: int, config_path: str = CONFIG_FILE_PATH):
-    """
-    Load model architecture and state based on client configuration from data.json.
-    
-    Args:
-        partition_id: The partition/client ID
-        config_path: Path to the configuration file
-    
-    Returns:
-        Tuple of (model, model_path, client_config)
-    """
-    # Get client configuration
+# Initializes model architecture and loads existing weights from data.json configuration
+# Args: partition_id - Client ID used to fetch configuration from data.json
+#       config_path - Path to client configuration JSON file
+# Returns: Tuple of (model, model_path, client_config) where model is initialized architecture
+def load_model_for_client(partition_id: int, config_path: str = CLIENT_INFO_FILE_PATH):
     client_config = get_client_by_partition_id(partition_id, config_path)
-    
-    # Extract info
+
     client_name = client_config['client_name']
     model_type = client_config['model_type']
     model_path = client_config['model_path']
-    
-    print(f"\n[Client {partition_id}] === {client_name} ===")
-    print(f"[Client {partition_id}] Model Type: {model_type}")
-    print(f"[Client {partition_id}] Model Path: {model_path}")
-    print(f"[Client {partition_id}] Has Local Data: {client_config['has_local_data']}")
-    
-    # Initialize model based on type
+
+    print(f"[Client {partition_id}] {client_name} | {model_type}")
+
     model = get_model_by_type(model_type)
-    
+
     return model, model_path, client_config
+
+# <------------------------------------------ FEDERATED TRAINING LOGIC ------------------------------------------>
 
 @app.train()
 def train(msg: Message, context: Context):
-    """
-    Train function that uses data.json for client configuration.
-    """
+    # Extract client configuration from Flower context
     partition_id = context.node_config["partition-id"]
     num_partitions = context.node_config["num-partitions"]
-    
-    # Identify the current server round
+
+    # Identify the current FL round from server message
     try:
         server_round = int(msg.metadata.group_id)
     except:
         server_round = 1
 
+    # Auto-detect GPU availability
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
     print(f"\n{'='*60}")
-    print(f"[Client {partition_id}] ROUND {server_round} - TRAINING")
+    print(f"[ROUND {server_round}] Client {partition_id} - Training Phase")
     print(f"{'='*60}")
 
-    # ===== STEP 1: LOAD MODEL FROM CONFIGURATION =====
+    # Load client model architecture and configuration from data.json
     model, model_path, client_config = load_model_for_client(partition_id)
-    
-    # Ensure the model directory exists
+
+    # Ensure model storage directory exists for checkpoint saving
     model_dir = os.path.dirname(model_path)
     if not os.path.exists(model_dir):
         os.makedirs(model_dir, exist_ok=True)
-        print(f"[Client {partition_id}] Created model directory: {model_dir}")
-    
-    # Load existing model state if it exists
+
+    # Resume from existing checkpoint if available (supports multi-round training)
     if os.path.exists(model_path):
         try:
-            model, metadata = load_model_checkpoint(model, model_path, device)
-            print(f"[Client {partition_id}] ✓ Loaded existing model from: {model_path}")
-            if metadata.get('round'):
-                print(f"[Client {partition_id}]   (Last trained: Round {metadata['round']})")
+            model, metadata = load_existing_model(model, model_path, device)
+            round_info = f"(from Round {metadata['round']})" if metadata.get('round') else ""
+            print(f"[Client {partition_id}] Loaded model {round_info}")
         except Exception as e:
-            print(f"[Client {partition_id}] ⚠ Error loading model: {e}")
-            print(f"[Client {partition_id}] Starting with fresh model")
-    else:
-        print(f"[Client {partition_id}] Starting with fresh model (will be saved at: {model_path})")
+            print(f"[Client {partition_id}] Starting fresh model")
 
     model.to(device)
-    
-    # ===== PHASE 1: KNOWLEDGE DISTILLATION =====
-    print(f"\n[Client {partition_id}] --- Phase 1: Knowledge Distillation ---")
+
+    # Phase 1: Knowledge Distillation from Server Consensus
+    # Clients learn from aggregated soft predictions on shared public dataset
     distill_loss = 0.0
-    
+
     if "arrays" in msg.content and msg.content["arrays"]:
         try:
             consensus_logits = msg.content["arrays"]["0"].numpy()
-            
-            # Only distill if consensus is valid (not all zeros from Round 1)
+
+            # Skip distillation in Round 1 (no consensus yet from previous round)
             if np.any(consensus_logits != 0):
-                print(f"[Client {partition_id}] Consensus received (shape: {consensus_logits.shape})")
-                print(f"[Client {partition_id}] Starting distillation...")
-                
+                print(f"[Client {partition_id}] Phase 1: Knowledge Distillation")
+
                 public_loader = load_public_dataset(batch_size=32)
-                
+
                 distill_loss = distill_knowledge(
                     model=model,
                     public_loader=public_loader,
@@ -143,24 +122,23 @@ def train(msg: Message, context: Context):
                     lr=0.001,
                     temperature=2.0
                 )
-                print(f"[Client {partition_id}] ✓ Distillation complete. Loss: {distill_loss:.4f}")
-            else:
-                print(f"[Client {partition_id}] Round 1: Zero consensus. Skipping distillation.")
+                print(f"[Client {partition_id}] ✓ Distillation Loss: {distill_loss:.4f}")
         except Exception as e:
-            print(f"[Client {partition_id}] ✗ Distillation error: {e}")
+            print(f"[Client {partition_id}] ✗ Distillation failed: {e}")
 
-    # ===== PHASE 2: PRIVATE TRAINING =====
-    print(f"\n[Client {partition_id}] --- Phase 2: Private Training ---")
+    # Phase 2: Private Training on Client's Local Dataset
+    # Only clients with has_local_data=true participate in this phase
+    print(f"[Client {partition_id}] Phase 2: Private Training")
+
     train_loss = 0.0
     training_time = 0.0
     dataset_len = 0
-    
+
     trainloader, _ = load_private_dataset(partition_id, num_partitions, batch_size=32)
 
     if trainloader is not None:
         dataset_len = len(trainloader.dataset)
-        print(f"[Client {partition_id}] Training on {dataset_len} samples...")
-        
+
         start_time = time.time()
         train_loss = train_fn(
             model=model,
@@ -170,18 +148,12 @@ def train(msg: Message, context: Context):
             device=device
         )
         training_time = time.time() - start_time
-        
-        print(f"[Client {partition_id}] ✓ Training complete.")
-        print(f"[Client {partition_id}]   - Loss: {train_loss:.4f}")
-        print(f"[Client {partition_id}]   - Time: {training_time:.2f}s")
-    else:
-        print(f"[Client {partition_id}] ⚠ Free Rider: No private data. Skipping private training.")
-        print(f"[Client {partition_id}]   (Will learn solely from knowledge distillation)")
 
-    # ===== PHASE 3: SAVE STATE & GENERATE PUBLIC LOGITS =====
-    print(f"\n[Client {partition_id}] --- Phase 3: Save & Generate Logits ---")
-    
-    # Save the model checkpoint with metadata
+        print(f"[Client {partition_id}] ✓ Training Loss: {train_loss:.4f} ({dataset_len} samples, {training_time:.1f}s)")
+    else:
+        print(f"[Client {partition_id}] ⚠ Free Rider - No private data")
+
+    # Save updated model checkpoint with round metadata
     try:
         save_model_checkpoint(
             model=model,
@@ -190,96 +162,81 @@ def train(msg: Message, context: Context):
             client_id=partition_id,
             round_num=server_round
         )
-        print(f"[Client {partition_id}] ✓ Model saved: {model_path}")
     except Exception as e:
-        print(f"[Client {partition_id}] ✗ Error saving model: {e}")
+        print(f"[Client {partition_id}] ✗ Save failed: {e}")
 
-    # Generate logits on public dataset
-    print(f"[Client {partition_id}] Generating predictions on public dataset...")
+    # Generate predictions on public dataset for server aggregation
+    # These logits will be aggregated into consensus for next round's distillation
+    print(f"[Client {partition_id}] Generating public logits for aggregation...")
     public_loader = load_public_dataset(batch_size=32)
     public_logits = get_public_logits(model, public_loader, device)
-    print(f"[Client {partition_id}] ✓ Generated logits (shape: {public_logits.shape})")
 
-    # Pack results
+    print(f"[Client {partition_id}] Round {server_round} Complete\n")
+
+    # Package results for server aggregation
     logits_record = ArrayRecord([public_logits])
-    
-    # MetricRecord only accepts numeric types (int, float, list[int], list[float])
+
     metrics = {
         "train_loss": train_loss,
         "distill_loss": distill_loss,
         "num-examples": dataset_len,
         "training_time": training_time,
-        "client_id": partition_id,  # Use numeric ID instead of string name
-        "has_local_data": int(client_config['has_local_data'])  # Convert bool to int
+        "client_id": partition_id,
+        "has_local_data": int(client_config['has_local_data'])
     }
-    
-    print(f"[Client {partition_id}] Round {server_round} complete!")
-    print(f"  Summary: train_loss={train_loss:.4f}, distill_loss={distill_loss:.4f}")
-    print(f"{'='*60}\n")
-    
+
     return Message(
         content=RecordDict({
-            "arrays": logits_record, 
+            "arrays": logits_record,
             "metrics": MetricRecord(metrics)
-        }), 
+        }),
         reply_to=msg
     )
 
+# <------------------------------------------ FEDERATED EVALUATION LOGIC ------------------------------------------>
+
 @app.evaluate()
 def evaluate(msg: Message, context: Context):
-    """
-    Evaluation function that uses data.json for client configuration.
-    """
+    # Evaluates model performance on client's test data or public dataset
+    # Free riders (no local data) evaluate on public dataset as generalization proxy
     partition_id = context.node_config["partition-id"]
     num_partitions = context.node_config["num-partitions"]
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    print(f"\n[Client {partition_id}] === EVALUATION ===")
+    print(f"\n[Client {partition_id}] Evaluation Phase")
 
-    # Load model from configuration
+    # Load model architecture and checkpoint
     model, model_path, client_config = load_model_for_client(partition_id)
-    
-    # Load existing model state
+
     if os.path.exists(model_path):
         try:
-            model, metadata = load_model_checkpoint(model, model_path, device)
-            print(f"[Client {partition_id}] Loaded model from: {model_path}")
-            if metadata.get('round'):
-                print(f"[Client {partition_id}]   (Trained through Round {metadata['round']})")
+            model, metadata = load_existing_model(model, model_path, device)
         except Exception as e:
-            print(f"[Client {partition_id}] ⚠ Error loading model: {e}")
-            print(f"[Client {partition_id}] Using untrained model")
-    else:
-        print(f"[Client {partition_id}] ⚠ Warning: No saved model found. Using untrained model.")
-    
+            print(f"[Client {partition_id}] ⚠ Using untrained model")
+
     model.to(device)
 
-    # Load evaluation data
+    # Load test dataset (private if available, otherwise public)
     _, valloader = load_private_dataset(partition_id, num_partitions, batch_size=32)
 
-    # Handle Free Rider evaluation
     if valloader is None:
-        print(f"[Client {partition_id}] No private test set.")
-        print(f"[Client {partition_id}] Evaluating on Public Dataset (proxy for generalization)...")
+        print(f"[Client {partition_id}] Using public dataset for evaluation")
         valloader = load_public_dataset(batch_size=32)
 
     # Run evaluation
     eval_loss, eval_acc = test_fn(model, valloader, device)
 
-    print(f"[Client {partition_id}] Evaluation Results:")
-    print(f"  - Loss: {eval_loss:.4f}")
-    print(f"  - Accuracy: {eval_acc:.4f} ({eval_acc*100:.2f}%)")
-    print(f"  - Samples: {len(valloader.dataset)}")
+    print(f"[Client {partition_id}] ✓ Loss: {eval_loss:.4f} | Accuracy: {eval_acc:.4f} ({eval_acc*100:.1f}%)")
 
     metrics = {
         "eval_loss": eval_loss,
         "eval_acc": eval_acc,
         "num-examples": len(valloader.dataset),
-        "client_id": partition_id,  # Use numeric ID
-        "has_local_data": int(client_config['has_local_data'])  # Convert bool to int
+        "client_id": partition_id,
+        "has_local_data": int(client_config['has_local_data'])
     }
-    
+
     return Message(
-        content=RecordDict({"metrics": MetricRecord(metrics)}), 
+        content=RecordDict({"metrics": MetricRecord(metrics)}),
         reply_to=msg
     )
