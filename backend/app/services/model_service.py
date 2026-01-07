@@ -18,7 +18,7 @@ if FED_LEARNING_PATH.exists():
 
 from flex_med.task import (  # type: ignore  # added to sys.path above
     COMMON_TRANSFORM,
-    get_densenet,
+    get_efficientnet,
     get_mobilenet,
     get_resnet,
 )
@@ -64,8 +64,8 @@ def _select_model(model_path: Path) -> Tuple[torch.nn.Module, str]:
                 model = get_mobilenet()
                 model_name = "MobileNetV2"
             else:
-                model = get_densenet()
-                model_name = "DenseNet121"
+                model = get_efficientnet()
+                model_name = "EfficientNet-B3"
         except Exception:
             pass
     return model, model_name
@@ -153,7 +153,7 @@ def get_gradcam_target_layers(model: torch.nn.Module, model_name: str):
         return [model.layer4[-1]]
     elif "MobileNet" in model_name:
         return [model.features[-1]]
-    elif "DenseNet" in model_name:
+    elif "EfficientNet" in model_name:
         return [model.features[-1]]
     else:
         raise ValueError(f"Unsupported model for Grad-CAM: {model_name}")

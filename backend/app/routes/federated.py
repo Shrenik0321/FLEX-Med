@@ -46,7 +46,7 @@ async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
 
     try:
         response = requests.post(
-            "https://00ba40d02957.ngrok-free.app/start_fl",
+            "https://6f816048fc47.ngrok-free.app/start_fl",
             json=clients_data,
             headers={"Content-Type": "application/json"}
         )

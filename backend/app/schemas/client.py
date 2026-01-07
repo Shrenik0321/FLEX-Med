@@ -128,7 +128,7 @@ class ClientCreate(BaseModel):
     model_type: ModelType
     status: Status = Status.Inactive
     has_local_data: bool = False
-    dataset_path: Optional[str] = "/content/drive/MyDrive/College/Datasets/fed_data/client_allidb"
+    dataset_path: Optional[str] = "/content/drive/MyDrive/College/FLEX-Med/datasets/all_idb2_raw"
     model_path: Optional[str] = None
     metrics: str = "{}"  # ← Default to empty JSON object
     

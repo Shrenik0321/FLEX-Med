@@ -6,7 +6,7 @@ import os
 from flwr.app import ArrayRecord, ConfigRecord, Context
 from flwr.serverapp import ServerApp
 from flwr.server import Grid
-from flex_med.task import FedMDStrategy, load_public_dataset, CONFIG_FILE_PATH
+from flex_med.task import FedMDStrategy, load_public_dataset, CONFIG_FILE_PATH, CHECKPOINT_DIR, load_checkpoint
 
 # Create ServerApp
 app = ServerApp()
@@ -53,28 +53,40 @@ def main(grid: Grid, context: Context) -> None:
     
     # ===== STEP 2: INITIALIZE PUBLIC DATASET & CONSENSUS =====
     print("\n[Server] Step 2: Initializing Consensus Matrix...")
-    
+
     # Load public dataset metadata
     public_loader = load_public_dataset(batch_size=1)
     num_samples = len(public_loader.dataset)
     num_classes = 2  # Binary classification: Healthy vs Leukemia
-    
+
     print(f"  - Public dataset samples: {num_samples}")
     print(f"  - Number of classes: {num_classes}")
     print(f"  - Consensus matrix shape: ({num_samples}, {num_classes})")
-    
-    # Create zero consensus matrix for Round 1
-    zero_consensus = np.zeros((num_samples, num_classes), dtype=np.float32)
-    initial_arrays = ArrayRecord([zero_consensus])
-    
-    print(f"  ✓ Zero consensus matrix initialized")
+
+    # Check for existing checkpoint
+    checkpoint = load_checkpoint(CHECKPOINT_DIR)
+
+    if checkpoint:
+        # Resume from checkpoint
+        initial_consensus = checkpoint['consensus_logits']
+        print(f"  ✓ Restored consensus from checkpoint (Round {checkpoint['round']})")
+        print(f"    - Shape: {initial_consensus.shape}")
+    else:
+        # Create zero consensus matrix for Round 1
+        initial_consensus = np.zeros((num_samples, num_classes), dtype=np.float32)
+        print(f"  ✓ Zero consensus matrix initialized (fresh start)")
+
+    initial_arrays = ArrayRecord([initial_consensus])
 
     # ===== STEP 3: INITIALIZE STRATEGY =====
     print("\n[Server] Step 3: Initializing FedMD Strategy...")
-    
-    strategy = FedMDStrategy(config_path=CONFIG_FILE_PATH)
-    
+
+    strategy = FedMDStrategy(config_path=CONFIG_FILE_PATH, checkpoint_dir=CHECKPOINT_DIR)
+
     print(f"  ✓ Strategy initialized with {strategy.num_clients} clients")
+
+    if checkpoint:
+        print(f"  ✓ Training will resume from round {strategy.start_round}")
 
     # ===== STEP 4: START FEDERATED LEARNING =====
     print("\n[Server] Step 4: Starting Federated Learning...")
@@ -91,11 +103,12 @@ def main(grid: Grid, context: Context) -> None:
     print("\n" + "="*70)
     print("[Server] Federated Learning Complete!")
     print("="*70)
-    
+
     print("\n[Server] Step 5: Saving Results...")
-    
+
     # Save final consensus logits
     consensus_save_path = "final_consensus.npy"
+    final_logits = None
     try:
         final_logits = result.arrays["0"].numpy()
         np.save(consensus_save_path, final_logits)
@@ -132,7 +145,22 @@ def main(grid: Grid, context: Context) -> None:
         print(f"  ✓ Training summary saved to: {metrics_save_path}")
     except Exception as e:
         print(f"  ⚠ Could not save training summary: {e}")
-    
+
+    # Save final checkpoint
+    if final_logits is not None and strategy.eval_history:
+        try:
+            from flex_med.task import save_checkpoint
+            save_checkpoint(
+                checkpoint_dir=CHECKPOINT_DIR,
+                current_round=num_rounds,
+                consensus_logits=final_logits,
+                eval_history=strategy.eval_history,
+                training_metrics=summary
+            )
+            print(f"  ✓ Final checkpoint saved")
+        except Exception as e:
+            print(f"  ⚠ Could not save final checkpoint: {e}")
+
     # ===== STEP 6: UPDATE CLIENT METRICS (OPTIONAL) =====
     print("\n[Server] Step 6: Updating Client Metrics...")
     
@@ -148,5 +176,10 @@ def main(grid: Grid, context: Context) -> None:
     print("  1. Check final_consensus.npy for the distilled knowledge")
     print("  2. Review individual client models in their respective paths")
     print("  3. Analyze training_summary.json for experiment details")
-    print("  4. Use the trained models for inference on new data")
+    print(f"  4. Find checkpoints in {CHECKPOINT_DIR}")
+    print("  5. Use the trained models for inference on new data")
+    print("\nCheckpoint Information:")
+    print(f"  - Checkpoints saved to: {CHECKPOINT_DIR}")
+    print("  - Resume training by running the same command")
+    print("  - Training will automatically resume from the last checkpoint")
     print("\n" + "="*70 + "\n")

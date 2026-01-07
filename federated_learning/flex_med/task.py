@@ -33,13 +33,19 @@ CONFIG_FILE_PATH = os.getenv(
 # Public dataset path (remains constant) - now configurable
 DATA_ROOT = os.getenv(
     "FLEX_MED_DATA_ROOT",
-    "/content/drive/MyDrive/College/Datasets/fed_data"
+    "/content/drive/MyDrive/College/FLEX-Med/datasets"
 )
 PUBLIC_PATH = os.path.join(DATA_ROOT, "public_anchor")
 
+# Checkpoint directory - where FL training state is saved
+CHECKPOINT_DIR = os.getenv(
+    "FLEX_MED_CHECKPOINT_DIR",
+    "/content/drive/MyDrive/College/FLEX-Med/checkpoints"
+)
+
 # Model Constraints
 NUM_CLASSES = 2   # 0: Hem (Healthy), 1: ALL (Leukemia)
-IMG_SIZE = 128    # Resize all inputs to 128x128 for consistency
+IMG_SIZE = 224    # Resize all inputs to 224X224 for consistency
 
 # <------------------------------------------ CLIENT CONFIGURATION LOADER ------------------------------------------>
 
@@ -125,36 +131,39 @@ PRIVATE_TRAIN_TRANSFORM = Compose([
 
 # <------------------------------------------ MODEL DEFINITIONS ------------------------------------------>
 
-def get_model_by_type(model_type: str):
+def get_model_by_type(model_type: str, use_pretrained: bool = True):
     """
     Returns a model based on the model_type string.
-    
+
     Args:
-        model_type: String identifier ('resnet18', 'mobilenet_v2', 'densenet121')
-    
+        model_type: String identifier ('resnet18', 'mobilenet_v2', 'efficientnet_b3')
+
     Returns:
         PyTorch model initialized for binary classification
     """
     model_type = model_type.lower()
-    
+
     if model_type == 'resnet18':
-        model = models.resnet18(weights=None)
+        weights = models.ResNet18_Weights.IMAGENET1K_V1 if use_pretrained else None
+        model = models.resnet18(weights=weights)
         model.fc = nn.Linear(model.fc.in_features, NUM_CLASSES)
         return model
-    
+
     elif model_type == 'mobilenet_v2':
-        model = models.mobilenet_v2(weights=None)
+        weights = models.MobileNet_V2_Weights.IMAGENET1K_V1 if use_pretrained else None
+        model = models.mobilenet_v2(weights=weights)
         model.classifier[1] = nn.Linear(model.classifier[1].in_features, NUM_CLASSES)
         return model
-    
-    elif model_type == 'densenet121':
-        model = models.densenet121(weights=None)
-        model.classifier = nn.Linear(model.classifier.in_features, NUM_CLASSES)
+
+    elif model_type == 'efficientnet_b3':
+        weights = models.EfficientNet_B3_Weights.IMAGENET1K_V1 if use_pretrained else None
+        model = models.efficientnet_b3(weights=weights)
+        model.classifier[1] = nn.Linear(model.classifier[1].in_features, NUM_CLASSES)
         return model
-    
+
     else:
         raise ValueError(f"Unsupported model type: {model_type}. "
-                        f"Supported types: resnet18, mobilenet_v2, densenet121")
+                        f"Supported types: resnet18, mobilenet_v2, efficientnet_b3")
 
 # Legacy functions for backward compatibility
 def get_resnet():
@@ -165,9 +174,9 @@ def get_mobilenet():
     """Returns a MobileNetV2 for Binary Classification."""
     return get_model_by_type('mobilenet_v2')
 
-def get_densenet():
-    """Returns a DenseNet-121 for Binary Classification."""
-    return get_model_by_type('densenet121')
+def get_efficientnet():
+    """Returns an EfficientNet-B3 for Binary Classification."""
+    return get_model_by_type('efficientnet_b3')
 
 # <------------------------------------------ PUBLIC (ANCHOR) DATASET LOADER ------------------------------------------>
 
@@ -241,10 +250,15 @@ def train(model, trainloader, epochs, lr, device):
     """Train model on private data."""
     if trainloader is None:
         return 0.0  # Skip training for clients without data
-        
+
     model.to(device)
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=lr,
+        betas=(0.9, 0.999),
+        weight_decay=0.01  # L2 regularization
+    )
     
     model.train()
     total_loss = 0.0
@@ -297,13 +311,18 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
     model.to(device)
     model.train()
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=lr,
+        betas=(0.9, 0.999),
+        weight_decay=0.01  # L2 regularization
+    )
     consensus_tensor = torch.from_numpy(consensus_logits).float()
 
     total_loss = 0.0
     idx = 0
 
-    for epoch in range(epochs):
+    for _epoch in range(epochs):
         for images, _ in public_loader:
             images = images.to(device)
             batch_size = images.size(0)
@@ -340,15 +359,96 @@ def get_public_logits(model, public_loader, device):
 
     model.to(device)
     model.eval()
-    
+
     all_logits = []
     with torch.no_grad():
         for images, _ in public_loader:
             images = images.to(device)
             outputs = model(images)
             all_logits.append(outputs.cpu().numpy())
-    
+
     return np.concatenate(all_logits)
+
+# <------------------------------------------ CHECKPOINT UTILITIES ------------------------------------------>
+
+def save_checkpoint(
+    checkpoint_dir: str,
+    current_round: int,
+    consensus_logits: np.ndarray,
+    eval_history: List[Dict],
+    training_metrics: Dict
+):
+    """
+    Save FL training checkpoint to enable resumption after interruption.
+
+    Args:
+        checkpoint_dir: Directory to save checkpoints
+        current_round: Current training round number
+        consensus_logits: Current consensus matrix
+        eval_history: List of evaluation results per round
+        training_metrics: Additional training metrics
+    """
+    # Ensure checkpoint directory exists
+    os.makedirs(checkpoint_dir, exist_ok=True)
+
+    checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_round_{current_round}.pt")
+    latest_path = os.path.join(checkpoint_dir, "latest_checkpoint.pt")
+
+    checkpoint = {
+        'round': current_round,
+        'consensus_logits': consensus_logits,
+        'eval_history': eval_history,
+        'training_metrics': training_metrics,
+        'timestamp': time.time()
+    }
+
+    # Save round-specific checkpoint
+    torch.save(checkpoint, checkpoint_path)
+
+    # Save as latest checkpoint (for easy resumption)
+    torch.save(checkpoint, latest_path)
+
+    print(f"[Checkpoint] Saved checkpoint for round {current_round}")
+    print(f"  - Path: {checkpoint_path}")
+    print(f"  - Size: {os.path.getsize(checkpoint_path) / 1024:.2f} KB")
+
+def load_checkpoint(checkpoint_dir: str) -> Optional[Dict]:
+    """
+    Load the latest FL training checkpoint.
+
+    Args:
+        checkpoint_dir: Directory containing checkpoints
+
+    Returns:
+        Checkpoint dictionary or None if no checkpoint exists
+    """
+    latest_path = os.path.join(checkpoint_dir, "latest_checkpoint.pt")
+
+    if not os.path.exists(latest_path):
+        print(f"[Checkpoint] No checkpoint found at {latest_path}")
+        return None
+
+    try:
+        checkpoint = torch.load(latest_path, map_location='cpu')
+        print(f"[Checkpoint] Loaded checkpoint from round {checkpoint['round']}")
+        print(f"  - Consensus shape: {checkpoint['consensus_logits'].shape}")
+        print(f"  - Eval history length: {len(checkpoint['eval_history'])}")
+        return checkpoint
+    except Exception as e:
+        print(f"[Checkpoint] Error loading checkpoint: {e}")
+        return None
+
+def clear_checkpoints(checkpoint_dir: str):
+    """
+    Clear all checkpoints from the directory.
+
+    Args:
+        checkpoint_dir: Directory containing checkpoints
+    """
+    if os.path.exists(checkpoint_dir):
+        import shutil
+        shutil.rmtree(checkpoint_dir)
+        print(f"[Checkpoint] Cleared all checkpoints from {checkpoint_dir}")
 
 # <------------------------------------------ FEDMD STRATEGY ------------------------------------------>
 
@@ -360,25 +460,41 @@ class FedMDStrategy(Strategy):
     using a shared public dataset as the transfer medium.
     """
     
-    def __init__(self, config_path: str = CONFIG_FILE_PATH):
+    def __init__(self, config_path: str = CONFIG_FILE_PATH, checkpoint_dir: str = CHECKPOINT_DIR):
         """
-        Initialize FedMD Strategy with client configuration.
-        
+        Initialize FedMD Strategy with client configuration and checkpoint support.
+
         Args:
             config_path: Path to the client configuration JSON file
+            checkpoint_dir: Directory for saving/loading checkpoints
         """
         super().__init__()
         self.config_path = config_path
+        self.checkpoint_dir = checkpoint_dir
         self.client_configs = load_client_config(config_path)
         self.num_clients = len(self.client_configs)
-        
+
         # Track evaluation metrics across rounds
         self.eval_history = []
-        
+
+        # Track starting round (for checkpoint resumption)
+        self.start_round = 1
+        self.last_consensus_logits = None
+
         print(f"\n[Strategy] Initialized with {self.num_clients} clients:")
         for i, client in enumerate(self.client_configs):
             print(f"  Client {i}: {client['client_name']} - {client['model_type']} - "
                   f"Data: {'✓' if client['has_local_data'] else '✗'}")
+
+        # Try to load checkpoint
+        checkpoint = load_checkpoint(checkpoint_dir)
+        if checkpoint:
+            self.start_round = checkpoint['round'] + 1  # Resume from next round
+            self.eval_history = checkpoint['eval_history']
+            self.last_consensus_logits = checkpoint['consensus_logits']
+            print(f"\n[Strategy] Resuming from round {self.start_round}")
+        else:
+            print(f"\n[Strategy] Starting fresh training")
 
     def configure_evaluate(
         self, 
@@ -509,6 +625,19 @@ class FedMDStrategy(Strategy):
         }
         self.eval_history.append(round_metrics)
 
+        # Save checkpoint after evaluation
+        if self.last_consensus_logits is not None:
+            try:
+                save_checkpoint(
+                    checkpoint_dir=self.checkpoint_dir,
+                    current_round=server_round,
+                    consensus_logits=self.last_consensus_logits,
+                    eval_history=self.eval_history,
+                    training_metrics=round_metrics
+                )
+            except Exception as e:
+                print(f"[Checkpoint] Warning: Failed to save checkpoint: {e}")
+
         return {
             "loss": avg_loss,
             "metrics": {
@@ -579,14 +708,17 @@ class FedMDStrategy(Strategy):
             return None, {}
         
         arrays_aggregated = ArrayRecord([consensus_logits])
-        
+
+        # Store consensus for checkpointing
+        self.last_consensus_logits = consensus_logits
+
         metrics_aggregated = {
             "consensus_round": server_round,
             "num_clients": len(logits_list),
             "client_names": client_info,
             "weights": normalized_weights,
         }
-        
+
         return arrays_aggregated, metrics_aggregated
 
     def configure_train(self, server_round, arrays, config, grid) -> Iterable[Message]:
