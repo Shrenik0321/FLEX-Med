@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import os
 from pathlib import Path
+from datetime import datetime
 from supabase import Client as SupabaseClient
 from app.config import get_supabase_client, get_settings, Settings
 from app.services.fl_evaluation_service import evaluate_all_clients, calculate_improvement
@@ -14,6 +15,43 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Global FL pipeline status tracker
+fl_status = {
+    "is_running": False,
+    "current_stage": None,
+    "progress": 0,
+    "total_rounds": 0,
+    "current_round": 0,
+    "clients": 0,
+    "started_at": None,
+    "completed_at": None,
+    "error": None,
+    "logs": []
+}
+
+def update_fl_status(stage: str = None, progress: int = None, current_round: int = None, log: str = None, error: str = None, completed: bool = False):
+    """Update global FL status for monitoring"""
+    global fl_status
+
+    if stage:
+        fl_status["current_stage"] = stage
+    if progress is not None:
+        fl_status["progress"] = progress
+    if current_round is not None:
+        fl_status["current_round"] = current_round
+    if log:
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        fl_status["logs"].append(f"[{timestamp}] {log}")
+        # Keep only last 50 logs
+        if len(fl_status["logs"]) > 50:
+            fl_status["logs"] = fl_status["logs"][-50:]
+    if error:
+        fl_status["error"] = error
+    if completed:
+        fl_status["is_running"] = False
+        fl_status["completed_at"] = datetime.now().isoformat()
+        fl_status["progress"] = 100
 
 @router.post("/start_fl")
 async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
@@ -53,7 +91,7 @@ async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
 
     try:
         response = requests.post(
-            "https://79233b82dab3.ngrok-free.app/start_fl",
+            "https://4caf7f497280.ngrok-free.app/start_fl",
             json=clients_data,
             headers={"Content-Type": "application/json"}
         )
@@ -111,6 +149,26 @@ async def get_metrics_comparison():
 # <========================================== CONSOLIDATED FL ENDPOINT ==========================================>
 
 
+@router.get("/fl_status")
+async def get_fl_status():
+    """
+    Get current status of FL pipeline execution
+
+    Returns:
+        - is_running: Whether FL is currently running
+        - current_stage: Current pipeline stage (pre_eval, simulation, post_eval, etc.)
+        - progress: Overall progress percentage (0-100)
+        - current_round: Current FL round (during simulation)
+        - total_rounds: Total number of rounds
+        - clients: Number of clients
+        - started_at: When pipeline started
+        - completed_at: When pipeline completed (if finished)
+        - error: Error message (if failed)
+        - logs: Recent log entries (last 50)
+    """
+    return fl_status
+
+
 @router.post("/start_fl_complete")
 async def start_fl_complete(
     background_tasks: BackgroundTasks,
@@ -140,6 +198,14 @@ async def start_fl_complete(
         Immediate response with job ID (actual execution happens in background)
     """
 
+    # Check if FL is already running
+    global fl_status
+    if fl_status["is_running"]:
+        raise HTTPException(
+            status_code=409,
+            detail="FL pipeline is already running. Check /api/fl_status for progress."
+        )
+
     # Step 1: Fetch all clients from database
     logger.info("\n" + "="*70)
     logger.info("FEDERATED LEARNING - COMPLETE PIPELINE")
@@ -156,6 +222,20 @@ async def start_fl_complete(
     # Use environment variable for public test path if not provided
     if public_test_path is None:
         public_test_path = os.getenv("PUBLIC_TEST_PATH", "/content/drive/MyDrive/College/FLEX-Med/datasets/public_test")
+
+    # Initialize FL status
+    fl_status.update({
+        "is_running": True,
+        "current_stage": "initializing",
+        "progress": 0,
+        "total_rounds": num_rounds,
+        "current_round": 0,
+        "clients": len(clients_data),
+        "started_at": datetime.now().isoformat(),
+        "completed_at": None,
+        "error": None,
+        "logs": [f"FL pipeline started with {len(clients_data)} clients, {num_rounds} rounds"]
+    })
 
     # Schedule background task for FL execution
     background_tasks.add_task(
@@ -176,7 +256,8 @@ async def start_fl_complete(
         "num_rounds": num_rounds,
         "learning_rate": lr,
         "local_epochs": local_epochs,
-        "note": "Check logs for progress. Metrics will be updated in database when complete."
+        "status_endpoint": "/api/fl_status",
+        "note": "Use GET /api/fl_status to monitor progress in real-time"
     }
 
 
@@ -202,6 +283,7 @@ async def run_complete_fl_pipeline(
 
     try:
         # ===== STEP 1: PRE-FL EVALUATION =====
+        update_fl_status(stage="pre_fl_evaluation", progress=10, log="Starting pre-FL evaluation")
         logger.info("\n[PIPELINE] Step 1: Pre-FL Evaluation")
         logger.info("="*70)
 
@@ -251,9 +333,11 @@ async def run_complete_fl_pipeline(
 
             logger.info(f"✓ Updated pre-FL metrics for client {client_id}")
 
+        update_fl_status(progress=25, log="Pre-FL evaluation complete, metrics saved to database")
         logger.info("✅ Pre-FL evaluation complete and saved to database\n")
 
         # ===== STEP 2: WRITE TEMPORARY CONFIG FOR FL =====
+        update_fl_status(stage="preparing_config", progress=30, log="Preparing FL configuration")
         logger.info("[PIPELINE] Step 2: Preparing FL Configuration")
         logger.info("="*70)
 
@@ -263,9 +347,11 @@ async def run_complete_fl_pipeline(
         with open(temp_config_path, 'w') as f:
             json.dump(clients_data, f, indent=2)
 
+        update_fl_status(progress=35, log=f"Configuration prepared: {temp_config_path}")
         logger.info(f"✓ Wrote temporary config to: {temp_config_path}\n")
 
         # ===== STEP 3: RUN FL SIMULATION =====
+        update_fl_status(stage="fl_simulation", progress=40, log=f"Starting FL simulation ({num_rounds} rounds)")
         logger.info("[PIPELINE] Step 3: Running Federated Learning Simulation")
         logger.info("="*70)
 
@@ -297,12 +383,15 @@ async def run_complete_fl_pipeline(
         if process.returncode != 0:
             logger.error(f"FL simulation failed with return code {process.returncode}")
             logger.error(f"STDERR: {process.stderr}")
+            update_fl_status(error=f"FL simulation failed: {process.stderr}", completed=True)
             raise RuntimeError(f"FL simulation failed: {process.stderr}")
 
+        update_fl_status(progress=70, log="FL simulation completed successfully")
         logger.info("✅ FL simulation completed successfully\n")
         logger.info(f"STDOUT:\n{process.stdout}")
 
         # ===== STEP 4: POST-FL EVALUATION =====
+        update_fl_status(stage="post_fl_evaluation", progress=75, log="Starting post-FL evaluation")
         logger.info("[PIPELINE] Step 4: Post-FL Evaluation")
         logger.info("="*70)
 
@@ -364,9 +453,11 @@ async def run_complete_fl_pipeline(
                 imp = existing_metrics['improvement']
                 logger.info(f"  Improvement: Accuracy {imp['accuracy']:+.2%}, F1 {imp['f1_score']:+.3f}")
 
+        update_fl_status(progress=95, log="Post-FL evaluation complete, metrics saved to database")
         logger.info("✅ Post-FL evaluation complete and saved to database\n")
 
         # ===== STEP 5: CLEANUP =====
+        update_fl_status(stage="cleanup", progress=98, log="Cleaning up temporary files")
         # Remove temporary config file
         temp_config_path.unlink(missing_ok=True)
 
@@ -379,8 +470,18 @@ async def run_complete_fl_pipeline(
         logger.info(f"All metrics saved to Supabase database")
         logger.info("="*70 + "\n")
 
+        # Mark as complete
+        update_fl_status(
+            stage="completed",
+            progress=100,
+            log=f"FL pipeline completed successfully! {len(clients_data)} clients trained for {num_rounds} rounds",
+            completed=True
+        )
+
     except Exception as e:
         logger.error(f"\n❌ FL Pipeline failed: {e}")
         import traceback
+        error_msg = f"{str(e)}\n{traceback.format_exc()}"
         logger.error(traceback.format_exc())
+        update_fl_status(error=str(e), log=f"Pipeline failed: {str(e)}", completed=True)
         raise

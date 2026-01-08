@@ -31,9 +31,9 @@ clientapp = "flex_med.client_app:app"
 
 [tool.flwr.app.config]
 # Training configuration
-num-server-rounds = 20           # 20 rounds of federated learning
+num-server-rounds = 2           # 20 rounds of federated learning
 fraction-train = 1.0             # Use all clients each round
-local-epochs = 10                 # 10 epochs of private training per round
+local-epochs = 2                 # 10 epochs of private training per round
 lr = 0.0005                      # Learning rate (conservative for stability)
 
 # Distillation configuration (optional - can add to client_app.py)

@@ -58,7 +58,9 @@ export default function FederatedPage() {
             {status}
           </p>
           {lastRun && (
-            <p className="text-xs text-muted-foreground mt-1">Last run: {lastRun}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Last run: {lastRun}
+            </p>
           )}
         </div>
 
@@ -168,7 +170,9 @@ export default function FederatedPage() {
                     </span>
                   </p>
                   <p className="text-xs text-muted-foreground">{item.detail}</p>
-                  <p className="text-[11px] text-muted-foreground/70 mt-1">{item.time}</p>
+                  <p className="text-[11px] text-muted-foreground/70 mt-1">
+                    {item.time}
+                  </p>
                 </div>
               </div>
             ))}
