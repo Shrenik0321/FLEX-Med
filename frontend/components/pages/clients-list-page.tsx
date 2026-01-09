@@ -175,7 +175,9 @@ export default function ClientsListPage({
   useEffect(() => {
     const fetchClients = async () => {
       try {
-        const response = await fetch("http://localhost:8000/api/clients");
+        const response = await fetch(
+          "https://hkpmwl2gtwdxo8-7860.proxy.runpod.net/api/clients"
+        );
         if (!response.ok) throw new Error("Failed to fetch");
         const data = await response.json();
         setClients(data);

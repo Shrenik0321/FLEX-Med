@@ -14,10 +14,13 @@ export default function FederatedPage() {
       setStatus("running");
 
       // We trigger the API which internal fetches clients from DB
-      await fetch("http://localhost:8000/api/start_fl", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
+      await fetch(
+        "https://hkpmwl2gtwdxo8-7860.proxy.runpod.net/api/start_fl_complete",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
 
       setLastRun(new Date().toLocaleString());
     } catch (error) {
