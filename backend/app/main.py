@@ -19,7 +19,7 @@ app.add_middleware(
 def healthcheck():
     return {"status": "ok"}
 
-app.include_router(predict.router)
+app.include_router(predict.router, prefix="/api")
 app.include_router(clients.router, prefix="/api")
 app.include_router(federated.router, prefix="/api")
 

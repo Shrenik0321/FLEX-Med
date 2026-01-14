@@ -1,12 +1,15 @@
 import io
 import logging
 import torch
-from fastapi import APIRouter, File, HTTPException, UploadFile
+import requests
+from fastapi import APIRouter, File, HTTPException, UploadFile, Form, Depends
 from fastapi.responses import JSONResponse
 from PIL import Image
+import os
+from supabase import Client as SupabaseClient
 
 from app.schemas.prediction import PredictionResponse
-from app.config import get_settings
+from app.config import get_settings, get_supabase_client
 from app.services.model_service import (
     predict_image,
     load_model,
@@ -19,6 +22,15 @@ from app.services.xai_service import generate_lime_base64
 router = APIRouter(prefix="/predict", tags=["predict"])
 logger = logging.getLogger(__name__)
 
+# Load inference orchestrator URL from settings
+# This URL should point to the ngrok tunnel from Colab (e.g., https://xxxx.ngrok-free.app)
+# Update the INFERENCE_ORCHESTRATOR_URL environment variable in .env when starting a new Colab session
+
+# Ngrok URL for local training orchestrator (update when Colab session changes)
+INFERENCE_ORCHESTRATOR_URL = os.getenv(
+    "LOCAL_TRAIN_ORCHESTRATOR_URL",
+    "https://intraspinal-agape-deidra.ngrok-free.dev"
+)
 
 # ============================================================
 # STANDARD PREDICTION (UNCHANGED)
@@ -74,14 +86,111 @@ async def predict_from_upload(file: UploadFile = File(...)):
         logger.error("Unexpected server error", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-
 # ============================================================
-# PREDICTION + XAI (GRAD-CAM)
+# PREDICTION + XAI (PROXIED TO COLAB ORCHESTRATOR)
 # ============================================================
 @router.post("/upload-xai")
-async def upload_xai(file: UploadFile = File(...)):
+async def upload_xai_proxy(
+    file: UploadFile = File(...),
+    client_id: int = Form(...),
+    supabase: SupabaseClient = Depends(get_supabase_client)
+):
     """
-    Predict from uploaded image + Grad-CAM explanation
+    Predict from uploaded image + Grad-CAM + LIME explanations.
+
+    This endpoint proxies the request to the Colab inference orchestrator (via ngrok)
+    where the xAI computation happens on cloud GPUs.
+
+    Args:
+        file: Uploaded blood cell microscopy image
+        client_id: Database ID of the client (used to fetch client_name)
+        supabase: Supabase client for database access
+
+    Returns:
+        JSON with prediction, confidence, and xAI visualizations (base64 encoded images)
+
+    Note:
+        - The INFERENCE_ORCHESTRATOR_URL must be updated in .env when starting a new Colab session
+        - For local xAI computation, use the /upload-xai-local endpoint instead
+    """
+    try:
+        logger.info(f"[PROXY] xAI inference request for client_id: {client_id}, file: {file.filename}")
+
+        # Fetch client from database to get client_name
+        client_response = supabase.from_("clients").select("client_name").eq("id", client_id).execute()
+
+        if not client_response.data or len(client_response.data) == 0:
+            logger.error(f"[PROXY] Client with id {client_id} not found in database")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Client with id {client_id} not found"
+            )
+
+        client_name = client_response.data[0]["client_name"]
+        logger.info(f"[PROXY] Fetched client_name: {client_name}")
+        logger.info(f"[PROXY] Forwarding to orchestrator: {INFERENCE_ORCHESTRATOR_URL}")
+
+        # Read file content
+        file_content = await file.read()
+
+        # Prepare multipart form data (file only)
+        files = {
+            "file": (file.filename, file_content, file.content_type)
+        }
+
+        # Send client_name as query parameter
+        params = {
+            "client_name": client_name
+        }
+
+        # Forward request to Colab orchestrator
+        response = requests.post(
+            f"{INFERENCE_ORCHESTRATOR_URL}/upload-xai",
+            files=files,
+            params=params,  # client_name as query param
+            timeout=600  # xAI can take time (LIME is expensive)
+        )
+
+        response.raise_for_status()
+        result = response.json()
+
+        logger.info(f"[PROXY] Inference successful. Prediction: {result.get('prediction')}")
+        return JSONResponse(status_code=200, content=result)
+
+    except HTTPException:
+        raise
+    except requests.exceptions.Timeout:
+        logger.error(f"[PROXY] Request timeout to orchestrator")
+        raise HTTPException(
+            status_code=504,
+            detail="Inference request timed out. xAI generation takes 10-15 seconds."
+        )
+    except requests.exceptions.RequestException as e:
+        logger.error(f"[PROXY] Orchestrator error: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            raise HTTPException(
+                status_code=e.response.status_code,
+                detail=f"Orchestrator API Error: {e.response.text}"
+            )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to connect to inference orchestrator: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"[PROXY] Unexpected error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
+# PREDICTION + XAI (LOCAL COMPUTATION - FALLBACK)
+# ============================================================
+@router.post("/upload-xai-local")
+async def upload_xai_local(file: UploadFile = File(...)):
+    """
+    Predict from uploaded image + Grad-CAM + LIME explanations (computed locally).
+
+    This is a fallback endpoint for local xAI computation when Colab orchestrator is unavailable.
+    For production use, prefer the /upload-xai endpoint which offloads computation to Colab.
     """
     try:
         settings = get_settings()

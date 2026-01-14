@@ -16,6 +16,16 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_key: str
 
+    # Orchestrator URLs (ngrok tunnels from Colab)
+    federated_training_orchestrator_url: str = Field(
+        default="http://localhost:8001",
+        description="URL for federated learning orchestrator (ngrok tunnel)"
+    )
+    inference_orchestrator_url: str = Field(
+        default="http://localhost:8002",
+        description="URL for inference orchestrator with xAI (ngrok tunnel)"
+    )
+
     class Config:
         case_sensitive = False
         env_file = ".env"  # <-- important

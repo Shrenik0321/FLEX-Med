@@ -24,20 +24,29 @@ from flwr.serverapp.strategy import Strategy
 
 # <------------------------------------------ CONFIGURATION ------------------------------------------>
 
+# Base Path
+BASE_PATH = os.getenv("BASE_PATH", "/content/drive/MyDrive/College/FLEX-Med")
+
 # Client Information File Path - Acts as the intermediary between the api and fl codebase. Should be connected directly to the database.
-CLIENT_INFO_FILE_PATH = "/content/drive/MyDrive/College/FLEX-Med/flex-med/flex_med/data.json"
+CLIENT_INFO_FILE_PATH = os.path.join(BASE_PATH, "flex-med/flex_med/data.json")
 
 # Dataset File Path - Contains the public and private datasets.
-DATASET_FILE_PATH = "/content/drive/MyDrive/College/FLEX-Med/datasets"
+DATASET_FILE_PATH = os.path.join(BASE_PATH, "datasets")
 
 PUBLIC_ANCHOR_DATASET_PATH = os.path.join(DATASET_FILE_PATH, "public_anchor")
 PUBLIC_TEST_DATASET_PATH = os.path.join(DATASET_FILE_PATH, "public_test")
 
 # Model Checkpoint File Path - Contains the model checkpoints.
-MODEL_CHECKPOINT_FILE_PATH = "/content/drive/MyDrive/College/FLEX-Med/checkpoints"
+MODEL_CHECKPOINT_FILE_PATH = os.path.join(BASE_PATH, "checkpoints")
+
+# Round Metrics File Path - Contains per-round evaluation metrics for visualization.
+ROUND_METRICS_FILE_PATH = os.path.join(BASE_PATH, "round_metrics.json")
+
+# Graphs Output Directory - Contains generated visualization graphs.
+GRAPHS_OUTPUT_DIR = os.path.join(BASE_PATH, "graphs")
 
 # Model Constraints
-NUM_CLASSES = 2   # 0: Hem (Healthy), 1: ALL (Leukemia)
+NUM_CLASSES = 2   # 0: ALL (Leukemia), 1: Hem (Healthy)  # Fixed: must match ImageFolder alphabetical order (all, hem)
 IMG_SIZE = 224    # Resize all inputs to 224X224 for consistency
 
 # <------------------------------------------ DATA TRANSFORMS ------------------------------------------>
@@ -49,13 +58,19 @@ COMMON_TRANSFORM = Compose([
     Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 
-# Augmentation for Private Training
+# Enhanced Augmentation for Private Training (critical for small datasets like ALL-IDB2)
 PRIVATE_TRAIN_TRANSFORM = Compose([
     transforms.Resize((IMG_SIZE, IMG_SIZE)),
-    transforms.RandomHorizontalFlip(),
-    transforms.RandomRotation(15),
+    transforms.RandomHorizontalFlip(p=0.5),
+    transforms.RandomVerticalFlip(p=0.5),
+    transforms.RandomRotation(30),
+    transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2, hue=0.1),
+    transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
+    transforms.RandomPerspective(distortion_scale=0.2, p=0.3),
+    transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 1.5)),
     ToTensor(),
     Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    transforms.RandomErasing(p=0.2, scale=(0.02, 0.1)),  # Cutout augmentation (after ToTensor)
 ])
 
 # <------------------------------------------ UTILITY FUNCTIONS ------------------------------------------>
@@ -194,6 +209,123 @@ def load_private_dataset(partition_id: int, num_partitions: int, batch_size=32, 
 
     return trainloader, testloader
 
+# Loads the public test dataset for consistent evaluation across all rounds
+# Args: batch_size - Batch size for DataLoader
+# Returns: DataLoader with shuffle=False for deterministic evaluation
+def load_public_test_dataset(batch_size=64):
+    if not os.path.exists(PUBLIC_TEST_DATASET_PATH):
+        raise FileNotFoundError(f"Public test data not found at {PUBLIC_TEST_DATASET_PATH}")
+
+    dataset = datasets.ImageFolder(root=PUBLIC_TEST_DATASET_PATH, transform=COMMON_TRANSFORM)
+
+    # Shuffle=False for deterministic evaluation results
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=2)
+    print(f"[Data] Loaded public test dataset: {len(dataset)} samples")
+    return loader
+
+# Evaluates a single client model on the public test dataset
+# Args: client_id - Client identifier (partition_id)
+#       model_path - Path to client's model checkpoint
+#       model_type - Architecture identifier (e.g., 'resnet18')
+#       device - Device to evaluate on (cpu/cuda)
+# Returns: Dictionary with accuracy, loss metrics
+def evaluate_client_on_public_test(client_id: int, model_path: str, model_type: str, device: torch.device) -> Dict:
+    # Initialize model architecture
+    model = get_model_by_type(model_type)
+
+    # Load model weights if checkpoint exists
+    if os.path.exists(model_path):
+        try:
+            model, metadata = load_existing_model(model, model_path, device)
+        except Exception as e:
+            print(f"[Eval] Client {client_id}: Using untrained model ({e})")
+    else:
+        print(f"[Eval] Client {client_id}: No checkpoint found, using fresh model")
+
+    model.to(device)
+
+    # Load public test dataset
+    test_loader = load_public_test_dataset(batch_size=64)
+
+    # Evaluate model
+    loss, accuracy = test(model, test_loader, device)
+
+    return {
+        "accuracy": accuracy,
+        "loss": loss,
+        "num_samples": len(test_loader.dataset)
+    }
+
+# Saves round metrics to JSON file for visualization
+# Args: round_num - Current FL round number
+#       stage - Either "pre_fl" or "post_fl"
+#       client_metrics - Dictionary mapping client_id to metrics
+#       metrics_path - Path to save JSON file
+# Returns: None (saves to disk)
+def save_round_metrics(round_num: int, stage: str, client_metrics: Dict, metrics_path: str = ROUND_METRICS_FILE_PATH):
+    # Load existing metrics or create new structure
+    if os.path.exists(metrics_path):
+        with open(metrics_path, 'r') as f:
+            all_metrics = json.load(f)
+    else:
+        all_metrics = {}
+
+    round_key = f"round_{round_num}"
+
+    # Initialize round entry if not exists
+    if round_key not in all_metrics:
+        all_metrics[round_key] = {
+            "pre_fl": {"clients": {}},
+            "post_fl": {"clients": {}},
+            "improvement": {}
+        }
+
+    # Update stage metrics
+    all_metrics[round_key][stage]["clients"] = client_metrics
+
+    # Calculate improvement if both pre and post exist
+    if (all_metrics[round_key]["pre_fl"]["clients"] and
+        all_metrics[round_key]["post_fl"]["clients"]):
+        improvement = {}
+        for client_id in all_metrics[round_key]["post_fl"]["clients"]:
+            if client_id in all_metrics[round_key]["pre_fl"]["clients"]:
+                pre_acc = all_metrics[round_key]["pre_fl"]["clients"][client_id].get("accuracy", 0)
+                post_acc = all_metrics[round_key]["post_fl"]["clients"][client_id].get("accuracy", 0)
+                improvement[client_id] = post_acc - pre_acc
+        all_metrics[round_key]["improvement"] = improvement
+
+    # Save to file
+    os.makedirs(os.path.dirname(metrics_path), exist_ok=True) if os.path.dirname(metrics_path) else None
+    with open(metrics_path, 'w') as f:
+        json.dump(all_metrics, f, indent=2)
+
+    print(f"[Metrics] Saved {stage} metrics for round {round_num}")
+
+# Evaluates all clients on the public test dataset
+# Args: client_configs - List of client configuration dictionaries
+#       device - Device to evaluate on (cpu/cuda)
+# Returns: Dictionary mapping client_id (as string) to metrics
+def evaluate_all_clients(client_configs: List[Dict], device: torch.device) -> Dict:
+    client_metrics = {}
+
+    for i, client in enumerate(client_configs):
+        client_id = str(i)
+        model_path = client['model_path']
+        model_type = client['model_type']
+        client_name = client['client_name']
+
+        print(f"[Eval] Evaluating client {i}: {client_name} ({model_type})")
+
+        try:
+            metrics = evaluate_client_on_public_test(i, model_path, model_type, device)
+            client_metrics[client_id] = metrics
+            print(f"[Eval] Client {i}: Accuracy={metrics['accuracy']:.4f} ({metrics['accuracy']*100:.1f}%), Loss={metrics['loss']:.4f}")
+        except Exception as e:
+            print(f"[Eval] Client {i}: Evaluation failed - {e}")
+            client_metrics[client_id] = {"accuracy": None, "loss": None, "error": str(e)}
+
+    return client_metrics
+
 # <------------------------------------------ CHECKPOINT UTILITY FUNCTION DEFINITIONS ------------------------------------------>
 
 # Handles both legacy state_dict and new checkpoint format with metadata
@@ -254,13 +386,28 @@ def save_checkpoint(checkpoint_dir: str, current_round: int, consensus_logits: n
 def load_checkpoint(checkpoint_dir: str) -> Optional[Dict]:
     latest_path = os.path.join(checkpoint_dir, "latest_checkpoint.pt")
 
+    # Debug: Show what path is being checked
+    print(f"[CHECKPOINT] Looking for: {latest_path}")
+    print(f"[CHECKPOINT] Exists: {os.path.exists(latest_path)}")
+    print(f"[CHECKPOINT] BASE_PATH env: {os.getenv('BASE_PATH', 'NOT SET')}")
+
     if not os.path.exists(latest_path):
-        return None
+        # Try fallback path for Colab
+        fallback_path = "/content/drive/MyDrive/College/FLEX-Med/checkpoints/latest_checkpoint.pt"
+        print(f"[CHECKPOINT] Trying fallback: {fallback_path}")
+        if os.path.exists(fallback_path):
+            latest_path = fallback_path
+            print(f"[CHECKPOINT] Found at fallback path!")
+        else:
+            print(f"[CHECKPOINT] Not found at fallback either")
+            return None
 
     try:
-        checkpoint = torch.load(latest_path, map_location='cpu')
+        checkpoint = torch.load(latest_path, map_location='cpu', weights_only=False)
+        print(f"[CHECKPOINT] Loaded successfully! Round: {checkpoint.get('round', 'unknown')}")
         return checkpoint
     except Exception as e:
+        print(f"[CHECKPOINT] Error loading: {e}")
         return None
 
 # Clear all checkpoints from the directory
@@ -273,7 +420,7 @@ def clear_checkpoints(checkpoint_dir: str):
 
 # <------------------------------------------ MODEL TRAINING & TESTING FUNCTION DEFINITIONS ------------------------------------------>
 
-# Train model on private client data with AdamW optimizer
+# Train model on private client data with AdamW optimizer and class-balanced loss
 # Args: model - PyTorch model to train
 #       trainloader - DataLoader for training data
 #       epochs - Number of training epochs
@@ -285,28 +432,44 @@ def train(model, trainloader, epochs, lr, device):
         return 0.0  # Skip training for clients without data
 
     model.to(device)
-    criterion = nn.CrossEntropyLoss()
+
+    # Calculate class weights for balanced training (handles imbalanced datasets)
+    try:
+        all_labels = []
+        for _, labels in trainloader:
+            all_labels.extend(labels.tolist())
+        class_counts = torch.bincount(torch.tensor(all_labels))
+        # Inverse frequency weighting: minority class gets higher weight
+        class_weights = 1.0 / (class_counts.float() + 1e-6)
+        class_weights = class_weights / class_weights.sum() * len(class_weights)
+        class_weights = class_weights.to(device)
+        print(f"[Train] Using class weights: {class_weights.cpu().tolist()}")
+    except Exception as e:
+        class_weights = None
+        print(f"[Train] Using unweighted loss (class weights failed: {e})")
+
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=lr,
         betas=(0.9, 0.999),
         weight_decay=0.01  # L2 regularization
     )
-    
+
     model.train()
     total_loss = 0.0
-    
+
     for _ in range(epochs):
         for images, labels in trainloader:
             images = images.to(device)
             labels = labels.to(device)
-            
+
             optimizer.zero_grad()
             loss = criterion(model(images), labels)
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
-    
+
     avg_loss = total_loss / (len(trainloader) * epochs)
     return avg_loss
 
@@ -424,6 +587,144 @@ class FLEXMedStrategy(Strategy):
             self.eval_history = checkpoint['eval_history']
             self.last_consensus_logits = checkpoint['consensus_logits']
             print(f"[SERVER] Resuming from Round {self.start_round}")
+
+    # <------------------------------------------ FL EXECUTION WITH RESUME SUPPORT ------------------------------------------>
+
+    # Override base Strategy.start() to support checkpoint resumption
+    # The base implementation always loops from round 1 to num_rounds, ignoring start_round
+    # This override loops from start_round to num_rounds, enabling mid-training resume
+    # ENHANCED: Now includes per-round pre/post evaluation on public test set
+    def start(
+        self,
+        grid: Grid,
+        initial_arrays: ArrayRecord,
+        num_rounds: int = 3,
+        timeout: float = 3600,
+        train_config: Optional[ConfigRecord] = None,
+        evaluate_config: Optional[ConfigRecord] = None,
+        evaluate_fn = None,
+    ):
+        """Execute FL with resume support and per-round evaluation.
+
+        For each round:
+        1. PRE-FL Evaluation: Evaluate all clients on public test set (knowledge retention)
+        2. FL Training: Distillation + Private training
+        3. POST-FL Evaluation: Evaluate all clients on public test set (learning progression)
+        4. Save metrics: Store pre/post/improvement to round_metrics.json
+        """
+        from flwr.common import log
+        from flwr.serverapp.strategy.result import Result
+        from logging import INFO
+        import time
+
+        # Auto-detect GPU availability for server-side evaluations
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        log(INFO, f"[SERVER] Evaluation device: {device}")
+
+        # Calculate remaining rounds if resuming
+        if self.start_round > 1:
+            remaining = num_rounds - (self.start_round - 1)
+            log(INFO, f"[RESUME] Resuming from round {self.start_round}/{num_rounds} ({remaining} remaining)")
+            if remaining <= 0:
+                log(INFO, "[RESUME] Training already complete!")
+                result = Result()
+                result.arrays = initial_arrays
+                return result
+        else:
+            log(INFO, f"[SERVER] Starting fresh training ({num_rounds} rounds)")
+
+        # Initialize configs
+        train_config = ConfigRecord() if train_config is None else train_config
+        evaluate_config = ConfigRecord() if evaluate_config is None else evaluate_config
+
+        result = Result()
+        arrays = initial_arrays
+        t_start = time.time()
+
+        # Store per-round metrics for visualization
+        self.round_metrics_history = {}
+
+        # KEY: Loop from start_round to num_rounds (not 1 to num_rounds)
+        for current_round in range(self.start_round, num_rounds + 1):
+            log(INFO, "")
+            log(INFO, f"{'='*70}")
+            log(INFO, f"[ROUND {current_round}/{num_rounds}]")
+            log(INFO, f"{'='*70}")
+
+            # --- PRE-FL EVALUATION PHASE ---
+            log(INFO, "")
+            log(INFO, f"[ROUND {current_round}] PRE-FL Evaluation (Knowledge Retention)")
+            log(INFO, "-" * 50)
+
+            try:
+                pre_fl_metrics = evaluate_all_clients(self.client_configs, device)
+                save_round_metrics(current_round, "pre_fl", pre_fl_metrics)
+                self.round_metrics_history[f"round_{current_round}_pre_fl"] = pre_fl_metrics
+
+                # Log summary
+                avg_pre_acc = np.mean([m.get("accuracy", 0) for m in pre_fl_metrics.values() if m.get("accuracy") is not None])
+                log(INFO, f"[ROUND {current_round}] PRE-FL Average Accuracy: {avg_pre_acc:.4f} ({avg_pre_acc*100:.1f}%)")
+            except Exception as e:
+                log(INFO, f"[ROUND {current_round}] PRE-FL Evaluation failed: {e}")
+                pre_fl_metrics = {}
+
+            # --- TRAINING PHASE ---
+            log(INFO, "")
+            log(INFO, f"[ROUND {current_round}] FL Training Phase")
+            log(INFO, "-" * 50)
+
+            train_msgs = self.configure_train(current_round, arrays, train_config, grid)
+            train_replies = grid.send_and_receive(messages=train_msgs, timeout=timeout)
+            agg_arrays, agg_metrics = self.aggregate_train(current_round, train_replies)
+
+            if agg_arrays is not None:
+                result.arrays = agg_arrays
+                arrays = agg_arrays
+            if agg_metrics:
+                result.train_metrics_clientapp[current_round] = agg_metrics
+
+            # --- POST-FL EVALUATION PHASE ---
+            log(INFO, "")
+            log(INFO, f"[ROUND {current_round}] POST-FL Evaluation (Learning Progression)")
+            log(INFO, "-" * 50)
+
+            try:
+                post_fl_metrics = evaluate_all_clients(self.client_configs, device)
+                save_round_metrics(current_round, "post_fl", post_fl_metrics)
+                self.round_metrics_history[f"round_{current_round}_post_fl"] = post_fl_metrics
+
+                # Log summary
+                avg_post_acc = np.mean([m.get("accuracy", 0) for m in post_fl_metrics.values() if m.get("accuracy") is not None])
+                log(INFO, f"[ROUND {current_round}] POST-FL Average Accuracy: {avg_post_acc:.4f} ({avg_post_acc*100:.1f}%)")
+
+                # Calculate and log improvement
+                if pre_fl_metrics:
+                    avg_pre = np.mean([m.get("accuracy", 0) for m in pre_fl_metrics.values() if m.get("accuracy") is not None])
+                    improvement = avg_post_acc - avg_pre
+                    log(INFO, f"[ROUND {current_round}] Round Improvement: {improvement:+.4f} ({improvement*100:+.1f}%)")
+            except Exception as e:
+                log(INFO, f"[ROUND {current_round}] POST-FL Evaluation failed: {e}")
+                post_fl_metrics = {}
+
+            # --- STANDARD FLOWER EVALUATION (for backward compatibility) ---
+            eval_msgs = self.configure_evaluate(current_round, arrays, evaluate_config, grid)
+            eval_replies = grid.send_and_receive(messages=eval_msgs, timeout=timeout)
+            eval_metrics = self.aggregate_evaluate(current_round, eval_replies)
+
+            if eval_metrics:
+                result.evaluate_metrics_clientapp[current_round] = eval_metrics
+
+        log(INFO, "")
+        log(INFO, f"{'='*70}")
+        log(INFO, f"Strategy execution finished in {time.time() - t_start:.2f}s")
+        log(INFO, f"{'='*70}")
+
+        # Log final summary
+        log(INFO, "")
+        log(INFO, "[SUMMARY] Per-Round Metrics saved to: " + ROUND_METRICS_FILE_PATH)
+        log(INFO, "[SUMMARY] Generate visualizations with: python generate_graphs.py")
+
+        return result
 
     # Send evaluation requests to all clients
     # Args: server_round - Current FL round number
@@ -577,9 +878,17 @@ class FLEXMedStrategy(Strategy):
 
                 # Extract weight from metrics (number of training examples)
                 metrics = msg.content.get("metrics", {})
-                num_examples = metrics.get("num-examples", 1)
-                # Weight by number of training examples (clients with more data have more influence)
-                weights.append(max(num_examples, 1))  # Ensure non-zero weight
+                num_examples = metrics.get("num-examples", 0)
+                has_local_data = metrics.get("has_local_data", 0)
+
+                # Weight by training examples - free riders get minimal weight
+                # to prevent polluting consensus with untrained predictions
+                if has_local_data:
+                    # Clients with data: weight by training samples
+                    weights.append(max(num_examples, 1))
+                else:
+                    # Free riders: minimal weight (don't pollute consensus)
+                    weights.append(1)
 
             except (KeyError, IndexError) as e:
                 pass
@@ -591,9 +900,17 @@ class FLEXMedStrategy(Strategy):
             normalized_weights = [w / total_weight for w in weights]
 
             # Weighted average of logits
-            consensus_logits = np.average(logits_list, axis=0, weights=normalized_weights)
+            new_consensus = np.average(logits_list, axis=0, weights=normalized_weights)
 
-            print(f"[SERVER] ✓ Consensus generated from {len(logits_list)} clients")
+            # Apply momentum to smooth consensus updates and reduce oscillation
+            momentum = 0.6  # Weight for previous consensus
+            if self.last_consensus_logits is not None and server_round > 1:
+                consensus_logits = (momentum * self.last_consensus_logits +
+                                   (1 - momentum) * new_consensus)
+                print(f"[SERVER] ✓ Consensus with momentum (α={momentum}) from {len(logits_list)} clients")
+            else:
+                consensus_logits = new_consensus
+                print(f"[SERVER] ✓ Initial consensus from {len(logits_list)} clients")
         else:
             return None, {}
 

@@ -21,7 +21,17 @@ def main(grid: Grid, context: Context) -> None:
     lr: float = context.run_config["lr"]
     local_epochs: int = context.run_config.get("local-epochs", 1)
 
-    print(f"\n[SERVER] Starting Federated Learning ({num_rounds} rounds, lr={lr})")
+    # Check for resume mode
+    resume_mode = os.getenv("FLEX_MED_RESUME", "auto").lower()
+    checkpoint = load_checkpoint(MODEL_CHECKPOINT_FILE_PATH)
+
+    if checkpoint and resume_mode != "false":
+        start_round = checkpoint['round'] + 1
+        remaining = num_rounds - checkpoint['round']
+        print(f"\n[SERVER] Resuming Federated Learning from round {start_round}/{num_rounds}")
+        print(f"[SERVER] {remaining} rounds remaining (lr={lr})")
+    else:
+        print(f"\n[SERVER] Starting Federated Learning ({num_rounds} rounds, lr={lr})")
 
     # <------------------------------------------ CLIENT CONFIGURATION LOADING ------------------------------------------>
 

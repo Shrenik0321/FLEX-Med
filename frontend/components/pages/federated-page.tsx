@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { Brain, Activity, Clock, Play, Shield } from "lucide-react";
+import { API_BASE_PATH } from "@/utils";
 
 export default function FederatedPage() {
   const [isStarting, setIsStarting] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "running" | "error">("idle");
 
@@ -14,13 +16,10 @@ export default function FederatedPage() {
       setStatus("running");
 
       // We trigger the API which internal fetches clients from DB
-      await fetch(
-        "https://hkpmwl2gtwdxo8-7860.proxy.runpod.net/api/start_fl_complete",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      await fetch(`${API_BASE_PATH}/start_fl`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
 
       setLastRun(new Date().toLocaleString());
     } catch (error) {
@@ -28,6 +27,30 @@ export default function FederatedPage() {
       setStatus("error");
     } finally {
       setIsStarting(false);
+    }
+  };
+
+  const handleResume = async () => {
+    try {
+      setIsResuming(true);
+      setStatus("running");
+
+      const response = await fetch(`${API_BASE_PATH}/resume_fl`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || "Failed to resume training");
+      }
+
+      setLastRun(new Date().toLocaleString());
+    } catch (error) {
+      console.error("Failed to resume federated learning:", error);
+      setStatus("error");
+    } finally {
+      setIsResuming(false);
     }
   };
 
@@ -107,14 +130,24 @@ export default function FederatedPage() {
             Trigger a new federated learning round using the current client
             configuration.
           </p>
-          <button
-            onClick={handleStart}
-            disabled={isStarting}
-            className="px-5 py-2 bg-card border border-primary text-primary rounded-lg text-sm font-medium hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            <Play size={18} />
-            {isStarting ? "Starting round..." : "Start Federated Learning"}
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={handleStart}
+              disabled={isStarting || isResuming}
+              className="px-5 py-2 bg-card border border-primary text-primary rounded-lg text-sm font-medium hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <Play size={18} />
+              {isStarting ? "Starting..." : "Start Training"}
+            </button>
+            <button
+              onClick={handleResume}
+              disabled={isStarting || isResuming}
+              className="px-5 py-2 bg-card border border-amber-500 text-amber-500 rounded-lg text-sm font-medium hover:bg-amber-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <Play size={18} />
+              {isResuming ? "Resuming..." : "Resume Training"}
+            </button>
+          </div>
           {status === "error" && (
             <p className="mt-3 text-xs text-red-600">
               Something went wrong starting the run. Check the backend service

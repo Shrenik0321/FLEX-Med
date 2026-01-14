@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE_PATH } from "@/utils";
 import { Search, Trash2, MoreVertical, Play } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
@@ -25,6 +26,7 @@ interface Client {
   status: string;
   model_type: number;
   created_at: string;
+  dataset_path?: string;
 }
 
 // Confirmation Modal Component
@@ -175,9 +177,7 @@ export default function ClientsListPage({
   useEffect(() => {
     const fetchClients = async () => {
       try {
-        const response = await fetch(
-          "https://hkpmwl2gtwdxo8-7860.proxy.runpod.net/api/clients"
-        );
+        const response = await fetch(`${API_BASE_PATH}/clients`);
         if (!response.ok) throw new Error("Failed to fetch");
         const data = await response.json();
         setClients(data);
@@ -235,7 +235,7 @@ export default function ClientsListPage({
   const handleStartTraining = async (client: Client) => {
     try {
       const response = await fetch(
-        `http://localhost:8000/api/clients/${client.id}/start_local_train`,
+        `${API_BASE_PATH}/clients/${client.id}/start_local_train`,
         {
           method: "POST",
           headers: {
@@ -327,6 +327,9 @@ export default function ClientsListPage({
                 Models
               </th>
               <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
+                Dataset Available
+              </th>
+              <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
                 Created At
               </th>
               <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
@@ -359,6 +362,17 @@ export default function ClientsListPage({
                 </td>
                 <td className="px-6 py-4 text-sm text-foreground">
                   {client.model_type}
+                </td>
+                <td className="px-6 py-4 text-sm">
+                  <span
+                    className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${
+                      client.dataset_path
+                        ? "border-green-500 text-green-700 bg-green-50"
+                        : "border-red-500 text-red-700 bg-red-50"
+                    }`}
+                  >
+                    {client.dataset_path ? "True" : "False"}
+                  </span>
                 </td>
                 <td className="px-6 py-4 text-sm text-foreground">
                   {formatDate(client.created_at)}

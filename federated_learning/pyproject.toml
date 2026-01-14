@@ -30,19 +30,21 @@ serverapp = "flex_med.server_app:app"
 clientapp = "flex_med.client_app:app"
 
 [tool.flwr.app.config]
-# Training configuration
-num-server-rounds = 2           # 20 rounds of federated learning
+# Training configuration (optimized for reaching 0.75+ accuracy)
+num-server-rounds = 35           # More rounds for convergence
 fraction-train = 1.0             # Use all clients each round
-local-epochs = 2                 # 10 epochs of private training per round
-lr = 0.0005                      # Learning rate (conservative for stability)
+fraction-evaluate = 1.0          # Use all clients each round
+local-epochs = 5                 # 5 epochs of private training per round
+lr = 0.001                       # Higher learning rate for faster convergence
 
-# Distillation configuration (optional - can add to client_app.py)
-distill-lr = 0.001               # Learning rate for distillation
-distill-epochs = 1               # Epochs for distillation phase
-temperature = 2.0                # Temperature for knowledge distillation
+# Distillation configuration
+# Note: Actual epochs handled in client_app.py (2 for data clients, 8 for free riders)
+distill-lr = 0.001               # Learning rate for distillation (data clients)
+distill-epochs = 2               # Epochs for distillation phase (data clients)
+temperature = 3.0                # Softer labels for better generalization
 
 # Data configuration
-batch-size = 64                  # Batch size for training/evaluation
+batch-size = 32                  # Smaller batch size for better gradients on small datasets
 
 [tool.flwr.federations]
 default = "local-simulation"
@@ -53,7 +55,7 @@ options.num-supernodes = 3       # Hospital_CNMC, Hospital_ALLIDB2, Free_Rider
 
 # Optional: Add more clients for scaling experiments
 # [tool.flwr.federations.local-simulation-5clients]
-# options.num-supernodes = 5
+# options.num-supernodes = 3
 
 # Remote federation (for deployment)
 [tool.flwr.federations.remote-federation]

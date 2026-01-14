@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from typing import List, Dict, Any, Optional
+from pydantic import BaseModel
 import requests
 import json
 import subprocess
@@ -15,6 +16,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Load orchestrator URL from settings
+# This URL should point to the ngrok tunnel from Colab (e.g., https://xxxx.ngrok-free.app)
+# Update the FEDERATED_TRAINING_ORCHESTRATOR_URL environment variable in .env when starting a new Colab session
+_settings = get_settings()
+FEDERATED_TRAINING_ORCHESTRATOR_URL = _settings.federated_training_orchestrator_url
 
 # Global FL pipeline status tracker
 fl_status = {
@@ -91,7 +98,7 @@ async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
 
     try:
         response = requests.post(
-            "https://4caf7f497280.ngrok-free.app/start_fl",
+            f"{FEDERATED_TRAINING_ORCHESTRATOR_URL}/start_fl",
             json=clients_data,
             headers={"Content-Type": "application/json"}
         )
@@ -106,6 +113,83 @@ async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
             )
         raise HTTPException(status_code=500, detail=f"Failed to connect to orchestrator: {str(e)}")
 
+@router.post("/resume_fl")
+async def resume_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
+    """
+    Resume FL simulation from last checkpoint.
+
+    This endpoint:
+    1. Fetches clients from database
+    2. Validates pre_fl metrics exist (required for resume)
+    3. Forwards to Colab orchestrator's /resume_fl endpoint
+    4. Skips pre-FL evaluation (already done)
+    5. Runs FL from last checkpoint
+    6. Post-FL evaluation runs after completion
+    """
+    # Fetch all clients from database
+    response = supabase.from_("clients").select("*").execute()
+    clients_data = response.data if response.data else []
+
+    if not clients_data:
+        raise HTTPException(status_code=400, detail="No clients found in database")
+
+    # Validate that pre_fl metrics exist for all clients
+    missing_pre_fl = []
+    for client in clients_data:
+        metrics_value = client.get('metrics', '{}')
+        if isinstance(metrics_value, str):
+            try:
+                metrics = json.loads(metrics_value) if metrics_value else {}
+            except json.JSONDecodeError:
+                metrics = {}
+        else:
+            metrics = metrics_value or {}
+
+        if 'pre_fl' not in metrics:
+            missing_pre_fl.append(client.get('client_name', f"ID:{client.get('id')}"))
+
+    if missing_pre_fl:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Pre-FL metrics missing for clients: {', '.join(missing_pre_fl)}. Use /start_fl for fresh training."
+        )
+
+    # Clean up metrics field (same as start_fl)
+    for client in clients_data:
+        metrics_value = client.get('metrics', '{}')
+        if isinstance(metrics_value, str):
+            if metrics_value.startswith('"') and metrics_value.endswith('"'):
+                try:
+                    metrics_value = json.loads(metrics_value)
+                except json.JSONDecodeError:
+                    metrics_value = metrics_value.strip('"')
+            if not metrics_value or metrics_value.strip() == '':
+                metrics_value = '{}'
+        elif isinstance(metrics_value, dict):
+            metrics_value = json.dumps(metrics_value)
+        else:
+            metrics_value = '{}'
+        client['metrics'] = metrics_value
+
+    try:
+        # Forward to Colab orchestrator's /resume_fl endpoint
+        response = requests.post(
+            f"{FEDERATED_TRAINING_ORCHESTRATOR_URL}/resume_fl",
+            json=clients_data,
+            headers={"Content-Type": "application/json"}
+        )
+        response.raise_for_status()
+        return response.json()
+
+    except requests.exceptions.RequestException as e:
+        if hasattr(e, 'response') and e.response is not None:
+            raise HTTPException(
+                status_code=e.response.status_code,
+                detail=f"Orchestrator API Error: {e.response.text}"
+            )
+        raise HTTPException(status_code=500, detail=f"Failed to connect to orchestrator: {str(e)}")
+
+
 @router.get("/simulation/status")
 async def get_simulation_status():
     """
@@ -113,7 +197,7 @@ async def get_simulation_status():
     """
     try:
         response = requests.get(
-            "https://541103493561.ngrok-free.app/simulation/status",
+            f"{FEDERATED_TRAINING_ORCHESTRATOR_URL}/simulation/status",
             timeout=10
         )
         response.raise_for_status()
@@ -133,7 +217,7 @@ async def get_metrics_comparison():
     """
     try:
         response = requests.get(
-            "https://541103493561.ngrok-free.app/metrics/comparison",
+            f"{FEDERATED_TRAINING_ORCHESTRATOR_URL}/metrics/comparison",
             timeout=10
         )
         response.raise_for_status()

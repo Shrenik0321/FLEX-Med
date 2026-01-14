@@ -1,5 +1,6 @@
 "use client";
 
+import { API_BASE_PATH } from "@/utils";
 import { ArrowLeft, Upload, Check, X, FileJson } from "lucide-react";
 import { useState } from "react";
 
@@ -24,7 +25,7 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
     setError(null);
 
     try {
-      const response = await fetch("http://localhost:8000/api/clients", {
+      const response = await fetch(`${API_BASE_PATH}/clients`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowLeft, Download, Upload } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { ArrowLeft, Download, Upload, Play, Square, RefreshCw } from "lucide-react";
+import { API_BASE_PATH } from "@/utils";
 
 interface Client {
   id: number;
@@ -9,7 +10,21 @@ interface Client {
   client_email: string;
   status: string;
   model_type: number | string;
+  dataset_path?: string;
+  model_path?: string;
   created_at: string;
+}
+
+interface TrainingConfig {
+  epochs: number;
+  batch_size: number;
+  learning_rate: number;
+}
+
+interface TrainingStatus {
+  status: "idle" | "pending" | "running" | "completed" | "failed" | "not_found";
+  logs: string[];
+  message?: string;
 }
 
 interface ClientDetailsPageProps {
@@ -46,9 +61,25 @@ export default function ClientDetailsPage({
   const [gradcamImage, setGradcamImage] = useState<string | null>(null);
   const [limeImage, setLimeImage] = useState<string | null>(null);
 
+  // Local Training State
+  const [trainingConfig, setTrainingConfig] = useState<TrainingConfig>({
+    epochs: 5,
+    batch_size: 16,
+    learning_rate: 0.001,
+  });
+  const [trainingStatus, setTrainingStatus] = useState<TrainingStatus>({
+    status: "idle",
+    logs: [],
+  });
+  const [isStartingTraining, setIsStartingTraining] = useState(false);
+  const [trainingError, setTrainingError] = useState<string | null>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+
   const tabs = [
     { id: "overview", label: "Overview" },
     { id: "inference", label: "Inference & XAI" },
+    { id: "local-training", label: "Local Training" },
     { id: "training", label: "Training Logs" },
   ];
 
@@ -62,19 +93,16 @@ export default function ClientDetailsPage({
       setIsSaving(true);
       setSaveMessage(null);
 
-      const response = await fetch(
-        `http://localhost:8000/api/clients/${client.id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            client_name: formState.client_name,
-            client_email: formState.client_email,
-            status: formState.status,
-            model_type: formState.model_type,
-          }),
-        }
-      );
+      const response = await fetch(`${API_BASE_PATH}/clients/${client.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_name: formState.client_name,
+          client_email: formState.client_email,
+          status: formState.status,
+          model_type: formState.model_type,
+        }),
+      });
 
       if (!response.ok) {
         throw new Error("Failed to update client");
@@ -122,9 +150,10 @@ export default function ClientDetailsPage({
       // Create FormData and append the image file
       const formData = new FormData();
       formData.append("file", selectedImage);
+      formData.append("client_id", client.id.toString()); // Pass client ID
 
       // Send POST request with FormData
-      const response = await fetch("http://localhost:8000/predict/upload-xai", {
+      const response = await fetch(`${API_BASE_PATH}/predict/upload-xai`, {
         method: "POST",
         headers: {
           "ngrok-skip-browser-warning": "true",
@@ -179,6 +208,166 @@ export default function ClientDetailsPage({
       );
     } finally {
       setIsRunningInference(false);
+    }
+  };
+
+  // ============== LOCAL TRAINING FUNCTIONS ==============
+
+  // Scroll to bottom of logs when new logs arrive
+  useEffect(() => {
+    if (logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [trainingStatus.logs]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
+
+  const pollTrainingStatus = useCallback(async () => {
+    try {
+      const response = await fetch(
+        `${API_BASE_PATH}/train_status/${client.client_name}`,
+        {
+          headers: {
+            "ngrok-skip-browser-warning": "true",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch training status");
+      }
+
+      const data = await response.json();
+      setTrainingStatus({
+        status: data.status || "not_found",
+        logs: data.logs || [],
+        message: data.message,
+      });
+
+      // Stop polling if training is complete or failed
+      if (data.status === "completed" || data.status === "failed") {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
+
+        // Mark training as complete in backend
+        if (data.status === "completed") {
+          await fetch(
+            `${API_BASE_PATH}/train_status/${client.client_name}/complete`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "ngrok-skip-browser-warning": "true",
+              },
+            }
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error polling training status:", error);
+    }
+  }, [client.client_name]);
+
+  const handleStartTraining = async () => {
+    try {
+      setIsStartingTraining(true);
+      setTrainingError(null);
+      setTrainingStatus({ status: "pending", logs: ["Initiating training..."] });
+
+      const response = await fetch(`${API_BASE_PATH}/start_local_train`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: JSON.stringify({
+          client_id: client.id,
+          epochs: trainingConfig.epochs,
+          batch_size: trainingConfig.batch_size,
+          learning_rate: trainingConfig.learning_rate,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Failed to start training");
+      }
+
+      const result = await response.json();
+      setTrainingStatus({
+        status: "running",
+        logs: [`Training started: ${result.message}`],
+      });
+
+      // Start polling for training status
+      pollingIntervalRef.current = setInterval(pollTrainingStatus, 2000);
+    } catch (error) {
+      console.error("Failed to start training:", error);
+      setTrainingError(
+        error instanceof Error ? error.message : "Failed to start training"
+      );
+      setTrainingStatus({ status: "failed", logs: [] });
+    } finally {
+      setIsStartingTraining(false);
+    }
+  };
+
+  const handleStopPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+  };
+
+  const handleRefreshStatus = () => {
+    pollTrainingStatus();
+  };
+
+  const handleConfigChange = (field: keyof TrainingConfig, value: string) => {
+    const numValue = parseFloat(value);
+    if (!isNaN(numValue)) {
+      setTrainingConfig((prev) => ({ ...prev, [field]: numValue }));
+    }
+  };
+
+  const getStatusColor = (status: TrainingStatus["status"]) => {
+    switch (status) {
+      case "completed":
+        return "text-green-600 bg-green-50 border-green-500";
+      case "running":
+        return "text-blue-600 bg-blue-50 border-blue-500";
+      case "pending":
+        return "text-yellow-600 bg-yellow-50 border-yellow-500";
+      case "failed":
+        return "text-red-600 bg-red-50 border-red-500";
+      default:
+        return "text-gray-600 bg-gray-50 border-gray-300";
+    }
+  };
+
+  const getStatusLabel = (status: TrainingStatus["status"]) => {
+    switch (status) {
+      case "completed":
+        return "Completed";
+      case "running":
+        return "Training in Progress";
+      case "pending":
+        return "Starting...";
+      case "failed":
+        return "Failed";
+      case "not_found":
+        return "No Training Data";
+      default:
+        return "Idle";
     }
   };
 
@@ -299,7 +488,9 @@ export default function ClientDetailsPage({
               </div>
 
               {saveMessage && (
-                <p className="mt-4 text-xs text-muted-foreground">{saveMessage}</p>
+                <p className="mt-4 text-xs text-muted-foreground">
+                  {saveMessage}
+                </p>
               )}
             </div>
 
@@ -647,11 +838,202 @@ export default function ClientDetailsPage({
           </div>
         )}
 
+        {activeTab === "local-training" && (
+          <div className="space-y-6">
+            {/* Training Configuration */}
+            <div className="bg-card rounded-lg p-6 shadow-sm border border-border">
+              <h2 className="text-lg font-semibold text-foreground mb-4">
+                Training Configuration
+              </h2>
+              <p className="text-sm text-muted-foreground mb-6">
+                Configure and start local training for{" "}
+                <span className="font-medium">{client.client_name}</span>. The
+                model will be trained on the configured dataset path.
+              </p>
+
+              {/* Client Dataset Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                    Model Path
+                  </p>
+                  <p className="text-sm text-foreground font-mono truncate">
+                    {client.model_path || "Not configured"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                    Dataset Path
+                  </p>
+                  <p className="text-sm text-foreground font-mono truncate">
+                    {client.dataset_path || "Not configured"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Training Parameters */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Epochs
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={trainingConfig.epochs}
+                    onChange={(e) => handleConfigChange("epochs", e.target.value)}
+                    disabled={trainingStatus.status === "running" || trainingStatus.status === "pending"}
+                    className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Batch Size
+                  </label>
+                  <select
+                    value={trainingConfig.batch_size}
+                    onChange={(e) => handleConfigChange("batch_size", e.target.value)}
+                    disabled={trainingStatus.status === "running" || trainingStatus.status === "pending"}
+                    className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="8">8</option>
+                    <option value="16">16</option>
+                    <option value="32">32</option>
+                    <option value="64">64</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Learning Rate
+                  </label>
+                  <select
+                    value={trainingConfig.learning_rate}
+                    onChange={(e) => handleConfigChange("learning_rate", e.target.value)}
+                    disabled={trainingStatus.status === "running" || trainingStatus.status === "pending"}
+                    className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  >
+                    <option value="0.0001">0.0001</option>
+                    <option value="0.001">0.001</option>
+                    <option value="0.01">0.01</option>
+                    <option value="0.1">0.1</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {trainingError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-700">{trainingError}</p>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={handleStartTraining}
+                  disabled={
+                    isStartingTraining ||
+                    trainingStatus.status === "running" ||
+                    trainingStatus.status === "pending" ||
+                    !client.dataset_path ||
+                    !client.model_path
+                  }
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Play size={16} />
+                  {isStartingTraining ? "Starting..." : "Start Training"}
+                </button>
+
+                {(trainingStatus.status === "running" || trainingStatus.status === "pending") && (
+                  <button
+                    onClick={handleStopPolling}
+                    className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+                  >
+                    <Square size={16} />
+                    Stop Monitoring
+                  </button>
+                )}
+
+                <button
+                  onClick={handleRefreshStatus}
+                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+                >
+                  <RefreshCw size={16} />
+                  Refresh Status
+                </button>
+              </div>
+
+              {/* Missing Config Warning */}
+              {(!client.dataset_path || !client.model_path) && (
+                <p className="mt-4 text-sm text-orange-600">
+                  Please configure dataset_path and model_path for this client before training.
+                </p>
+              )}
+            </div>
+
+            {/* Training Status & Logs */}
+            <div className="bg-card rounded-lg p-6 shadow-sm border border-border">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-foreground">
+                  Training Status
+                </h2>
+                <span
+                  className={`px-3 py-1 rounded-full text-sm font-medium border-2 ${getStatusColor(
+                    trainingStatus.status
+                  )}`}
+                >
+                  {getStatusLabel(trainingStatus.status)}
+                </span>
+              </div>
+
+              {/* Real-time Logs */}
+              <div className="bg-gray-900 rounded-lg p-4 font-mono text-sm max-h-96 overflow-y-auto">
+                {trainingStatus.logs.length > 0 ? (
+                  <div className="space-y-1">
+                    {trainingStatus.logs.map((log, idx) => (
+                      <div
+                        key={idx}
+                        className={`${
+                          log.includes("Epoch")
+                            ? "text-blue-400"
+                            : log.includes("Complete") || log.includes("SUCCESS")
+                            ? "text-green-400"
+                            : log.includes("Failed") || log.includes("Error")
+                            ? "text-red-400"
+                            : log.includes("Warning")
+                            ? "text-yellow-400"
+                            : "text-gray-300"
+                        }`}
+                      >
+                        {log}
+                      </div>
+                    ))}
+                    <div ref={logsEndRef} />
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-8">
+                    No training logs yet. Start training to see real-time logs.
+                  </p>
+                )}
+              </div>
+
+              {/* Training Progress Indicator */}
+              {trainingStatus.status === "running" && (
+                <div className="mt-4 flex items-center gap-2 text-sm text-blue-600">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
+                  <span>Training in progress... Polling for updates every 2 seconds</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {activeTab === "training" && (
           <div className="bg-card rounded-lg p-6 shadow-sm border border-border">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-foreground">
-                Training Logs
+                Training Logs (Historical)
               </h2>
               <button className="flex items-center gap-2 px-4 py-2 border border-primary text-primary rounded-lg hover:bg-primary/10 transition-colors text-sm font-medium">
                 <Download size={16} />
@@ -685,7 +1067,9 @@ export default function ClientDetailsPage({
                   key={idx}
                   className="flex gap-3 px-4 py-3 text-sm border border-border rounded-lg"
                 >
-                  <span className="text-muted-foreground min-w-fit">{log.time}</span>
+                  <span className="text-muted-foreground min-w-fit">
+                    {log.time}
+                  </span>
                   <span
                     className={`font-medium ${
                       log.level === "ERROR"

@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 IMG_SIZE = 128
 NUM_CLASSES = 2
-CLASSES = ['Hem (Healthy)', 'ALL (Leukemia)']
+CLASSES = ['ALL (Leukemia)', 'Hem (Healthy)']  # Class 0, Class 1 - matches ImageFolder alphabetical order (all, hem)
 
 def build_model(architecture: str) -> nn.Module:
     """Build model architecture matching client's model type"""

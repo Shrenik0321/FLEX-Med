@@ -102,6 +102,7 @@ def train(msg: Message, context: Context):
     # Phase 1: Knowledge Distillation from Server Consensus
     # Clients learn from aggregated soft predictions on shared public dataset
     distill_loss = 0.0
+    has_local_data = client_config['has_local_data']
 
     if "arrays" in msg.content and msg.content["arrays"]:
         try:
@@ -109,7 +110,12 @@ def train(msg: Message, context: Context):
 
             # Skip distillation in Round 1 (no consensus yet from previous round)
             if np.any(consensus_logits != 0):
-                print(f"[Client {partition_id}] Phase 1: Knowledge Distillation")
+                # Free riders need more distillation epochs since they can't train on private data
+                distill_epochs = 2 if has_local_data else 8
+                distill_lr = 0.001 if has_local_data else 0.002  # Slightly higher LR for free riders
+                temperature = 3.0  # Softer labels for better generalization
+
+                print(f"[Client {partition_id}] Phase 1: Knowledge Distillation ({distill_epochs} epochs)")
 
                 public_loader = load_public_dataset(batch_size=32)
 
@@ -118,9 +124,9 @@ def train(msg: Message, context: Context):
                     public_loader=public_loader,
                     consensus_logits=consensus_logits,
                     device=device,
-                    epochs=1,
-                    lr=0.001,
-                    temperature=2.0
+                    epochs=distill_epochs,
+                    lr=distill_lr,
+                    temperature=temperature
                 )
                 print(f"[Client {partition_id}] ✓ Distillation Loss: {distill_loss:.4f}")
         except Exception as e:
@@ -151,7 +157,24 @@ def train(msg: Message, context: Context):
 
         print(f"[Client {partition_id}] ✓ Training Loss: {train_loss:.4f} ({dataset_len} samples, {training_time:.1f}s)")
     else:
-        print(f"[Client {partition_id}] ⚠ Free Rider - No private data")
+        # Free riders: Supervised training on public anchor dataset
+        # This helps them learn from labeled public data in addition to distillation
+        print(f"[Client {partition_id}] Phase 2b: Public Dataset Training (Free Rider)")
+
+        public_supervised_loader = load_public_dataset(batch_size=32)
+        dataset_len = len(public_supervised_loader.dataset)
+
+        start_time = time.time()
+        train_loss = train_fn(
+            model=model,
+            trainloader=public_supervised_loader,
+            epochs=3,  # Fewer epochs to prevent overfitting to public data
+            lr=0.0005,  # Lower LR for stability
+            device=device
+        )
+        training_time = time.time() - start_time
+
+        print(f"[Client {partition_id}] ✓ Public Training Loss: {train_loss:.4f} ({dataset_len} samples, {training_time:.1f}s)")
 
     # Save updated model checkpoint with round metadata
     try:
