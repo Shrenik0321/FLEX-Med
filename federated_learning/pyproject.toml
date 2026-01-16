@@ -49,9 +49,10 @@ batch-size = 32                  # Smaller batch size for better gradients on sm
 [tool.flwr.federations]
 default = "local-simulation"
 
-# Local simulation with 3 clients (2 with data + 1 free rider)
+# Local simulation (default 3 clients, but overridden dynamically by backend)
+# Note: num-supernodes is set dynamically based on number of clients in database
 [tool.flwr.federations.local-simulation]
-options.num-supernodes = 3       # Hospital_CNMC, Hospital_ALLIDB2, Free_Rider
+options.num-supernodes = 3       # Default fallback value (overridden at runtime)
 
 # Optional: Add more clients for scaling experiments
 # [tool.flwr.federations.local-simulation-5clients]

@@ -18,10 +18,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Load orchestrator URL from settings
-# This URL should point to the ngrok tunnel from Colab (e.g., https://xxxx.ngrok-free.app)
-# Update the FEDERATED_TRAINING_ORCHESTRATOR_URL environment variable in .env when starting a new Colab session
-_settings = get_settings()
-FEDERATED_TRAINING_ORCHESTRATOR_URL = _settings.federated_training_orchestrator_url
+# Ngrok URL for local training orchestrator (update when Colab session changes)
+FEDERATED_TRAINING_ORCHESTRATOR_URL = os.getenv(
+    "FEDERATED_TRAINING_ORCHESTRATOR_URL",
+    "https://6bf8b79c0b23.ngrok-free.app"
+)
 
 # Global FL pipeline status tracker
 fl_status = {
@@ -453,11 +454,14 @@ async def run_complete_fl_pipeline(
         env['FLEX_MED_CONFIG_FILE'] = str(temp_config_path)
 
         # Run FL simulation via subprocess
+        # Dynamically set num-supernodes based on actual number of clients
+        num_clients = len(clients_data)
         process = subprocess.run(
             ["flwr", "run", ".",
              f"--run-config", f"num-server-rounds={num_rounds}",
              f"--run-config", f"lr={lr}",
-             f"--run-config", f"local-epochs={local_epochs}"],
+             f"--run-config", f"local-epochs={local_epochs}",
+             f"--run-config", f"num-supernodes={num_clients}"],
             cwd=str(fl_dir),
             env=env,
             capture_output=True,

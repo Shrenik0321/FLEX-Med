@@ -160,3 +160,4 @@ def main(grid: Grid, context: Context) -> None:
             print(f"  ✗ Error saving checkpoint: {e}")
 
     print(f"\n[SERVER] Training complete!\n")
+    

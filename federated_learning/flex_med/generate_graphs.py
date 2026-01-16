@@ -20,6 +20,7 @@ Author: FLEX-Med Team
 import os
 import json
 import argparse
+import re
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
@@ -42,6 +43,33 @@ LINE_WIDTH = 2
 MARKER_SIZE = 8
 
 
+def sanitize_filename(name: str) -> str:
+    """
+    Sanitize a client name for use in filesystem paths.
+
+    Replaces special characters with underscores and limits length.
+    Examples:
+        "Asiri-resnet-allidb2" -> "Asiri-resnet-allidb2"
+        "Client A (Test)" -> "Client_A_Test"
+        "Hospital/Clinic #1" -> "Hospital_Clinic_1"
+    """
+    # Replace any character that's not alphanumeric, dash, or underscore with underscore
+    sanitized = re.sub(r'[^\w\-]', '_', name)
+
+    # Remove consecutive underscores
+    sanitized = re.sub(r'_+', '_', sanitized)
+
+    # Remove leading/trailing underscores
+    sanitized = sanitized.strip('_')
+
+    # Limit length to avoid filesystem issues (max 255 chars, but keep it reasonable)
+    max_length = 100
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length]
+
+    return sanitized or "unknown_client"
+
+
 def load_round_metrics(metrics_path: str = ROUND_METRICS_FILE_PATH) -> Dict:
     """Load round metrics from JSON file."""
     if not os.path.exists(metrics_path):
@@ -57,7 +85,11 @@ def load_round_metrics(metrics_path: str = ROUND_METRICS_FILE_PATH) -> Dict:
 
 
 def load_client_names(config_path: str = CLIENT_INFO_FILE_PATH) -> Dict[str, str]:
-    """Load client names from data.json configuration file."""
+    """Load client names from data.json configuration file.
+
+    Note: Maps enumerate indices (0, 1, 2...) to names, not database IDs,
+    to match how round_metrics.json stores client data.
+    """
     client_names = {}
 
     if os.path.exists(config_path):
@@ -65,8 +97,12 @@ def load_client_names(config_path: str = CLIENT_INFO_FILE_PATH) -> Dict[str, str
             with open(config_path, 'r') as f:
                 clients = json.load(f)
 
+            # Use enumerate index, not database ID
+            # This matches task.py's evaluate_all_clients() behavior
             for i, client in enumerate(clients):
-                client_names[str(i)] = client.get('client_name', f'Client {i}')
+                client_id = str(i)
+                client_name = client.get('client_name', f'Client {i}')
+                client_names[client_id] = client_name
 
             print(f"[Graphs] Loaded {len(client_names)} client names from config")
         except Exception as e:
@@ -75,8 +111,39 @@ def load_client_names(config_path: str = CLIENT_INFO_FILE_PATH) -> Dict[str, str
     return client_names
 
 
-def extract_round_data(metrics: Dict) -> Tuple[List[int], Dict[str, List], Dict[str, List], Dict[str, List]]:
+def load_valid_client_ids(config_path: str = CLIENT_INFO_FILE_PATH) -> set:
+    """Load valid client IDs from data.json configuration file.
+
+    Note: Returns enumerate indices (0, 1, 2...) not database IDs,
+    to match how round_metrics.json stores client data.
+    """
+    valid_ids = set()
+
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r') as f:
+                clients = json.load(f)
+
+            # Use enumerate index, not database ID
+            # This matches task.py's evaluate_all_clients() behavior
+            for i, client in enumerate(clients):
+                client_id = str(i)
+                valid_ids.add(client_id)
+
+            print(f"[Graphs] Loaded {len(valid_ids)} valid client IDs from config: {sorted(valid_ids)}")
+        except Exception as e:
+            print(f"[Graphs] Warning: Could not load valid client IDs: {e}")
+
+    return valid_ids
+
+
+def extract_round_data(metrics: Dict, valid_client_ids: Optional[set] = None) -> Tuple[List[int], Dict[str, List], Dict[str, List], Dict[str, List]]:
     """Extract round numbers and per-client metrics from the metrics dictionary.
+
+    Args:
+        metrics: Dictionary containing round metrics
+        valid_client_ids: Optional set of valid client IDs to filter by. If provided,
+                         only these clients will be included in the output.
 
     Returns:
         rounds: Sorted list of round numbers
@@ -88,7 +155,7 @@ def extract_round_data(metrics: Dict) -> Tuple[List[int], Dict[str, List], Dict[
     round_keys = [k for k in metrics.keys() if k.startswith("round_")]
     rounds = sorted([int(k.split("_")[1]) for k in round_keys])
 
-    # Get all unique client IDs
+    # Get all unique client IDs from metrics
     all_client_ids = set()
     for round_key in round_keys:
         round_data = metrics[round_key]
@@ -96,6 +163,11 @@ def extract_round_data(metrics: Dict) -> Tuple[List[int], Dict[str, List], Dict[
             all_client_ids.update(round_data["pre_fl"]["clients"].keys())
         if "post_fl" in round_data and "clients" in round_data["post_fl"]:
             all_client_ids.update(round_data["post_fl"]["clients"].keys())
+
+    # Filter by valid_client_ids if provided
+    if valid_client_ids is not None:
+        all_client_ids = all_client_ids.intersection(valid_client_ids)
+        print(f"[Graphs] Filtered to {len(all_client_ids)} valid clients from data.json")
 
     client_ids = sorted(all_client_ids, key=lambda x: int(x))
 
@@ -329,16 +401,17 @@ def generate_individual_graphs(
     # Generate graphs for each client separately
     for client_id in sorted(pre_fl_data.keys(), key=lambda x: int(x)):
         client_name = client_names.get(client_id, f"Client {client_id}")
+        safe_client_name = sanitize_filename(client_name)
 
-        # Create client-specific subdirectory
-        client_dir = os.path.join(output_dir, f"client_{client_id}")
+        # Create client-specific subdirectory using client name
+        client_dir = os.path.join(output_dir, safe_client_name)
         os.makedirs(client_dir, exist_ok=True)
 
         # Graph 1: Pre-FL Accuracy for this client
         fig1, ax1 = plt.subplots(figsize=(12, 7))
         plot_pre_fl_accuracy(ax1, rounds, pre_fl_data[client_id], client_name, client_id, annotate=annotate)
         plt.tight_layout()
-        path1 = os.path.join(client_dir, f"client_{client_id}_pre_fl_accuracy.png")
+        path1 = os.path.join(client_dir, f"{safe_client_name}_pre_fl_accuracy.png")
         fig1.savefig(path1, dpi=FIGURE_DPI, bbox_inches='tight')
         plt.close(fig1)
         saved_paths.append(path1)
@@ -348,7 +421,7 @@ def generate_individual_graphs(
         fig2, ax2 = plt.subplots(figsize=(12, 7))
         plot_post_fl_accuracy(ax2, rounds, post_fl_data[client_id], client_name, client_id, annotate=annotate)
         plt.tight_layout()
-        path2 = os.path.join(client_dir, f"client_{client_id}_post_fl_accuracy.png")
+        path2 = os.path.join(client_dir, f"{safe_client_name}_post_fl_accuracy.png")
         fig2.savefig(path2, dpi=FIGURE_DPI, bbox_inches='tight')
         plt.close(fig2)
         saved_paths.append(path2)
@@ -358,7 +431,7 @@ def generate_individual_graphs(
         fig3, ax3 = plt.subplots(figsize=(12, 7))
         plot_improvement(ax3, rounds, improvement_data[client_id], client_name, client_id, annotate=annotate)
         plt.tight_layout()
-        path3 = os.path.join(client_dir, f"client_{client_id}_improvement.png")
+        path3 = os.path.join(client_dir, f"{safe_client_name}_improvement.png")
         fig3.savefig(path3, dpi=FIGURE_DPI, bbox_inches='tight')
         plt.close(fig3)
         saved_paths.append(path3)
@@ -382,9 +455,10 @@ def generate_combined_graph_per_client(
     # Generate combined graph for each client
     for client_id in sorted(pre_fl_data.keys(), key=lambda x: int(x)):
         client_name = client_names.get(client_id, f"Client {client_id}")
+        safe_client_name = sanitize_filename(client_name)
 
-        # Create client-specific subdirectory
-        client_dir = os.path.join(output_dir, f"client_{client_id}")
+        # Create client-specific subdirectory using client name
+        client_dir = os.path.join(output_dir, safe_client_name)
         os.makedirs(client_dir, exist_ok=True)
 
         # Create combined figure with 3 subplots
@@ -399,7 +473,7 @@ def generate_combined_graph_per_client(
 
         plt.tight_layout()
 
-        path = os.path.join(client_dir, f"client_{client_id}_combined_metrics.png")
+        path = os.path.join(client_dir, f"{safe_client_name}_combined_metrics.png")
         fig.savefig(path, dpi=FIGURE_DPI, bbox_inches='tight')
         plt.close(fig)
 
@@ -574,9 +648,10 @@ def main():
     # Load data
     metrics = load_round_metrics(args.metrics_path)
     client_names = load_client_names(args.config_path)
+    valid_client_ids = load_valid_client_ids(args.config_path)
 
-    # Extract round data
-    rounds, pre_fl_data, post_fl_data, improvement_data = extract_round_data(metrics)
+    # Extract round data (filtered by valid client IDs from data.json)
+    rounds, pre_fl_data, post_fl_data, improvement_data = extract_round_data(metrics, valid_client_ids)
 
     if not rounds:
         print("[Graphs] Error: No round data found in metrics file")
@@ -616,11 +691,13 @@ def main():
     print("\nGenerated structure:")
     print(f"  - {args.output_dir}/training_summary.txt")
     for client_id in sorted(pre_fl_data.keys(), key=lambda x: int(x)):
-        print(f"  - {args.output_dir}/client_{client_id}/")
-        print(f"      - client_{client_id}_pre_fl_accuracy.png")
-        print(f"      - client_{client_id}_post_fl_accuracy.png")
-        print(f"      - client_{client_id}_improvement.png")
-        print(f"      - client_{client_id}_combined_metrics.png")
+        client_name = client_names.get(client_id, f"Client {client_id}")
+        safe_client_name = sanitize_filename(client_name)
+        print(f"  - {args.output_dir}/{safe_client_name}/")
+        print(f"      - {safe_client_name}_pre_fl_accuracy.png")
+        print(f"      - {safe_client_name}_post_fl_accuracy.png")
+        print(f"      - {safe_client_name}_improvement.png")
+        print(f"      - {safe_client_name}_combined_metrics.png")
 
 
 if __name__ == "__main__":

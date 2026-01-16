@@ -557,6 +557,199 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
     avg_loss = total_loss / (len(public_loader) * epochs)
     return avg_loss
 
+# <------------------------------------------ CONSENSUS COMPUTATION ------------------------------------------>
+
+def compute_consensus(
+    logits_list: List[np.ndarray],
+    client_metrics: List[Dict],
+    client_configs: List[Dict],
+    server_round: int,
+    last_consensus: Optional[np.ndarray] = None,
+    eval_history: Optional[List[Dict]] = None,
+    momentum: float = 0.6,
+    exclude_free_riders: bool = True,
+) -> Tuple[Optional[np.ndarray], Dict]:
+    """
+    Compute weighted consensus from client logits with sophisticated aggregation strategy.
+
+    Args:
+        logits_list: List of numpy arrays containing client predictions on public dataset
+        client_metrics: List of dicts with training metrics (train_loss, distill_loss, num-examples, has_local_data)
+        client_configs: List of client configuration dicts (model_type, client_name, etc.)
+        server_round: Current FL round number
+        last_consensus: Previous round's consensus logits (for momentum smoothing)
+        eval_history: Historical evaluation metrics across rounds
+        momentum: Weight for previous consensus (default 0.6)
+        exclude_free_riders: If True, free riders get zero weight (default True)
+
+    Returns:
+        Tuple of (consensus_logits, aggregation_metadata)
+        - consensus_logits: Weighted average of client logits with momentum, or None if no valid clients
+        - aggregation_metadata: Dict containing weights, factors, and debugging info
+
+    Weighting Strategy:
+        1. Base weight: num_samples (data quantity, primary factor ~70% influence)
+        2. Quality multiplier: 1/(1 + combined_loss) where combined_loss = 0.7*train_loss + 0.3*distill_loss
+        3. Architecture factor: [0.9-1.1] based on model suitability for medical imaging
+        4. Free riders: Zero weight (complete exclusion)
+    """
+
+    # Model suitability scores for medical imaging tasks
+    MODEL_SUITABILITY_SCORES = {
+        # Tier 1: Excellent (ResNet, DenseNet - skip connections, dense features)
+        'resnet18': 1.10, 'resnet34': 1.10, 'resnet50': 1.10, 'resnet101': 1.10, 'resnet152': 1.10,
+        'densenet121': 1.10, 'densenet161': 1.10, 'densenet169': 1.10, 'densenet201': 1.10,
+
+        # Tier 2: Good (EfficientNet, Inception - balanced efficiency/accuracy)
+        'efficientnet_b0': 1.05, 'efficientnet_b1': 1.05, 'efficientnet_b2': 1.05,
+        'efficientnet_b3': 1.05, 'efficientnet_b4': 1.05, 'efficientnet_b5': 1.05,
+        'efficientnet_b6': 1.05, 'efficientnet_b7': 1.05,
+        'inception_v3': 1.05, 'googlenet': 1.05,
+
+        # Tier 3: Standard (VGG - proven baseline)
+        'vgg16': 1.00, 'vgg19': 1.00,
+
+        # Tier 4: Mobile-optimized (may sacrifice accuracy for efficiency)
+        'mobilenet_v2': 0.95, 'mobilenet_v3_small': 0.90, 'mobilenet_v3_large': 0.95,
+        'squeezenet': 0.90,
+
+        # Tier 5: Older/less suitable
+        'alexnet': 0.90, 'vgg11': 0.95, 'vgg13': 0.95,
+    }
+
+    # Loss weighting parameters (for quality multiplier)
+    TRAIN_LOSS_WEIGHT = 0.7  # Private training more important
+    DISTILL_LOSS_WEIGHT = 0.3  # Distillation secondary
+
+    # Validate inputs
+    if not logits_list or len(logits_list) == 0:
+        return None, {"error": "No client logits provided"}
+
+    if len(logits_list) != len(client_metrics) or len(logits_list) != len(client_configs):
+        return None, {"error": "Mismatched input lengths"}
+
+    num_clients = len(logits_list)
+
+    # Initialize weight components for each client
+    weights = []
+    weight_breakdown = []  # For debugging/logging
+
+    for i in range(num_clients):
+        metrics = client_metrics[i]
+        config = client_configs[i]
+
+        # Extract metrics with safe defaults
+        num_samples = metrics.get("num-examples", 1)
+        has_local_data = metrics.get("has_local_data", 0)
+        train_loss = metrics.get("train_loss", 0.0)
+        distill_loss = metrics.get("distill_loss", 0.0)
+        model_type = config.get("model_type", "unknown").lower()
+        client_name = config.get("client_name", f"client_{i}")
+
+        # --- FACTOR 1: Free Rider Exclusion ---
+        if exclude_free_riders and not has_local_data:
+            weights.append(0.0)
+            weight_breakdown.append({
+                "client_name": client_name,
+                "model_type": model_type,
+                "base_weight": 0.0,
+                "quality_multiplier": 0.0,
+                "architecture_factor": 0.0,
+                "final_weight": 0.0,
+                "reason": "free_rider_excluded"
+            })
+            continue
+
+        # --- FACTOR 2: Base Weight (Data Quantity) ---
+        # Primary factor: clients with more data get higher base weight
+        base_weight = max(num_samples, 1)  # At least 1 to avoid zero division
+
+        # --- FACTOR 3: Quality Multiplier (Training Convergence) ---
+        # Lower combined loss = better convergence = higher multiplier
+        combined_loss = (TRAIN_LOSS_WEIGHT * train_loss +
+                        DISTILL_LOSS_WEIGHT * distill_loss)
+
+        # Quality multiplier: 1/(1 + loss) maps loss to [0, 1]
+        # loss=0 -> multiplier=1.0, loss=1 -> multiplier=0.5, loss=10 -> multiplier=0.09
+        quality_multiplier = 1.0 / (1.0 + combined_loss)
+
+        # --- FACTOR 4: Architecture Suitability Factor ---
+        # Small adjustment based on model's suitability for medical imaging
+        architecture_factor = MODEL_SUITABILITY_SCORES.get(model_type, 1.0)
+
+        # --- COMPUTE FINAL WEIGHT ---
+        final_weight = (base_weight *
+                       quality_multiplier *
+                       architecture_factor)
+
+        weights.append(final_weight)
+        weight_breakdown.append({
+            "client_name": client_name,
+            "model_type": model_type,
+            "num_samples": num_samples,
+            "train_loss": train_loss,
+            "distill_loss": distill_loss,
+            "combined_loss": combined_loss,
+            "base_weight": base_weight,
+            "quality_multiplier": quality_multiplier,
+            "architecture_factor": architecture_factor,
+            "final_weight": final_weight,
+        })
+
+    # --- NORMALIZE WEIGHTS ---
+    total_weight = sum(weights)
+
+    if total_weight == 0:
+        # All clients are free riders or have zero weight
+        return None, {
+            "error": "All clients excluded (free riders or zero weight)",
+            "weight_breakdown": weight_breakdown
+        }
+
+    normalized_weights = [w / total_weight for w in weights]
+
+    # Update weight breakdown with normalized values
+    for i, breakdown in enumerate(weight_breakdown):
+        breakdown["normalized_weight"] = normalized_weights[i]
+
+    # --- COMPUTE WEIGHTED CONSENSUS ---
+    new_consensus = np.average(logits_list, axis=0, weights=normalized_weights)
+
+    # --- APPLY MOMENTUM SMOOTHING ---
+    if last_consensus is not None and server_round > 1:
+        consensus_logits = (momentum * last_consensus +
+                          (1 - momentum) * new_consensus)
+        smoothing_applied = True
+    else:
+        consensus_logits = new_consensus
+        smoothing_applied = False
+
+    # --- PREPARE METADATA ---
+    aggregation_metadata = {
+        "server_round": server_round,
+        "num_clients": num_clients,
+        "num_contributing_clients": sum(1 for w in weights if w > 0),
+        "num_excluded_free_riders": sum(1 for w in weights if w == 0),
+        "total_raw_weight": total_weight,
+        "momentum": momentum if smoothing_applied else None,
+        "smoothing_applied": smoothing_applied,
+        "weight_breakdown": weight_breakdown,
+        "normalized_weights": normalized_weights,
+        "weight_statistics": {
+            "min": min(normalized_weights) if normalized_weights else 0,
+            "max": max(normalized_weights) if normalized_weights else 0,
+            "mean": float(np.mean(normalized_weights)) if normalized_weights else 0,
+            "std": float(np.std(normalized_weights)) if normalized_weights else 0,
+        },
+        "parameters": {
+            "train_loss_weight": TRAIN_LOSS_WEIGHT,
+            "distill_loss_weight": DISTILL_LOSS_WEIGHT,
+            "exclude_free_riders": exclude_free_riders,
+        }
+    }
+
+    return consensus_logits, aggregation_metadata
+
 # <------------------------------------------ FLEX-MED FL SIMULATION STRATEGY ------------------------------------------>
 
 # Coordinates federated learning rounds with model-agnostic knowledge distillation
@@ -861,10 +1054,10 @@ class FLEXMedStrategy(Strategy):
         if not results_list:
             return None, {}
 
-        # Collect logits from all clients
+        # Collect logits and metrics from all clients
         logits_list = []
-        client_info = []
-        weights = []
+        client_metrics_list = []
+        client_names = []
 
         for i, msg in enumerate(results_list):
             client_arrays = msg.content["arrays"]
@@ -872,58 +1065,61 @@ class FLEXMedStrategy(Strategy):
                 client_logits = client_arrays["0"].numpy()
                 logits_list.append(client_logits)
 
+                # Extract all metrics for weight computation
+                metrics = msg.content.get("metrics", {})
+                client_metrics_list.append(metrics)
+
                 # Track which client contributed
                 if i < len(self.client_configs):
-                    client_info.append(self.client_configs[i]['client_name'])
-
-                # Extract weight from metrics (number of training examples)
-                metrics = msg.content.get("metrics", {})
-                num_examples = metrics.get("num-examples", 0)
-                has_local_data = metrics.get("has_local_data", 0)
-
-                # Weight by training examples - free riders get minimal weight
-                # to prevent polluting consensus with untrained predictions
-                if has_local_data:
-                    # Clients with data: weight by training samples
-                    weights.append(max(num_examples, 1))
-                else:
-                    # Free riders: minimal weight (don't pollute consensus)
-                    weights.append(1)
+                    client_names.append(self.client_configs[i]['client_name'])
 
             except (KeyError, IndexError) as e:
+                print(f"[SERVER] Warning: Failed to extract data from client {i}: {e}")
                 pass
 
-        # Compute consensus with weighted average
-        if len(logits_list) > 0:
-            # Normalize weights
-            total_weight = sum(weights)
-            normalized_weights = [w / total_weight for w in weights]
+        # Compute consensus using sophisticated weight aggregation
+        consensus_logits, aggregation_metadata = compute_consensus(
+            logits_list=logits_list,
+            client_metrics=client_metrics_list,
+            client_configs=self.client_configs[:len(logits_list)],
+            server_round=server_round,
+            last_consensus=self.last_consensus_logits,
+            eval_history=self.eval_history,
+            momentum=0.6,
+            exclude_free_riders=True
+        )
 
-            # Weighted average of logits
-            new_consensus = np.average(logits_list, axis=0, weights=normalized_weights)
-
-            # Apply momentum to smooth consensus updates and reduce oscillation
-            momentum = 0.6  # Weight for previous consensus
-            if self.last_consensus_logits is not None and server_round > 1:
-                consensus_logits = (momentum * self.last_consensus_logits +
-                                   (1 - momentum) * new_consensus)
-                print(f"[SERVER] ✓ Consensus with momentum (α={momentum}) from {len(logits_list)} clients")
-            else:
-                consensus_logits = new_consensus
-                print(f"[SERVER] ✓ Initial consensus from {len(logits_list)} clients")
-        else:
+        if consensus_logits is None:
+            print(f"[SERVER] ✗ Failed to compute consensus: {aggregation_metadata.get('error', 'unknown')}")
             return None, {}
 
-        arrays_aggregated = ArrayRecord([consensus_logits])
+        # Print informative summary
+        print(f"[SERVER] ✓ Consensus computed from {aggregation_metadata['num_contributing_clients']}/{aggregation_metadata['num_clients']} clients")
+        if aggregation_metadata['num_excluded_free_riders'] > 0:
+            print(f"[SERVER]   Excluded {aggregation_metadata['num_excluded_free_riders']} free riders")
+
+        # Print top 3 contributors
+        breakdown = aggregation_metadata['weight_breakdown']
+        sorted_by_weight = sorted(breakdown, key=lambda x: x.get('normalized_weight', 0), reverse=True)
+        print(f"[SERVER]   Top contributors:")
+        for client_data in sorted_by_weight[:3]:
+            if client_data.get('normalized_weight', 0) > 0:
+                print(f"[SERVER]     - {client_data['client_name']} ({client_data['model_type']}): "
+                      f"{client_data['normalized_weight']*100:.1f}% weight "
+                      f"[samples: {client_data['num_samples']}, loss: {client_data['combined_loss']:.3f}]")
 
         # Store consensus for checkpointing
         self.last_consensus_logits = consensus_logits
 
+        arrays_aggregated = ArrayRecord([consensus_logits])
+
+        # Merge aggregation metadata with client names
         metrics_aggregated = {
             "consensus_round": server_round,
             "num_clients": len(logits_list),
-            "client_names": client_info,
-            "weights": normalized_weights,
+            "client_names": client_names,
+            "weights": aggregation_metadata['normalized_weights'],
+            "aggregation_details": aggregation_metadata  # Full details for tracking
         }
 
         return arrays_aggregated, metrics_aggregated

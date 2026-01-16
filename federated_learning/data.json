@@ -1,199 +1,133 @@
 [
   {
-    "id": 15,
-    "created_at": "2025-12-29T17:29:50.04583+00:00",
-    "client_name": "Asiri",
-    "model_type": "mobilenet_v2",
-    "dataset_path": "/content/drive/MyDrive/College/FLEX-Med/datasets/all_idb2_raw",
-    "status": "Inactive",
-    "has_local_data": true,
-    "model_path": "/content/drive/MyDrive/College/models/Asiri.pt",
-    "metrics": {
-      "pre_fl": {
-        "accuracy": 0.5,
-        "precision": 0.5,
-        "recall": 1.0,
-        "f1_score": 0.6666666666666666,
-        "specificity": 0.0,
-        "roc_auc": 0.5,
-        "healthy_accuracy": 0.0,
-        "leukemia_accuracy": 1.0,
-        "confusion_matrix": [
-          [
-            0,
-            658
-          ],
-          [
-            0,
-            658
-          ]
-        ],
-        "num_samples": 1316,
-        "evaluated_at": "2026-01-11T17:55:57.664113"
-      },
-      "post_fl": {
-        "accuracy": 0.560790273556231,
-        "precision": 1.0,
-        "recall": 0.12158054711246201,
-        "f1_score": 0.21680216802168023,
-        "specificity": 1.0,
-        "roc_auc": 0.8553182250718303,
-        "healthy_accuracy": 1.0,
-        "leukemia_accuracy": 0.12158054711246201,
-        "confusion_matrix": [
-          [
-            658,
-            0
-          ],
-          [
-            578,
-            80
-          ]
-        ],
-        "num_samples": 1316,
-        "evaluated_at": "2026-01-12T10:11:49.645719"
-      },
-      "improvement": {
-        "accuracy": 0.06079027355623101,
-        "precision": 0.5,
-        "recall": -0.878419452887538,
-        "f1_score": -0.4498644986449864,
-        "roc_auc": 0.3553182250718303,
-        "specificity": 1.0,
-        "healthy_accuracy": 1.0,
-        "leukemia_accuracy": -0.878419452887538
-      }
-    }
-  },
-  {
-    "id": 16,
-    "created_at": "2025-12-29T17:30:07.971319+00:00",
-    "client_name": "Delmon",
+    "id": 26,
+    "created_at": "2026-01-14T16:46:50.703429+00:00",
+    "client_name": "Asiri-resnet-allidb2",
     "model_type": "resnet18",
-    "dataset_path": "/content/drive/MyDrive/College/FLEX-Med/datasets/cnmc_balanced",
-    "status": "Inactive",
+    "dataset_path": "/content/drive/MyDrive/College/FLEX-Med/datasets/all_idb2_raw",
+    "status": "Training",
     "has_local_data": true,
-    "model_path": "/content/drive/MyDrive/College/models/Delmon.pt",
+    "model_path": "/content/drive/MyDrive/College/models/Asiri-resnet-allidb2.pt",
     "metrics": {
       "pre_fl": {
-        "accuracy": 0.5,
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1_score": 0.0,
-        "specificity": 1.0,
-        "roc_auc": 0.32302454707550743,
-        "healthy_accuracy": 1.0,
-        "leukemia_accuracy": 0.0,
+        "accuracy": 0.5575,
+        "precision": 0.5649717514124294,
+        "recall": 0.5,
+        "f1_score": 0.5305039787798409,
+        "specificity": 0.615,
+        "roc_auc": 0.65805,
+        "healthy_accuracy": 0.615,
+        "leukemia_accuracy": 0.5,
         "confusion_matrix": [
           [
-            658,
-            0
+            123,
+            77
           ],
           [
-            658,
-            0
+            100,
+            100
           ]
         ],
-        "num_samples": 1316,
-        "evaluated_at": "2026-01-11T17:56:02.304100"
+        "num_samples": 400,
+        "evaluated_at": "2026-01-15T03:47:13.701051"
       },
       "post_fl": {
-        "accuracy": 0.6519756838905775,
-        "precision": 0.6012145748987854,
-        "recall": 0.9027355623100304,
-        "f1_score": 0.7217496962332929,
-        "specificity": 0.4012158054711246,
-        "roc_auc": 0.7581230772073428,
-        "healthy_accuracy": 0.4012158054711246,
-        "leukemia_accuracy": 0.9027355623100304,
+        "accuracy": 0.7275,
+        "precision": 0.9690721649484536,
+        "recall": 0.47,
+        "f1_score": 0.632996632996633,
+        "specificity": 0.985,
+        "roc_auc": 0.885175,
+        "healthy_accuracy": 0.985,
+        "leukemia_accuracy": 0.47,
         "confusion_matrix": [
           [
-            264,
-            394
+            197,
+            3
           ],
           [
-            64,
-            594
+            106,
+            94
           ]
         ],
-        "num_samples": 1316,
-        "evaluated_at": "2026-01-12T10:11:54.535262"
+        "num_samples": 400,
+        "evaluated_at": "2026-01-15T16:35:44.549434"
       },
       "improvement": {
-        "accuracy": 0.15197568389057747,
-        "precision": 0.6012145748987854,
-        "recall": 0.9027355623100304,
-        "f1_score": 0.7217496962332929,
-        "roc_auc": 0.4350985301318354,
-        "specificity": -0.5987841945288754,
-        "healthy_accuracy": -0.5987841945288754,
-        "leukemia_accuracy": 0.9027355623100304
+        "accuracy": 0.17000000000000004,
+        "precision": 0.4041004135360242,
+        "recall": -0.030000000000000027,
+        "f1_score": 0.1024926542167921,
+        "roc_auc": 0.22712500000000002,
+        "specificity": 0.37,
+        "healthy_accuracy": 0.37,
+        "leukemia_accuracy": -0.030000000000000027
       }
     }
   },
   {
-    "id": 17,
-    "created_at": "2025-12-29T17:30:18.734224+00:00",
-    "client_name": "Durdans",
-    "model_type": "efficientnet_b3",
-    "dataset_path": null,
-    "status": "Inactive",
-    "has_local_data": false,
-    "model_path": "/content/drive/MyDrive/College/models/Durdans.pt",
+    "id": 27,
+    "created_at": "2026-01-14T16:47:52.358916+00:00",
+    "client_name": "Durdans-mobilenet-cnmc",
+    "model_type": "mobilenet_v2",
+    "dataset_path": "/content/drive/MyDrive/College/FLEX-Med/datasets/cnmc_balanced",
+    "status": "Training",
+    "has_local_data": true,
+    "model_path": "/content/drive/MyDrive/College/models/Durdans-mobilenet-cnmc.pt",
     "metrics": {
       "pre_fl": {
-        "accuracy": 0.5,
-        "precision": 0.5,
-        "recall": 1.0,
-        "f1_score": 0.6666666666666666,
-        "specificity": 0.0,
-        "roc_auc": 0.5,
-        "healthy_accuracy": 0.0,
-        "leukemia_accuracy": 1.0,
+        "accuracy": 0.5375,
+        "precision": 0.8571428571428571,
+        "recall": 0.09,
+        "f1_score": 0.16289592760180996,
+        "specificity": 0.985,
+        "roc_auc": 0.7888249999999999,
+        "healthy_accuracy": 0.985,
+        "leukemia_accuracy": 0.09,
         "confusion_matrix": [
           [
-            0,
-            658
+            197,
+            3
           ],
           [
-            0,
-            658
+            182,
+            18
           ]
         ],
-        "num_samples": 1316,
-        "evaluated_at": "2026-01-11T17:56:07.293333"
+        "num_samples": 400,
+        "evaluated_at": "2026-01-15T03:47:15.629516"
       },
       "post_fl": {
-        "accuracy": 0.4810030395136778,
-        "precision": 0.4899598393574297,
-        "recall": 0.9270516717325228,
-        "f1_score": 0.6410930110352075,
-        "specificity": 0.034954407294832825,
-        "roc_auc": 0.665601528071618,
-        "healthy_accuracy": 0.034954407294832825,
-        "leukemia_accuracy": 0.9270516717325228,
+        "accuracy": 0.625,
+        "precision": 0.7551020408163265,
+        "recall": 0.37,
+        "f1_score": 0.4966442953020134,
+        "specificity": 0.88,
+        "roc_auc": 0.6668625,
+        "healthy_accuracy": 0.88,
+        "leukemia_accuracy": 0.37,
         "confusion_matrix": [
           [
-            23,
-            635
+            176,
+            24
           ],
           [
-            48,
-            610
+            126,
+            74
           ]
         ],
-        "num_samples": 1316,
-        "evaluated_at": "2026-01-12T10:11:59.662965"
+        "num_samples": 400,
+        "evaluated_at": "2026-01-15T16:35:46.534562"
       },
       "improvement": {
-        "accuracy": -0.018996960486322212,
-        "precision": -0.010040160642570295,
-        "recall": -0.07294832826747721,
-        "f1_score": -0.02557365563145908,
-        "roc_auc": 0.165601528071618,
-        "specificity": 0.034954407294832825,
-        "healthy_accuracy": 0.034954407294832825,
-        "leukemia_accuracy": -0.07294832826747721
+        "accuracy": 0.08750000000000002,
+        "precision": -0.10204081632653061,
+        "recall": 0.28,
+        "f1_score": 0.33374836770020344,
+        "roc_auc": -0.12196249999999986,
+        "specificity": -0.10499999999999998,
+        "healthy_accuracy": -0.10499999999999998,
+        "leukemia_accuracy": 0.28
       }
     }
   }
