@@ -4,7 +4,8 @@ import os
 from flwr.app import ArrayRecord, ConfigRecord, Context
 from flwr.serverapp import ServerApp
 from flwr.server import Grid
-from flex_med.task import FLEXMedStrategy, load_public_dataset, CLIENT_INFO_FILE_PATH, NUM_CLASSES, MODEL_CHECKPOINT_FILE_PATH, load_checkpoint
+from flex_med.utils.config import CLIENT_INFO_FILE_PATH, MODEL_CHECKPOINT_FILE_PATH
+from flex_med.task import FLEXMedStrategy, load_public_dataset, NUM_CLASSES, load_checkpoint
 
 app = ServerApp()
 
@@ -82,7 +83,7 @@ def main(grid: Grid, context: Context) -> None:
 
     print(f"\n{'='*70}")
     print(f"[SERVER] Executing Federated Learning")
-    print(f"{'='*70}\n")
+    print(f"{'='*70}\n")    
 
     # Start FL rounds with FedMD two-phase training:
     # Phase 1 (Distillation): Clients learn from consensus on public dataset

@@ -1,0 +1,22 @@
+[
+  {
+    "id": 0,
+    "client_name": "CNMC-Client-0-resnet18",
+    "model_type": "resnet18",
+    "dataset_path": "/content/drive/MyDrive/College/FLEX-Med/cnmc_datasets/cnmc_client_0",
+    "status": "Active",
+    "has_local_data": true,
+    "model_path": "/content/drive/MyDrive/College/FLEX-Med/models/cnmc_client_0_resnet18.pt",
+    "metrics": {}
+  },
+  {
+    "id": 1,
+    "client_name": "CNMC-Client-1-mobilenet",
+    "model_type": "mobilenet_v2",
+    "dataset_path": "/content/drive/MyDrive/College/FLEX-Med/cnmc_datasets/cnmc_client_1",
+    "status": "Active",
+    "has_local_data": true,
+    "model_path": "/content/drive/MyDrive/College/FLEX-Med/models/cnmc_client_1_mobilenet.pt",
+    "metrics": {}
+  }
+]

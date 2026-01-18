@@ -4,6 +4,7 @@ import time
 import numpy as np
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
+from flex_med.utils.config import CLIENT_INFO_FILE_PATH
 from flex_med.task import (
     get_model_by_type,
     get_client_by_partition_id,
@@ -14,7 +15,6 @@ from flex_med.task import (
     train as train_fn,
     test as test_fn,
     load_existing_model,
-    CLIENT_INFO_FILE_PATH,
     NUM_CLASSES
 )
 
@@ -140,6 +140,9 @@ def train(msg: Message, context: Context):
     training_time = 0.0
     dataset_len = 0
 
+    # Extract model_type from client config for progressive fine-tuning
+    model_type = client_config['model_type']
+
     trainloader, _ = load_private_dataset(partition_id, num_partitions, batch_size=32)
 
     if trainloader is not None:
@@ -151,7 +154,8 @@ def train(msg: Message, context: Context):
             trainloader=trainloader,
             epochs=context.run_config["local-epochs"],
             lr=msg.content["config"]["lr"],
-            device=device
+            device=device,
+            model_type=model_type  # Pass model_type for progressive fine-tuning
         )
         training_time = time.time() - start_time
 
@@ -170,7 +174,8 @@ def train(msg: Message, context: Context):
             trainloader=public_supervised_loader,
             epochs=3,  # Fewer epochs to prevent overfitting to public data
             lr=0.0005,  # Lower LR for stability
-            device=device
+            device=device,
+            model_type=model_type  # Pass model_type for progressive fine-tuning
         )
         training_time = time.time() - start_time
 

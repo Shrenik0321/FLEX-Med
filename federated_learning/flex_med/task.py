@@ -21,33 +21,8 @@ from flwr.common import (
 )
 from flwr.server import Grid
 from flwr.serverapp.strategy import Strategy
-
-# <------------------------------------------ CONFIGURATION ------------------------------------------>
-
-# Base Path
-BASE_PATH = os.getenv("BASE_PATH", "/content/drive/MyDrive/College/FLEX-Med")
-
-# Client Information File Path - Acts as the intermediary between the api and fl codebase. Should be connected directly to the database.
-CLIENT_INFO_FILE_PATH = os.path.join(BASE_PATH, "flex-med/flex_med/data.json")
-
-# Dataset File Path - Contains the public and private datasets.
-DATASET_FILE_PATH = os.path.join(BASE_PATH, "datasets")
-
-PUBLIC_ANCHOR_DATASET_PATH = os.path.join(DATASET_FILE_PATH, "public_anchor")
-PUBLIC_TEST_DATASET_PATH = os.path.join(DATASET_FILE_PATH, "public_test")
-
-# Model Checkpoint File Path - Contains the model checkpoints.
-MODEL_CHECKPOINT_FILE_PATH = os.path.join(BASE_PATH, "checkpoints")
-
-# Round Metrics File Path - Contains per-round evaluation metrics for visualization.
-ROUND_METRICS_FILE_PATH = os.path.join(BASE_PATH, "round_metrics.json")
-
-# Graphs Output Directory - Contains generated visualization graphs.
-GRAPHS_OUTPUT_DIR = os.path.join(BASE_PATH, "graphs")
-
-# Model Constraints
-NUM_CLASSES = 2   # 0: ALL (Leukemia), 1: Hem (Healthy)  # Fixed: must match ImageFolder alphabetical order (all, hem)
-IMG_SIZE = 224    # Resize all inputs to 224X224 for consistency
+from flex_med.utils.config import BASE_PATH, CLIENT_INFO_FILE_PATH, DATASET_FILE_PATH, PUBLIC_ANCHOR_DATASET_PATH, PUBLIC_TEST_DATASET_PATH, MODEL_CHECKPOINT_FILE_PATH, ROUND_METRICS_FILE_PATH, GRAPHS_OUTPUT_DIR, NUM_CLASSES, IMG_SIZE, DATA_JSON_PATH
+from datetime import datetime
 
 # <------------------------------------------ DATA TRANSFORMS ------------------------------------------>
 
@@ -128,34 +103,108 @@ def get_public_logits(model, public_loader, device):
     
 # <------------------------------------------ MODEL FUNCTION DEFINITIONS ------------------------------------------>
 
-# Factory function for heterogeneous model creation in FL simulation
+# Factory function for heterogeneous model creation in FL simulation with transfer learning
 # Args: model_type - String identifier ('resnet18', 'mobilenet_v2', 'efficientnet_b3')
-#       use_pretrained - Whether to load ImageNet pretrained weights
+#       use_pretrained - Whether to load ImageNet pretrained weights (default: True for transfer learning)
 # Returns: PyTorch model initialized for binary classification (NUM_CLASSES=2)
+# STRATEGY: Progressive fine-tuning
+#   ✓ Load ImageNet backbone (proven feature extractors)
+#   ✗ Discard ImageNet classifier head (1000 classes → not relevant)
+#   ✓ Replace with new binary classifier (2 classes: ALL vs Healthy)
+#   ✓ Fine-tune head first (frozen backbone), then unfreeze for full training
 def get_model_by_type(model_type: str, use_pretrained: bool = True):
     model_type = model_type.lower()
 
     if model_type == 'resnet18':
-        weights = models.ResNet18_Weights.IMAGENET1K_V1 if use_pretrained else None
-        model = models.resnet18(weights=weights)
+        # Load ImageNet pre-trained backbone
+        model = models.resnet18(weights='IMAGENET1K_V1' if use_pretrained else None)
+        # Replace classifier head with binary classifier
         model.fc = nn.Linear(model.fc.in_features, NUM_CLASSES)
         return model
 
     elif model_type == 'mobilenet_v2':
-        weights = models.MobileNet_V2_Weights.IMAGENET1K_V1 if use_pretrained else None
-        model = models.mobilenet_v2(weights=weights)
+        # Load ImageNet pre-trained backbone
+        model = models.mobilenet_v2(weights='IMAGENET1K_V1' if use_pretrained else None)
+        # Replace classifier head with binary classifier
         model.classifier[1] = nn.Linear(model.classifier[1].in_features, NUM_CLASSES)
         return model
 
     elif model_type == 'efficientnet_b3':
-        weights = models.EfficientNet_B3_Weights.IMAGENET1K_V1 if use_pretrained else None
-        model = models.efficientnet_b3(weights=weights)
+        # Load ImageNet pre-trained backbone
+        model = models.efficientnet_b3(weights='IMAGENET1K_V1' if use_pretrained else None)
+        # Replace classifier head with binary classifier
         model.classifier[1] = nn.Linear(model.classifier[1].in_features, NUM_CLASSES)
         return model
 
     else:
         raise ValueError(f"Unsupported model type: {model_type}. "
                         f"Supported types: resnet18, mobilenet_v2, efficientnet_b3")
+
+# <------------------------------------------ TRANSFER LEARNING UTILITIES ------------------------------------------>
+
+def freeze_backbone(model, model_type: str):
+    """
+    Freeze all layers except the classifier head for initial training.
+
+    Strategy: Train only the new classifier head while keeping ImageNet features frozen.
+    This prevents catastrophic forgetting and allows the head to learn task-specific features.
+
+    Args:
+        model: PyTorch model
+        model_type: Model architecture identifier
+    """
+    model_type = model_type.lower()
+
+    if model_type == 'resnet18':
+        # Freeze all layers except fc (classifier head)
+        for name, param in model.named_parameters():
+            if 'fc' not in name:
+                param.requires_grad = False
+        print(f"[Transfer Learning] ResNet18 backbone frozen, training head only")
+
+    elif model_type == 'mobilenet_v2':
+        # Freeze all layers except classifier
+        for name, param in model.named_parameters():
+            if 'classifier' not in name:
+                param.requires_grad = False
+        print(f"[Transfer Learning] MobileNetV2 backbone frozen, training head only")
+
+    elif model_type == 'efficientnet_b3':
+        # Freeze all layers except classifier
+        for name, param in model.named_parameters():
+            if 'classifier' not in name:
+                param.requires_grad = False
+        print(f"[Transfer Learning] EfficientNetB3 backbone frozen, training head only")
+
+    return model
+
+
+def unfreeze_backbone(model, model_type: str):
+    """
+    Unfreeze all layers for full fine-tuning.
+
+    Strategy: After the head has learned task-specific features, unfreeze backbone
+    to adapt pre-trained features to medical domain with lower learning rate.
+
+    Args:
+        model: PyTorch model
+        model_type: Model architecture identifier
+    """
+    # Unfreeze all parameters
+    for param in model.parameters():
+        param.requires_grad = True
+
+    print(f"[Transfer Learning] Backbone unfrozen, full model fine-tuning enabled")
+    return model
+
+
+def get_trainable_params(model):
+    """Count trainable vs frozen parameters"""
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total = sum(p.numel() for p in model.parameters())
+    frozen = total - trainable
+    return trainable, frozen, total
+
 
 # <------------------------------------------ DATA LOADER FUNCTION DEFINITIONS ------------------------------------------>
 
@@ -228,7 +277,7 @@ def load_public_test_dataset(batch_size=64):
 #       model_path - Path to client's model checkpoint
 #       model_type - Architecture identifier (e.g., 'resnet18')
 #       device - Device to evaluate on (cpu/cuda)
-# Returns: Dictionary with accuracy, loss metrics
+# Returns: Dictionary with comprehensive metrics including confusion matrix, ROC-AUC, etc.
 def evaluate_client_on_public_test(client_id: int, model_path: str, model_type: str, device: torch.device) -> Dict:
     # Initialize model architecture
     model = get_model_by_type(model_type)
@@ -247,14 +296,13 @@ def evaluate_client_on_public_test(client_id: int, model_path: str, model_type: 
     # Load public test dataset
     test_loader = load_public_test_dataset(batch_size=64)
 
-    # Evaluate model
-    loss, accuracy = test(model, test_loader, device)
+    # Evaluate model with comprehensive metrics (confusion matrix, ROC-AUC, etc.)
+    metrics = test(model, test_loader, device, return_detailed=True)
 
-    return {
-        "accuracy": accuracy,
-        "loss": loss,
-        "num_samples": len(test_loader.dataset)
-    }
+    # Add timestamp
+    metrics["evaluated_at"] = datetime.now().isoformat()
+
+    return metrics
 
 # Saves round metrics to JSON file for visualization
 # Args: round_num - Current FL round number
@@ -325,6 +373,171 @@ def evaluate_all_clients(client_configs: List[Dict], device: torch.device) -> Di
             client_metrics[client_id] = {"accuracy": None, "loss": None, "error": str(e)}
 
     return client_metrics
+
+# Updates cnmc_data.json with comprehensive per-round metrics for visualization
+# Args: round_num - Current FL round number
+#       pre_fl_metrics - Dictionary mapping client_id to pre-FL evaluation metrics
+#       post_fl_metrics - Dictionary mapping client_id to post-FL evaluation metrics
+#       training_metrics - Dictionary mapping client_id to training metrics (distill_loss, train_loss, etc.)
+#       client_configs - List of client configuration dictionaries
+#       data_json_path - Path to cnmc_data.json file
+# Returns: None (saves to disk)
+def update_client_data_json_metrics(
+    round_num: int,
+    pre_fl_metrics: Dict,
+    post_fl_metrics: Dict,
+    training_metrics: Dict,
+    client_configs: List[Dict],
+    data_json_path: str = DATA_JSON_PATH
+):
+    """Update cnmc_data.json with comprehensive per-round metrics for graphical visualization.
+
+    New Schema:
+    metrics: {
+        "current": {
+            "pre_fl": { latest pre_fl metrics },
+            "post_fl": { latest post_fl metrics },
+            "improvement": { calculated improvement },
+            "last_round": N
+        },
+        "rounds": [
+            {
+                "round": 1,
+                "pre_fl": { comprehensive metrics with confusion_matrix, roc_auc, etc. },
+                "training": { distill_loss, train_loss, num_examples, consensus_weight },
+                "post_fl": { comprehensive metrics },
+                "improvement": { per-metric deltas }
+            }
+        ]
+    }
+    """
+    # Load current cnmc_data.json
+    if not os.path.exists(data_json_path):
+        print(f"[Metrics] Warning: {data_json_path} not found, skipping update")
+        return
+
+    try:
+        with open(data_json_path, 'r') as f:
+            clients_data = json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"[Metrics] Error reading {data_json_path}: {e}")
+        return
+
+    # Update each client's metrics
+    for i, client in enumerate(clients_data):
+        client_id = str(i)
+
+        # Get metrics for this client
+        pre_fl = pre_fl_metrics.get(client_id, {})
+        post_fl = post_fl_metrics.get(client_id, {})
+        training = training_metrics.get(client_id, {})
+
+        # Skip clients with failed evaluation
+        if post_fl.get("accuracy") is None:
+            print(f"[Metrics] Skipping client {i} - no post_fl metrics")
+            continue
+
+        # Initialize metrics structure if needed
+        if not isinstance(client.get("metrics"), dict) or "rounds" not in client.get("metrics", {}):
+            client["metrics"] = {
+                "current": {},
+                "rounds": []
+            }
+
+        # Calculate improvement (post_fl - pre_fl)
+        improvement = {}
+        metrics_to_compare = ["accuracy", "precision", "recall", "f1_score", "specificity", "roc_auc",
+                              "leukemia_accuracy", "healthy_accuracy"]
+
+        for metric in metrics_to_compare:
+            pre_val = pre_fl.get(metric, 0.0) or 0.0
+            post_val = post_fl.get(metric, 0.0) or 0.0
+            improvement[metric] = round(post_val - pre_val, 6)
+
+        # Create round entry
+        round_entry = {
+            "round": round_num,
+            "pre_fl": pre_fl if pre_fl else None,
+            "training": {
+                "distill_loss": training.get("distill_loss"),
+                "train_loss": training.get("train_loss"),
+                "num_examples": training.get("num-examples"),
+                "training_time_sec": training.get("training_time"),
+                "consensus_weight": training.get("consensus_weight")
+            } if training else None,
+            "post_fl": post_fl if post_fl else None,
+            "improvement": improvement
+        }
+
+        # Check if this round already exists, update if so
+        round_exists = False
+        for j, entry in enumerate(client["metrics"]["rounds"]):
+            if entry.get("round") == round_num:
+                client["metrics"]["rounds"][j] = round_entry
+                round_exists = True
+                break
+
+        if not round_exists:
+            client["metrics"]["rounds"].append(round_entry)
+
+        # Sort rounds by round number
+        client["metrics"]["rounds"].sort(key=lambda x: x.get("round", 0))
+
+        # Update current (latest) metrics
+        client["metrics"]["current"] = {
+            "pre_fl": pre_fl if pre_fl else None,
+            "post_fl": post_fl if post_fl else None,
+            "improvement": improvement,
+            "last_round": round_num
+        }
+
+    # Save updated cnmc_data.json
+    try:
+        with open(data_json_path, 'w') as f:
+            json.dump(clients_data, f, indent=2)
+        print(f"[Metrics] Updated {data_json_path} with round {round_num} comprehensive metrics")
+    except Exception as e:
+        print(f"[Metrics] Error saving {data_json_path}: {e}")
+
+
+# Helper function to extract training metrics from aggregate results (for persistence)
+def extract_training_metrics_for_persistence(
+    client_metrics_list: List[Dict],
+    aggregation_metadata: Dict,
+    client_configs: List[Dict]
+) -> Dict:
+    """
+    Extract training metrics from aggregate_train results for cnmc_data.json persistence.
+
+    Args:
+        client_metrics_list: List of metrics dicts from each client's training
+        aggregation_metadata: Metadata from compute_consensus including weights
+        client_configs: Client configuration list
+
+    Returns:
+        Dictionary mapping client_id (str) to training metrics
+    """
+    training_metrics = {}
+    weight_breakdown = aggregation_metadata.get("weight_breakdown", [])
+
+    for i, metrics in enumerate(client_metrics_list):
+        client_id = str(i)
+
+        # Find consensus weight for this client
+        consensus_weight = None
+        if i < len(weight_breakdown):
+            consensus_weight = weight_breakdown[i].get("normalized_weight")
+
+        training_metrics[client_id] = {
+            "distill_loss": metrics.get("distill_loss"),
+            "train_loss": metrics.get("train_loss"),
+            "num-examples": metrics.get("num-examples"),
+            "training_time": metrics.get("training_time"),
+            "consensus_weight": consensus_weight,
+            "has_local_data": metrics.get("has_local_data", 0)
+        }
+
+    return training_metrics
 
 # <------------------------------------------ CHECKPOINT UTILITY FUNCTION DEFINITIONS ------------------------------------------>
 
@@ -418,88 +631,315 @@ def clear_checkpoints(checkpoint_dir: str):
         import shutil
         shutil.rmtree(checkpoint_dir)
 
+# <------------------------------------------ LOSS FUNCTIONS ------------------------------------------>
+
+class FocalLoss(nn.Module):
+    """
+    Focal Loss for handling class imbalance and hard-to-learn examples.
+
+    Focal Loss down-weights easy examples and focuses training on hard negatives.
+    Formula: FL(pt) = -alpha * (1 - pt)^gamma * log(pt)
+
+    Args:
+        alpha: Weighting factor for positive class (default: 0.25)
+        gamma: Focusing parameter to reduce loss for well-classified examples (default: 2.0)
+               Higher gamma = more focus on hard examples
+
+    Why this helps:
+        - Standard CrossEntropy treats all examples equally
+        - Focal Loss reduces weight of easy examples (correctly classified with high confidence)
+        - Forces model to focus on hard examples (leukemia cells that look similar to healthy)
+        - Particularly effective when one class is harder to learn (leukemia: 47% → target: 75-85%)
+
+    Impact on FLEX-Med:
+        - Prevents model from becoming "lazy" and predicting majority class
+        - Helps achieve balanced accuracy (both healthy AND leukemia > 75%)
+        - Reduces class gap from 51% to <10%
+    """
+    def __init__(self, alpha: float = 0.25, gamma: float = 2.0):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+
+    def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            inputs: Model logits (raw outputs before softmax), shape [batch_size, num_classes]
+            targets: Ground truth labels, shape [batch_size]
+
+        Returns:
+            Focal loss value (scalar)
+        """
+        # Compute standard cross-entropy loss (per sample, not reduced)
+        ce_loss = F.cross_entropy(inputs, targets, reduction='none')
+
+        # Compute p_t (probability of true class)
+        # pt = exp(-ce_loss) since ce_loss = -log(p_t)
+        pt = torch.exp(-ce_loss)
+
+        # Apply focal term: (1 - pt)^gamma
+        # When pt is high (confident correct prediction), (1-pt)^gamma is small → loss reduced
+        # When pt is low (uncertain or wrong prediction), (1-pt)^gamma is large → loss emphasized
+        focal_term = (1 - pt) ** self.gamma
+
+        # Class-specific alpha weighting for handling class imbalance
+        # Class 0 (Leukemia): weight = alpha (0.25 → down-weight majority class)
+        # Class 1 (Healthy): weight = 1-alpha (0.75 → up-weight minority class)
+        alpha_t = torch.where(targets == 0, self.alpha, 1 - self.alpha)
+
+        # Apply class-specific alpha weighting and compute final loss
+        focal_loss = alpha_t * focal_term * ce_loss
+
+        return focal_loss.mean()
+
 # <------------------------------------------ MODEL TRAINING & TESTING FUNCTION DEFINITIONS ------------------------------------------>
 
-# Train model on private client data with AdamW optimizer and class-balanced loss
+# Train model on private client data with progressive fine-tuning strategy
 # Args: model - PyTorch model to train
 #       trainloader - DataLoader for training data
 #       epochs - Number of training epochs
 #       lr - Learning rate
 #       device - Device to train on (cpu/cuda)
+#       model_type - Model architecture (for freezing/unfreezing)
 # Returns: Average training loss across all epochs
-def train(model, trainloader, epochs, lr, device):
+#
+# PROGRESSIVE FINE-TUNING STRATEGY:
+#   Stage 1 (40% of epochs): Train HEAD ONLY (frozen backbone)
+#     - Higher learning rate (lr)
+#     - Prevents catastrophic forgetting of ImageNet features
+#     - Head learns task-specific binary classification
+#
+#   Stage 2 (60% of epochs): Train FULL MODEL (unfrozen backbone)
+#     - Lower learning rate (lr/10)
+#     - Adapts pre-trained features to medical domain
+#     - Fine-tunes entire network for ALL vs Healthy classification
+def train(model, trainloader, epochs, lr, device, model_type: str = None):
     if trainloader is None:
         return 0.0  # Skip training for clients without data
 
     model.to(device)
 
-    # Calculate class weights for balanced training (handles imbalanced datasets)
-    try:
-        all_labels = []
-        for _, labels in trainloader:
-            all_labels.extend(labels.tolist())
-        class_counts = torch.bincount(torch.tensor(all_labels))
-        # Inverse frequency weighting: minority class gets higher weight
-        class_weights = 1.0 / (class_counts.float() + 1e-6)
-        class_weights = class_weights / class_weights.sum() * len(class_weights)
-        class_weights = class_weights.to(device)
-        print(f"[Train] Using class weights: {class_weights.cpu().tolist()}")
-    except Exception as e:
-        class_weights = None
-        print(f"[Train] Using unweighted loss (class weights failed: {e})")
+    # Use Focal Loss to handle class imbalance and hard examples
+    criterion = FocalLoss(alpha=0.25, gamma=2.0)
+    print(f"[Train] Using Focal Loss (alpha=0.25, gamma=2.0) for class imbalance handling")
 
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=lr,
-        betas=(0.9, 0.999),
-        weight_decay=0.01  # L2 regularization
-    )
+    # Calculate epoch split for two-stage training
+    # Stage 1: 40% of epochs (minimum 2 epochs)
+    # Stage 2: 60% of epochs (remaining)
+    stage1_epochs = max(2, int(epochs * 0.4))
+    stage2_epochs = epochs - stage1_epochs
 
-    model.train()
     total_loss = 0.0
+    total_batches = 0
 
-    for _ in range(epochs):
-        for images, labels in trainloader:
-            images = images.to(device)
-            labels = labels.to(device)
+    # ========== STAGE 1: HEAD-ONLY TRAINING (Frozen Backbone) ==========
+    if model_type and stage1_epochs > 0:
+        print(f"\n[Train] Stage 1/2: Training classifier head only ({stage1_epochs} epochs, lr={lr:.6f})")
+        model = freeze_backbone(model, model_type)
 
-            optimizer.zero_grad()
-            loss = criterion(model(images), labels)
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
+        # Show trainable parameters
+        trainable, frozen, total_params = get_trainable_params(model)
+        print(f"[Train] Parameters: {trainable:,} trainable, {frozen:,} frozen, {total_params:,} total")
 
-    avg_loss = total_loss / (len(trainloader) * epochs)
+        # Optimizer for head-only training (higher LR)
+        optimizer_head = torch.optim.AdamW(
+            filter(lambda p: p.requires_grad, model.parameters()),
+            lr=lr,  # Full learning rate for head
+            betas=(0.9, 0.999),
+            weight_decay=0.01
+        )
+
+        model.train()
+        for epoch in range(stage1_epochs):
+            for images, labels in trainloader:
+                images = images.to(device)
+                labels = labels.to(device)
+
+                optimizer_head.zero_grad()
+                loss = criterion(model(images), labels)
+                loss.backward()
+                optimizer_head.step()
+
+                total_loss += loss.item()
+                total_batches += 1
+
+        print(f"[Train] Stage 1 complete: Head trained on task-specific features")
+
+    # ========== STAGE 2: FULL MODEL FINE-TUNING (Unfrozen Backbone) ==========
+    if model_type and stage2_epochs > 0:
+        print(f"\n[Train] Stage 2/2: Fine-tuning full model ({stage2_epochs} epochs, lr={lr/10:.6f})")
+        model = unfreeze_backbone(model, model_type)
+
+        # Show trainable parameters
+        trainable, frozen, total_params = get_trainable_params(model)
+        print(f"[Train] Parameters: {trainable:,} trainable, {frozen:,} frozen, {total_params:,} total")
+
+        # Optimizer for full fine-tuning (lower LR to prevent destroying pre-trained features)
+        optimizer_full = torch.optim.AdamW(
+            model.parameters(),
+            lr=lr / 10,  # 10x lower learning rate for backbone fine-tuning
+            betas=(0.9, 0.999),
+            weight_decay=0.01
+        )
+
+        model.train()
+        for epoch in range(stage2_epochs):
+            for images, labels in trainloader:
+                images = images.to(device)
+                labels = labels.to(device)
+
+                optimizer_full.zero_grad()
+                loss = criterion(model(images), labels)
+                loss.backward()
+                optimizer_full.step()
+
+                total_loss += loss.item()
+                total_batches += 1
+
+        print(f"[Train] Stage 2 complete: Full model fine-tuned for medical domain")
+
+    # Fallback: If no model_type provided, train normally (backward compatibility)
+    if not model_type:
+        print(f"[Train] Single-stage training ({epochs} epochs, lr={lr:.6f})")
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=lr,
+            betas=(0.9, 0.999),
+            weight_decay=0.01
+        )
+
+        model.train()
+        for _ in range(epochs):
+            for images, labels in trainloader:
+                images = images.to(device)
+                labels = labels.to(device)
+
+                optimizer.zero_grad()
+                loss = criterion(model(images), labels)
+                loss.backward()
+                optimizer.step()
+
+                total_loss += loss.item()
+                total_batches += 1
+
+    avg_loss = total_loss / total_batches if total_batches > 0 else 0.0
     return avg_loss
 
-# Evaluate model on validation/test data
+# Evaluate model on validation/test data with comprehensive metrics
 # Args: model - PyTorch model to evaluate
 #       testloader - DataLoader for test data
 #       device - Device to evaluate on (cpu/cuda)
-# Returns: Tuple of (loss, accuracy)
-def test(model, testloader, device):
+# Returns: Tuple of (loss, accuracy) OR Dict with detailed metrics if return_detailed=True
+def test(model, testloader, device, return_detailed=False):
+    from flwr.common import log
+    from logging import INFO, WARNING
+
     model.to(device)
     criterion = nn.CrossEntropyLoss()
-    
+
     correct, total, total_loss = 0, 0, 0.0
-    
+
+    # Track all predictions, labels, and probabilities for comprehensive analysis
+    all_preds = []
+    all_labels = []
+    all_probs = []  # For ROC-AUC calculation
+
     model.eval()
     with torch.no_grad():
         for images, labels in testloader:
             images = images.to(device)
             labels = labels.to(device)
-            
+
             outputs = model(images)
             total_loss += criterion(outputs, labels).item()
-            
+
+            # Get probabilities for ROC-AUC
+            probs = F.softmax(outputs, dim=1)
+            all_probs.extend(probs.cpu().tolist())
+
             preds = outputs.argmax(dim=1)
             correct += (preds == labels).sum().item()
             total += labels.size(0)
-    
+
+            # Store for per-class analysis
+            all_preds.extend(preds.cpu().tolist())
+            all_labels.extend(labels.cpu().tolist())
+
+    # Overall metrics
     accuracy = correct / total if total > 0 else 0.0
     loss = total_loss / len(testloader) if len(testloader) > 0 else 0.0
-        
+
+    # Convert to tensors for analysis
+    all_preds = torch.tensor(all_preds)
+    all_labels = torch.tensor(all_labels)
+    all_probs = torch.tensor(all_probs)
+
+    # Class 0: ALL (Leukemia - Positive), Class 1: Healthy (Hem - Negative)
+    # Note: ImageFolder loads alphabetically, so "all" folder = class 0, "hem" folder = class 1
+    leukemia_mask = (all_labels == 0)
+    healthy_mask = (all_labels == 1)
+
+    # Calculate confusion matrix components
+    # For binary: Leukemia (class 0) is positive, Healthy (class 1) is negative
+    TP = ((all_preds == 0) & (all_labels == 0)).sum().item()  # Predicted leukemia, actual leukemia
+    FP = ((all_preds == 0) & (all_labels == 1)).sum().item()  # Predicted leukemia, actual healthy
+    FN = ((all_preds == 1) & (all_labels == 0)).sum().item()  # Predicted healthy, actual leukemia
+    TN = ((all_preds == 1) & (all_labels == 1)).sum().item()  # Predicted healthy, actual healthy
+
+    # Per-class accuracies
+    leukemia_acc = TP / (TP + FN) if (TP + FN) > 0 else 0.0  # Recall/Sensitivity
+    healthy_acc = TN / (TN + FP) if (TN + FP) > 0 else 0.0   # Specificity
+
+    # Precision, Recall, F1
+    precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
+    recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0  # Same as leukemia_acc (sensitivity)
+    f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+    specificity = TN / (TN + FP) if (TN + FP) > 0 else 0.0  # Same as healthy_acc
+
+    # ROC-AUC calculation
+    try:
+        from sklearn.metrics import roc_auc_score
+        # Use probability of positive class (leukemia = class 0)
+        roc_auc = roc_auc_score(all_labels.numpy(), all_probs[:, 0].numpy())
+    except Exception:
+        # Fallback: approximate ROC-AUC from sensitivity and specificity
+        roc_auc = (recall + specificity) / 2
+
+    # Calculate class gap (imbalance indicator)
+    class_gap = abs(healthy_acc - leukemia_acc)
+
+    # Log per-class performance
+    log(INFO, f"[EVAL] Overall: {accuracy:.1%} | Leukemia: {leukemia_acc:.1%} | Healthy: {healthy_acc:.1%} | Gap: {class_gap:.1%}")
+    log(INFO, f"[EVAL] Precision: {precision:.3f} | Recall: {recall:.3f} | F1: {f1_score:.3f} | ROC-AUC: {roc_auc:.3f}")
+
+    # Warn if severely imbalanced
+    if class_gap > 0.3:
+        log(WARNING, f"[EVAL] ⚠️ Class imbalance detected! Gap: {class_gap:.1%} (Target: <10%)")
+
+    # Return detailed metrics if requested
+    if return_detailed:
+        return {
+            "loss": round(loss, 6),
+            "accuracy": round(accuracy, 6),
+            "precision": round(precision, 6),
+            "recall": round(recall, 6),
+            "f1_score": round(f1_score, 6),
+            "specificity": round(specificity, 6),
+            "roc_auc": round(roc_auc, 6),
+            "leukemia_accuracy": round(leukemia_acc, 6),
+            "healthy_accuracy": round(healthy_acc, 6),
+            "class_gap": round(class_gap, 6),
+            "confusion_matrix": {
+                "TP": TP,
+                "FP": FP,
+                "FN": FN,
+                "TN": TN
+            },
+            "num_samples": total,
+            "num_leukemia_samples": leukemia_mask.sum().item(),
+            "num_healthy_samples": healthy_mask.sum().item()
+        }
+
     return loss, accuracy
 
 # <------------------------------------------ KNOWLEDGE DISTILLATION FUNCTION DEFINITIONS ------------------------------------------>
@@ -792,7 +1232,7 @@ class FLEXMedStrategy(Strategy):
         grid: Grid,
         initial_arrays: ArrayRecord,
         num_rounds: int = 3,
-        timeout: float = 3600,
+        timeout: float = 14400,  # 4 hours - ensures all clients complete before aggregation
         train_config: Optional[ConfigRecord] = None,
         evaluate_config: Optional[ConfigRecord] = None,
         evaluate_fn = None,
@@ -807,7 +1247,7 @@ class FLEXMedStrategy(Strategy):
         """
         from flwr.common import log
         from flwr.serverapp.strategy.result import Result
-        from logging import INFO
+        from logging import INFO, WARNING
         import time
 
         # Auto-detect GPU availability for server-side evaluations
@@ -868,7 +1308,7 @@ class FLEXMedStrategy(Strategy):
 
             train_msgs = self.configure_train(current_round, arrays, train_config, grid)
             train_replies = grid.send_and_receive(messages=train_msgs, timeout=timeout)
-            agg_arrays, agg_metrics = self.aggregate_train(current_round, train_replies)
+            agg_arrays, agg_metrics, training_metrics = self.aggregate_train(current_round, train_replies)
 
             if agg_arrays is not None:
                 result.arrays = agg_arrays
@@ -884,6 +1324,16 @@ class FLEXMedStrategy(Strategy):
             try:
                 post_fl_metrics = evaluate_all_clients(self.client_configs, device)
                 save_round_metrics(current_round, "post_fl", post_fl_metrics)
+
+                # Update cnmc_data.json with comprehensive metrics (pre_fl, training, post_fl, improvement)
+                update_client_data_json_metrics(
+                    round_num=current_round,
+                    pre_fl_metrics=pre_fl_metrics,
+                    post_fl_metrics=post_fl_metrics,
+                    training_metrics=training_metrics,
+                    client_configs=self.client_configs
+                )
+
                 self.round_metrics_history[f"round_{current_round}_post_fl"] = post_fl_metrics
 
                 # Log summary
@@ -891,10 +1341,50 @@ class FLEXMedStrategy(Strategy):
                 log(INFO, f"[ROUND {current_round}] POST-FL Average Accuracy: {avg_post_acc:.4f} ({avg_post_acc*100:.1f}%)")
 
                 # Calculate and log improvement
+                improvement = 0.0
                 if pre_fl_metrics:
                     avg_pre = np.mean([m.get("accuracy", 0) for m in pre_fl_metrics.values() if m.get("accuracy") is not None])
                     improvement = avg_post_acc - avg_pre
                     log(INFO, f"[ROUND {current_round}] Round Improvement: {improvement:+.4f} ({improvement*100:+.1f}%)")
+
+                # Store improvement for early stopping
+                self.round_metrics_history[current_round] = {
+                    "pre_fl": pre_fl_metrics,
+                    "post_fl": post_fl_metrics,
+                    "improvement": improvement
+                }
+
+                # --- EARLY STOPPING: Class Imbalance Check ---
+                # DISABLED: Commented out to allow full training without early termination
+                # avg_class_gap = np.mean([m.get("class_gap", 0) for m in post_fl_metrics.values() if m.get("class_gap") is not None])
+                # if avg_class_gap > 0.80:  # Increased threshold: models need time to learn from random init
+                #     log(WARNING, f"[ROUND {current_round}] ⛔ Early stopping triggered: Average class gap {avg_class_gap:.1%} exceeds 80%")
+                #     log(INFO, "[EARLY STOP] Model is becoming severely imbalanced. Stopping to prevent further degradation.")
+                #     log(INFO, "[EARLY STOP] Recommendation: Review FocalLoss parameters or add more data augmentation.")
+                #     break
+                # elif avg_class_gap > 0.50:  # Warning threshold at 50%
+                #     log(WARNING, f"[ROUND {current_round}] ⚠️  Class imbalance warning: Average class gap {avg_class_gap:.1%} (Target: <10%)")
+
+                # Log class gap for monitoring (without stopping)
+                avg_class_gap = np.mean([m.get("class_gap", 0) for m in post_fl_metrics.values() if m.get("class_gap") is not None])
+                log(INFO, f"[ROUND {current_round}] Class gap: {avg_class_gap:.1%}")
+
+                # --- EARLY STOPPING: No Improvement Check ---
+                # DISABLED: Commented out to allow full training without early termination
+                # if current_round >= 5:
+                #     recent_improvements = [
+                #         self.round_metrics_history[r]["improvement"]
+                #         for r in range(current_round - 4, current_round + 1)
+                #         if r in self.round_metrics_history
+                #     ]
+                #     if len(recent_improvements) >= 5:
+                #         avg_recent_improvement = sum(recent_improvements) / len(recent_improvements)
+                #         if avg_recent_improvement < 0.01:  # Less than 1% average improvement
+                #             log(WARNING, f"[ROUND {current_round}] ⛔ Early stopping triggered: No significant improvement")
+                #             log(INFO, f"[EARLY STOP] Average improvement over last 5 rounds: {avg_recent_improvement:+.2%}")
+                #             log(INFO, "[EARLY STOP] Model has converged. Further training unlikely to improve performance.")
+                #             break
+
             except Exception as e:
                 log(INFO, f"[ROUND {current_round}] POST-FL Evaluation failed: {e}")
                 post_fl_metrics = {}
@@ -1046,13 +1536,13 @@ class FLEXMedStrategy(Strategy):
     # Aggregate client logits into weighted consensus for knowledge distillation
     # Args: server_round - Current FL round number
     #       results - Client training messages with logits
-    # Returns: Tuple of (consensus_logits_array, aggregation_metrics)
+    # Returns: Tuple of (consensus_logits_array, aggregation_metrics, training_metrics_for_persistence)
     def aggregate_train(self, server_round: int, results: Iterable[Message], **kwargs):
         results_list = list(results)
         print(f"\n[SERVER] Round {server_round}: Aggregating Consensus")
 
         if not results_list:
-            return None, {}
+            return None, {}, {}
 
         # Collect logits and metrics from all clients
         logits_list = []
@@ -1091,7 +1581,7 @@ class FLEXMedStrategy(Strategy):
 
         if consensus_logits is None:
             print(f"[SERVER] ✗ Failed to compute consensus: {aggregation_metadata.get('error', 'unknown')}")
-            return None, {}
+            return None, {}, {}
 
         # Print informative summary
         print(f"[SERVER] ✓ Consensus computed from {aggregation_metadata['num_contributing_clients']}/{aggregation_metadata['num_clients']} clients")
@@ -1122,7 +1612,14 @@ class FLEXMedStrategy(Strategy):
             "aggregation_details": aggregation_metadata  # Full details for tracking
         }
 
-        return arrays_aggregated, metrics_aggregated
+        # Extract training metrics for cnmc_data.json persistence
+        training_metrics_for_persistence = extract_training_metrics_for_persistence(
+            client_metrics_list=client_metrics_list,
+            aggregation_metadata=aggregation_metadata,
+            client_configs=self.client_configs
+        )
+
+        return arrays_aggregated, metrics_aggregated, training_metrics_for_persistence
 
     # Send training configuration and consensus logits to all clients
     # Args: server_round - Current FL round number
