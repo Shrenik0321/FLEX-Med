@@ -151,6 +151,57 @@ def extract_improvement_series(client: Dict, metric: str) -> Tuple[List[int], Li
     return rounds, values
 
 
+def extract_validation_series(client: Dict, metric: str) -> Tuple[List[int], List[float]]:
+    """
+    Extract validation metric series across rounds (for hybrid evaluation strategy).
+
+    Args:
+        client: Client data dictionary
+        metric: Metric name (accuracy, f1_score, etc.)
+
+    Returns:
+        Tuple of (rounds, values)
+    """
+    rounds = []
+    values = []
+
+    metrics = client.get('metrics', {})
+    if not isinstance(metrics, dict) or 'rounds' not in metrics:
+        return rounds, values
+
+    for round_data in metrics['rounds']:
+        round_num = round_data.get('round')
+        validation_data = round_data.get('validation', {})
+
+        if validation_data and metric in validation_data:
+            value = validation_data[metric]
+            if value is not None:
+                rounds.append(round_num)
+                values.append(value)
+
+    return rounds, values
+
+
+def extract_global_metrics(client: Dict) -> Dict:
+    """
+    Extract global Pre-FL and Post-FL metrics (for hybrid evaluation strategy).
+
+    Args:
+        client: Client data dictionary
+
+    Returns:
+        Dictionary with 'pre_fl', 'post_fl', and 'improvement' metrics
+    """
+    metrics = client.get('metrics', {})
+    global_metrics = metrics.get('global', {})
+
+    return {
+        'pre_fl': global_metrics.get('pre_fl', {}),
+        'post_fl': global_metrics.get('post_fl', {}),
+        'improvement': global_metrics.get('improvement', {})
+    }
+
+
 def setup_plot_style():
     """Configure matplotlib style for consistent plots."""
     plt.style.use('seaborn-v0_8-whitegrid')
@@ -784,6 +835,263 @@ def plot_summary_dashboard(
     return filepath
 
 
+def plot_global_fl_benefit(
+    clients: List[Dict],
+    output_dir: str = GRAPHS_OUTPUT_DIR,
+    show_plot: bool = True
+) -> str:
+    """
+    Plot Global FL Benefit Analysis (Pre-FL vs Post-FL on public test dataset).
+    Shows the overall improvement from federated learning.
+    """
+    setup_plot_style()
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+
+    metrics_to_plot = ['accuracy', 'f1_score', 'loss', 'class_gap']
+
+    for idx, metric in enumerate(metrics_to_plot):
+        ax = axes[idx // 2, idx % 2]
+        config = METRICS_CONFIG.get(metric, {'label': metric})
+
+        pre_values = []
+        post_values = []
+        client_labels = []
+        improvements = []
+
+        for i, client in enumerate(clients):
+            name = client.get('client_name', f'Client {i}')[:15]
+            client_labels.append(name)
+
+            global_metrics = extract_global_metrics(client)
+            pre_fl = global_metrics['pre_fl']
+            post_fl = global_metrics['post_fl']
+
+            pre_val = pre_fl.get(metric, 0) or 0
+            post_val = post_fl.get(metric, 0) or 0
+            improvement = post_val - pre_val
+
+            pre_values.append(pre_val)
+            post_values.append(post_val)
+            improvements.append(improvement)
+
+        x = np.arange(len(clients))
+        width = 0.35
+
+        bars1 = ax.bar(x - width/2, pre_values, width,
+                      label='Pre-FL (Centralized)', color='#e74c3c', alpha=0.8)
+        bars2 = ax.bar(x + width/2, post_values, width,
+                      label='Post-FL (Federated)', color='#2ecc71', alpha=0.8)
+
+        # Add value labels and improvement annotations
+        for i, (bar1, bar2, pre_val, post_val, imp) in enumerate(zip(bars1, bars2, pre_values, post_values, improvements)):
+            if pre_val > 0:
+                ax.text(bar1.get_x() + bar1.get_width()/2, bar1.get_height() + 0.01,
+                       f'{pre_val:.2f}', ha='center', va='bottom', fontsize=8)
+            if post_val > 0:
+                ax.text(bar2.get_x() + bar2.get_width()/2, bar2.get_height() + 0.01,
+                       f'{post_val:.2f}', ha='center', va='bottom', fontsize=8)
+
+            # Add improvement arrow
+            if imp != 0:
+                y_start = max(pre_val, post_val) + 0.05
+                color = '#2ecc71' if imp > 0 else '#e74c3c'
+                ax.annotate(f'{imp:+.2f}', xy=(x[i], y_start),
+                           xytext=(x[i], y_start + 0.05),
+                           ha='center', fontsize=9, fontweight='bold', color=color,
+                           arrowprops=dict(arrowstyle='->', color=color, lw=1.5))
+
+        ax.set_xlabel('Client')
+        ax.set_ylabel(config['label'])
+        ax.set_title(f'{config["label"]}: FL Benefit Analysis')
+        ax.set_xticks(x)
+        ax.set_xticklabels(client_labels, rotation=45, ha='right')
+        ax.legend()
+        ax.grid(True, alpha=0.3, axis='y')
+        if config['ylim']:
+            ax.set_ylim(config['ylim'])
+
+    plt.suptitle('Global FL Benefit Analysis (Public Test Dataset)\nCentralized vs Federated Models',
+                fontsize=16, fontweight='bold')
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+    # Save plot
+    os.makedirs(output_dir, exist_ok=True)
+    filename = 'global_fl_benefit_analysis.png'
+    filepath = os.path.join(output_dir, filename)
+    plt.savefig(filepath)
+
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
+
+    print(f"  Saved: {filename}")
+    return filepath
+
+
+def plot_validation_progression(
+    clients: List[Dict],
+    output_dir: str = GRAPHS_OUTPUT_DIR,
+    show_plot: bool = True
+) -> str:
+    """
+    Plot per-round validation metrics progression.
+    Shows learning curves on validation sets (not test set).
+    """
+    setup_plot_style()
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+
+    metrics_to_plot = ['accuracy', 'loss', 'f1_score', 'class_gap']
+
+    for idx, metric in enumerate(metrics_to_plot):
+        ax = axes[idx // 2, idx % 2]
+        config = METRICS_CONFIG.get(metric, {'label': metric})
+
+        for i, client in enumerate(clients):
+            color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
+            name = client.get('client_name', f'Client {i}')
+            model = client.get('model_type', 'unknown')
+
+            rounds, values = extract_validation_series(client, metric)
+
+            if rounds and values:
+                # Convert to percentage for class_gap and accuracy
+                if metric in ['accuracy', 'class_gap']:
+                    values = [v * 100 for v in values]
+
+                ax.plot(rounds, values, marker='o', linewidth=2, markersize=6,
+                       color=color, label=f'{name} ({model})')
+
+        ax.set_xlabel('Training Round')
+        ylabel = f'{config["label"]} (%)' if metric in ['accuracy', 'class_gap'] else config['label']
+        ax.set_ylabel(ylabel)
+        ax.set_title(f'{config["label"]} - Validation Progression')
+        ax.legend(loc='best')
+        ax.grid(True, alpha=0.3)
+
+        # Add target line for class_gap
+        if metric == 'class_gap':
+            ax.axhline(y=10, color='green', linestyle='--', linewidth=2,
+                      alpha=0.7, label='Target (<10%)')
+
+    plt.suptitle('Per-Round Validation Metrics\n(Evaluated on Private Validation Sets)',
+                fontsize=16, fontweight='bold')
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+    # Save plot
+    os.makedirs(output_dir, exist_ok=True)
+    filename = 'validation_progression.png'
+    filepath = os.path.join(output_dir, filename)
+    plt.savefig(filepath)
+
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
+
+    print(f"  Saved: {filename}")
+    return filepath
+
+
+def plot_hybrid_evaluation_comparison(
+    clients: List[Dict],
+    output_dir: str = GRAPHS_OUTPUT_DIR,
+    show_plot: bool = True
+) -> str:
+    """
+    Plot comparison between validation progression and global evaluation.
+    Shows how per-round validation metrics relate to final test performance.
+    """
+    setup_plot_style()
+    fig, axes = plt.subplots(len(clients), 2, figsize=(16, 5 * len(clients)))
+
+    if len(clients) == 1:
+        axes = [axes]
+
+    for i, client in enumerate(clients):
+        name = client.get('client_name', f'Client {i}')
+        model = client.get('model_type', 'unknown')
+        color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
+
+        # Left plot: Accuracy progression (validation vs global)
+        ax_left = axes[i][0] if len(clients) > 1 else axes[0]
+
+        # Validation progression
+        rounds, val_acc = extract_validation_series(client, 'accuracy')
+        if rounds and val_acc:
+            ax_left.plot(rounds, [v * 100 for v in val_acc], marker='o',
+                        linewidth=2, markersize=6, color=color,
+                        label='Validation (per-round)', linestyle='-')
+
+        # Global markers
+        global_metrics = extract_global_metrics(client)
+        if global_metrics['pre_fl'] and global_metrics['post_fl']:
+            pre_acc = global_metrics['pre_fl'].get('accuracy', 0) * 100
+            post_acc = global_metrics['post_fl'].get('accuracy', 0) * 100
+
+            max_round = max(rounds) if rounds else 1
+
+            ax_left.scatter([0], [pre_acc], s=200, marker='D', color='#e74c3c',
+                          edgecolors='black', linewidths=2, label='Global Pre-FL (Test)',
+                          zorder=10)
+            ax_left.scatter([max_round], [post_acc], s=200, marker='D', color='#2ecc71',
+                          edgecolors='black', linewidths=2, label='Global Post-FL (Test)',
+                          zorder=10)
+
+        ax_left.set_xlabel('Training Round')
+        ax_left.set_ylabel('Accuracy (%)')
+        ax_left.set_title(f'{name} ({model}) - Accuracy Progression')
+        ax_left.legend(loc='best')
+        ax_left.grid(True, alpha=0.3)
+        ax_left.set_ylim(0, 100)
+
+        # Right plot: Loss progression
+        ax_right = axes[i][1] if len(clients) > 1 else axes[1]
+
+        # Validation loss
+        rounds, val_loss = extract_validation_series(client, 'loss')
+        if rounds and val_loss:
+            ax_right.plot(rounds, val_loss, marker='s', linewidth=2,
+                         markersize=6, color=color,
+                         label='Validation (per-round)', linestyle='-')
+
+        # Global markers
+        if global_metrics['pre_fl'] and global_metrics['post_fl']:
+            pre_loss = global_metrics['pre_fl'].get('loss', 0)
+            post_loss = global_metrics['post_fl'].get('loss', 0)
+
+            ax_right.scatter([0], [pre_loss], s=200, marker='D', color='#e74c3c',
+                           edgecolors='black', linewidths=2, label='Global Pre-FL (Test)',
+                           zorder=10)
+            ax_right.scatter([max_round], [post_loss], s=200, marker='D', color='#2ecc71',
+                           edgecolors='black', linewidths=2, label='Global Post-FL (Test)',
+                           zorder=10)
+
+        ax_right.set_xlabel('Training Round')
+        ax_right.set_ylabel('Loss')
+        ax_right.set_title(f'{name} ({model}) - Loss Progression')
+        ax_right.legend(loc='best')
+        ax_right.grid(True, alpha=0.3)
+
+    plt.suptitle('Hybrid Evaluation Strategy\nValidation Progression vs Global Test Performance',
+                fontsize=16, fontweight='bold')
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+    # Save plot
+    os.makedirs(output_dir, exist_ok=True)
+    filename = 'hybrid_evaluation_comparison.png'
+    filepath = os.path.join(output_dir, filename)
+    plt.savefig(filepath)
+
+    if show_plot:
+        plt.show()
+    else:
+        plt.close()
+
+    print(f"  Saved: {filename}")
+    return filepath
+
+
 def generate_all_visualizations(
     data_path: str = DATA_JSON_PATH,
     output_dir: str = GRAPHS_OUTPUT_DIR,
@@ -864,6 +1172,32 @@ def generate_all_visualizations(
     print("\n7. Class Balance Analysis")
     saved_files['class_balance'] = plot_class_balance_analysis(clients, output_dir, show_plots)
 
+    # 8. Hybrid Evaluation Strategy Visualizations (if global metrics exist)
+    has_global_metrics = False
+    for client in clients:
+        metrics = client.get('metrics', {})
+        if 'global' in metrics and metrics['global']:
+            has_global_metrics = True
+            break
+
+    if has_global_metrics:
+        print("\n8. Global FL Benefit Analysis (Hybrid Strategy)")
+        saved_files['global_fl_benefit'] = plot_global_fl_benefit(clients, output_dir, show_plots)
+
+        print("\n9. Validation Progression (Hybrid Strategy)")
+        saved_files['validation_progression'] = plot_validation_progression(clients, output_dir, show_plots)
+
+        print("\n10. Hybrid Evaluation Comparison")
+        saved_files['hybrid_comparison'] = plot_hybrid_evaluation_comparison(clients, output_dir, show_plots)
+
+        print("\n" + "=" * 70)
+        print("HYBRID EVALUATION STRATEGY DETECTED")
+        print("=" * 70)
+        print("✓ Global metrics (Pre-FL vs Post-FL on public test)")
+        print("✓ Per-round validation metrics")
+        print("✓ Test set exposed only 2 times (Pre-FL + Post-FL)")
+        print("=" * 70)
+
     print("\n" + "=" * 70)
     print(f"Visualizations complete! {len(saved_files)} graphs saved to:")
     print(f"  {output_dir}")
@@ -891,7 +1225,31 @@ def print_metrics_summary(data_path: str = DATA_JSON_PATH):
         print(f"\n[{i}] {name} ({model})")
         print("-" * 50)
 
-        if current:
+        # Check for global metrics (hybrid strategy)
+        global_metrics = metrics.get('global', {})
+        if global_metrics and 'pre_fl' in global_metrics and 'post_fl' in global_metrics:
+            print(f"  Evaluation Strategy: HYBRID")
+            print(f"  Rounds completed: {len(rounds)}")
+            print()
+            print(f"  GLOBAL METRICS (Public Test Dataset):")
+            pre = global_metrics['pre_fl']
+            post = global_metrics['post_fl']
+            imp = global_metrics.get('improvement', {})
+
+            print(f"    Pre-FL  (Centralized): Acc={pre.get('accuracy', 0):.2%}, Loss={pre.get('loss', 0):.3f}")
+            print(f"    Post-FL (Federated):   Acc={post.get('accuracy', 0):.2%}, Loss={post.get('loss', 0):.3f}")
+            print(f"    FL Benefit:            Acc={imp.get('accuracy', 0):+.2%}, Loss={imp.get('loss', 0):+.3f}")
+            print()
+            print(f"  FINAL METRICS:")
+            print(f"    Accuracy:   {post.get('accuracy', 0):.2%}")
+            print(f"    F1 Score:   {post.get('f1_score', 0):.3f}")
+            print(f"    Precision:  {post.get('precision', 0):.3f}")
+            print(f"    Recall:     {post.get('recall', 0):.3f}")
+            print(f"    Class Gap:  {post.get('class_gap', 0):.2%}")
+
+        elif current:
+            # Legacy format (old evaluation strategy)
+            print(f"  Evaluation Strategy: LEGACY")
             pre = current.get('pre_fl', {})
             post = current.get('post_fl', {})
             imp = current.get('improvement', {})

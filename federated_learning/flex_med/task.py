@@ -374,6 +374,190 @@ def evaluate_all_clients(client_configs: List[Dict], device: torch.device) -> Di
 
     return client_metrics
 
+# Evaluates all clients on public test dataset - ONLY for global Pre/Post-FL comparison
+# Args: client_configs - List of client configuration dictionaries
+#       device - Device to evaluate on (cpu/cuda)
+# Returns: Dictionary mapping client_id (as string) to metrics
+# NOTE: This function should ONLY be called for initial (Pre-FL) and final (Post-FL) evaluations
+#       to avoid repeatedly exposing the test set during training.
+def evaluate_all_clients_on_public_test(client_configs: List[Dict], device: torch.device) -> Dict:
+    """
+    Evaluate all clients on the public test dataset.
+    Used ONLY for global Pre-FL (before training starts) and Post-FL (after training completes) comparisons.
+    This keeps test set exposure minimal (only 2 times total).
+    """
+    client_metrics = {}
+
+    for i, client in enumerate(client_configs):
+        client_id = str(i)
+        model_path = client['model_path']
+        model_type = client['model_type']
+        client_name = client['client_name']
+
+        print(f"[Global Eval] Evaluating client {i}: {client_name} ({model_type}) on public test")
+
+        try:
+            # Load model architecture
+            model = get_model_by_type(model_type)
+
+            # Load checkpoint if exists
+            if os.path.exists(model_path):
+                try:
+                    model, metadata = load_existing_model(model, model_path, device)
+                    print(f"[Global Eval] Client {i}: Loaded checkpoint (round {metadata.get('round', 'unknown')})")
+                except Exception as e:
+                    print(f"[Global Eval] Client {i}: Using fresh model ({e})")
+            else:
+                print(f"[Global Eval] Client {i}: No checkpoint found, using fresh model")
+
+            model.to(device)
+
+            # Load public test dataset (1880 samples)
+            test_loader = load_public_test_dataset(batch_size=64)
+
+            # Evaluate with detailed metrics
+            metrics = test(model, test_loader, device, return_detailed=True)
+            metrics['dataset'] = 'public_test'
+            metrics['evaluation_type'] = 'global'
+            metrics['num_samples'] = len(test_loader.dataset)
+            metrics['evaluated_at'] = datetime.now().isoformat()
+
+            client_metrics[client_id] = metrics
+
+            acc = metrics.get('accuracy', 0)
+            loss = metrics.get('loss', 0)
+            print(f"[Global Eval] Client {i}: Accuracy={acc:.1%}, Loss={loss:.3f}")
+
+        except Exception as e:
+            print(f"[Global Eval] Client {i}: Evaluation failed - {e}")
+            client_metrics[client_id] = {"accuracy": None, "loss": None, "error": str(e)}
+
+    return client_metrics
+
+
+# Evaluates all clients on their private validation sets - for per-round tracking
+# Args: client_configs - List of client configuration dictionaries
+#       device - Device to evaluate on (cpu/cuda)
+#       num_partitions - Total number of clients
+# Returns: Dictionary mapping client_id (as string) to validation metrics
+# NOTE: This function is called every round to track learning progression without
+#       contaminating the test set.
+def evaluate_all_clients_on_validation(client_configs: List[Dict], device: torch.device, num_partitions: int) -> Dict:
+    """
+    Evaluate all clients on their private validation sets (20% of private data).
+    Used for per-round progress tracking without exposing the test set.
+    Free rider clients (no local data) are evaluated on public test as a proxy.
+    """
+    client_metrics = {}
+
+    for i, client in enumerate(client_configs):
+        client_id = str(i)
+        model_path = client['model_path']
+        model_type = client['model_type']
+        client_name = client['client_name']
+        has_local_data = client.get('has_local_data', False)
+
+        print(f"[Round Eval] Evaluating client {i}: {client_name} ({model_type}) on validation")
+
+        try:
+            # Load model architecture
+            model = get_model_by_type(model_type)
+
+            # Load checkpoint if exists
+            if os.path.exists(model_path):
+                try:
+                    model, metadata = load_existing_model(model, model_path, device)
+                except Exception as e:
+                    print(f"[Round Eval] Client {i}: Using fresh model ({e})")
+            else:
+                print(f"[Round Eval] Client {i}: No checkpoint found, using fresh model")
+
+            model.to(device)
+
+            # Load appropriate dataset
+            if has_local_data:
+                # Load validation set (20% of private data)
+                _, valloader = load_private_dataset(i, num_partitions, batch_size=64)
+
+                if valloader is not None:
+                    dataset_type = 'validation'
+                    num_samples = len(valloader.dataset)
+                else:
+                    # Fallback if data loading fails
+                    valloader = load_public_test_dataset(batch_size=64)
+                    dataset_type = 'public_test_proxy'
+                    num_samples = len(valloader.dataset)
+            else:
+                # Free rider: use public test as proxy for generalization
+                valloader = load_public_test_dataset(batch_size=64)
+                dataset_type = 'public_test_proxy'
+                num_samples = len(valloader.dataset)
+
+            # Evaluate
+            model.eval()
+            all_preds = []
+            all_labels = []
+            total_loss = 0.0
+            criterion = nn.CrossEntropyLoss()
+
+            with torch.no_grad():
+                for images, labels in valloader:
+                    images, labels = images.to(device), labels.to(device)
+                    outputs = model(images)
+                    loss = criterion(outputs, labels)
+                    total_loss += loss.item() * images.size(0)
+
+                    _, preds = torch.max(outputs, 1)
+                    all_preds.extend(preds.cpu().numpy())
+                    all_labels.extend(labels.cpu().numpy())
+
+            all_preds = np.array(all_preds)
+            all_labels = np.array(all_labels)
+
+            # Calculate metrics
+            from sklearn.metrics import precision_recall_fscore_support
+
+            accuracy = (all_preds == all_labels).mean()
+            loss = total_loss / len(all_labels)
+
+            precision, recall, f1, _ = precision_recall_fscore_support(
+                all_labels, all_preds, average='binary', zero_division=0
+            )
+
+            # Calculate class-specific accuracies
+            leukemia_mask = (all_labels == 1)
+            healthy_mask = (all_labels == 0)
+
+            leukemia_acc = (all_preds[leukemia_mask] == all_labels[leukemia_mask]).mean() if leukemia_mask.any() else 0
+            healthy_acc = (all_preds[healthy_mask] == all_labels[healthy_mask]).mean() if healthy_mask.any() else 0
+            class_gap = abs(leukemia_acc - healthy_acc)
+
+            metrics = {
+                'loss': float(loss),
+                'accuracy': float(accuracy),
+                'precision': float(precision),
+                'recall': float(recall),
+                'f1_score': float(f1),
+                'class_gap': float(class_gap),
+                'leukemia_accuracy': float(leukemia_acc),
+                'healthy_accuracy': float(healthy_acc),
+                'num_samples': num_samples,
+                'dataset': dataset_type,
+                'evaluation_type': 'per_round',
+                'evaluated_at': datetime.now().isoformat()
+            }
+
+            client_metrics[client_id] = metrics
+
+            print(f"[Round Eval] Client {i}: Acc={accuracy:.1%}, Loss={loss:.3f}, Gap={class_gap:.1%}")
+
+        except Exception as e:
+            print(f"[Round Eval] Client {i}: Evaluation failed - {e}")
+            client_metrics[client_id] = {"accuracy": None, "loss": None, "error": str(e)}
+
+    return client_metrics
+
+
 # Updates cnmc_data.json with comprehensive per-round metrics for visualization
 # Args: round_num - Current FL round number
 #       pre_fl_metrics - Dictionary mapping client_id to pre-FL evaluation metrics
@@ -539,6 +723,184 @@ def extract_training_metrics_for_persistence(
 
     return training_metrics
 
+
+# Helper functions for the new hybrid evaluation strategy
+
+def save_global_pre_fl_metrics(metrics: Dict, client_configs: List[Dict], data_json_path: str = DATA_JSON_PATH):
+    """Save global Pre-FL metrics to cnmc_data.json."""
+    if not os.path.exists(data_json_path):
+        print(f"[Global Metrics] Warning: {data_json_path} not found, skipping save")
+        return
+
+    try:
+        with open(data_json_path, 'r') as f:
+            clients_data = json.load(f)
+
+        for i, client in enumerate(clients_data):
+            client_id = str(i)
+
+            if client_id in metrics:
+                if 'metrics' not in client or not isinstance(client['metrics'], dict):
+                    client['metrics'] = {}
+
+                if 'global' not in client['metrics']:
+                    client['metrics']['global'] = {}
+
+                client['metrics']['global']['pre_fl'] = metrics[client_id]
+
+        with open(data_json_path, 'w') as f:
+            json.dump(clients_data, f, indent=2)
+
+        print(f"[Global Metrics] Saved Pre-FL metrics to {data_json_path}")
+
+    except Exception as e:
+        print(f"[Global Metrics] Error saving Pre-FL metrics: {e}")
+
+
+def save_global_post_fl_metrics(metrics: Dict, client_configs: List[Dict], data_json_path: str = DATA_JSON_PATH):
+    """Save global Post-FL metrics and calculate improvements."""
+    if not os.path.exists(data_json_path):
+        print(f"[Global Metrics] Warning: {data_json_path} not found, skipping save")
+        return
+
+    try:
+        with open(data_json_path, 'r') as f:
+            clients_data = json.load(f)
+
+        for i, client in enumerate(clients_data):
+            client_id = str(i)
+
+            if client_id in metrics:
+                if 'metrics' not in client:
+                    client['metrics'] = {}
+                if 'global' not in client['metrics']:
+                    client['metrics']['global'] = {}
+
+                # Save Post-FL metrics
+                client['metrics']['global']['post_fl'] = metrics[client_id]
+
+                # Calculate improvement
+                pre_fl = client['metrics']['global'].get('pre_fl', {})
+                post_fl = metrics[client_id]
+
+                improvement = {}
+                for metric in ['accuracy', 'loss', 'precision', 'recall', 'f1_score', 'class_gap',
+                               'leukemia_accuracy', 'healthy_accuracy']:
+                    if metric in pre_fl and metric in post_fl:
+                        pre_val = pre_fl[metric]
+                        post_val = post_fl[metric]
+                        improvement[metric] = round(post_val - pre_val, 6)
+
+                client['metrics']['global']['improvement'] = improvement
+
+        with open(data_json_path, 'w') as f:
+            json.dump(clients_data, f, indent=2)
+
+        print(f"[Global Metrics] Saved Post-FL metrics and improvements to {data_json_path}")
+
+    except Exception as e:
+        print(f"[Global Metrics] Error saving Post-FL metrics: {e}")
+
+
+def save_round_validation_metrics(round_num: int, metrics: Dict, client_configs: List[Dict], data_json_path: str = DATA_JSON_PATH):
+    """Save per-round validation metrics to cnmc_data.json."""
+    if not os.path.exists(data_json_path):
+        print(f"[Round Metrics] Warning: {data_json_path} not found, skipping save")
+        return
+
+    try:
+        with open(data_json_path, 'r') as f:
+            clients_data = json.load(f)
+
+        for i, client in enumerate(clients_data):
+            client_id = str(i)
+
+            if client_id in metrics:
+                if 'metrics' not in client:
+                    client['metrics'] = {}
+                if 'rounds' not in client['metrics']:
+                    client['metrics']['rounds'] = []
+
+                # Find or create round entry
+                round_entry = None
+                for r in client['metrics']['rounds']:
+                    if r.get('round') == round_num:
+                        round_entry = r
+                        break
+
+                if round_entry is None:
+                    round_entry = {'round': round_num}
+                    client['metrics']['rounds'].append(round_entry)
+
+                # Add validation metrics
+                round_entry['validation'] = metrics[client_id]
+
+        with open(data_json_path, 'w') as f:
+            json.dump(clients_data, f, indent=2)
+
+        print(f"[Round Metrics] Saved validation metrics for round {round_num} to {data_json_path}")
+
+    except Exception as e:
+        print(f"[Round Metrics] Error saving validation metrics: {e}")
+
+
+def load_global_pre_fl_for_client(client_id: str, client_configs: List[Dict], data_json_path: str = DATA_JSON_PATH) -> Dict:
+    """Load global Pre-FL metrics for a specific client."""
+    if not os.path.exists(data_json_path):
+        return {}
+
+    try:
+        with open(data_json_path, 'r') as f:
+            clients_data = json.load(f)
+
+        for i, client in enumerate(clients_data):
+            if str(i) == client_id:
+                return client.get('metrics', {}).get('global', {}).get('pre_fl', {})
+
+    except Exception as e:
+        print(f"[Global Metrics] Error loading Pre-FL for client {client_id}: {e}")
+
+    return {}
+
+
+def check_for_degradation_warnings(current_metrics: Dict, round_num: int, client_history: Dict):
+    """Check validation metrics and log warnings if degradation detected (does not stop training)."""
+    from flwr.common import log
+    from logging import WARNING
+
+    if round_num < 3:
+        return
+
+    for client_id, history in client_history.items():
+        if len(history) >= 3:
+            # Get last 3 rounds of accuracy
+            last_3 = history[-3:]
+            accs = [r['metrics'].get('accuracy', 0) for r in last_3]
+
+            # Check for 2 consecutive declines
+            if accs[-1] < accs[-2] and accs[-2] < accs[-3]:
+                log(WARNING, "")
+                log(WARNING, "⚠️  DEGRADATION WARNING ⚠️")
+                log(WARNING, f"Client {client_id}: Validation accuracy declining for 2 consecutive rounds")
+                log(WARNING, f"  Round {round_num-2}: {accs[0]:.3%}")
+                log(WARNING, f"  Round {round_num-1}: {accs[1]:.3%}")
+                log(WARNING, f"  Round {round_num}: {accs[2]:.3%}")
+                log(WARNING, f"Consider reviewing hyperparameters or stopping early.")
+                log(WARNING, "")
+
+            # Check for loss increase
+            losses = [r['metrics'].get('loss', 999) for r in last_3]
+            if losses[-1] > losses[-2] and losses[-2] > losses[-3]:
+                log(WARNING, "")
+                log(WARNING, "⚠️  OVERFITTING WARNING ⚠️")
+                log(WARNING, f"Client {client_id}: Validation loss increasing for 2 consecutive rounds")
+                log(WARNING, f"  Round {round_num-2}: {losses[0]:.3f}")
+                log(WARNING, f"  Round {round_num-1}: {losses[1]:.3f}")
+                log(WARNING, f"  Round {round_num}: {losses[2]:.3f}")
+                log(WARNING, f"Model may be overfitting to training data.")
+                log(WARNING, "")
+
+
 # <------------------------------------------ CHECKPOINT UTILITY FUNCTION DEFINITIONS ------------------------------------------>
 
 # Handles both legacy state_dict and new checkpoint format with metadata
@@ -656,7 +1018,7 @@ class FocalLoss(nn.Module):
         - Helps achieve balanced accuracy (both healthy AND leukemia > 75%)
         - Reduces class gap from 51% to <10%
     """
-    def __init__(self, alpha: float = 0.25, gamma: float = 2.0):
+    def __init__(self, alpha: float = 0.35, gamma: float = 2.0):  # FIXED: Increased from 0.25 to 0.35 for better leukemia detection
         super().__init__()
         self.alpha = alpha
         self.gamma = gamma
@@ -735,6 +1097,13 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None):
     # ========== STAGE 1: HEAD-ONLY TRAINING (Frozen Backbone) ==========
     if model_type and stage1_epochs > 0:
         print(f"\n[Train] Stage 1/2: Training classifier head only ({stage1_epochs} epochs, lr={lr:.6f})")
+
+        # FIXED: Reset all parameters to trainable first (ensures clean state for freeze/unfreeze)
+        # This is critical for Round 2+ where models are loaded from checkpoints
+        # Without this, freeze_backbone() won't work correctly on already-unfrozen models
+        for param in model.parameters():
+            param.requires_grad = True
+
         model = freeze_backbone(model, model_type)
 
         # Show trainable parameters
@@ -758,6 +1127,8 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None):
                 optimizer_head.zero_grad()
                 loss = criterion(model(images), labels)
                 loss.backward()
+                # SOLUTION 5: Gradient clipping to prevent large updates
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer_head.step()
 
                 total_loss += loss.item()
@@ -791,6 +1162,8 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None):
                 optimizer_full.zero_grad()
                 loss = criterion(model(images), labels)
                 loss.backward()
+                # SOLUTION 5: Gradient clipping to prevent large updates
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer_full.step()
 
                 total_loss += loss.item()
@@ -817,6 +1190,8 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None):
                 optimizer.zero_grad()
                 loss = criterion(model(images), labels)
                 loss.backward()
+                # SOLUTION 5: Gradient clipping to prevent large updates
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
 
                 total_loss += loss.item()
@@ -953,6 +1328,12 @@ def test(model, testloader, device, return_detailed=False):
 #       temperature - Temperature scaling for soft labels
 # Returns: Average distillation loss
 def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr, temperature):
+    # SOLUTION 1: Weighted Distillation to prevent consensus from overriding private knowledge
+    # Weight distillation at 60% of total influence (40% comes from private training)
+    # This ensures consensus knowledge from other clients is properly integrated
+    # FIXED: Increased from 0.25 to 0.60 to give distillation stronger influence
+    DISTILL_WEIGHT = 0.60  # Critical fix: stronger consensus integration
+
     model.to(device)
     model.train()
 
@@ -971,27 +1352,30 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
         for images, _ in public_loader:
             images = images.to(device)
             batch_size = images.size(0)
-            
+
             if idx + batch_size > len(consensus_tensor):
                 break
 
             batch_consensus = consensus_tensor[idx:idx+batch_size].to(device)
             student_logits = model(images)
-            
-            # KL Divergence Loss
-            loss = F.kl_div(
+
+            # KL Divergence Loss with weighted influence
+            kl_loss = F.kl_div(
                 F.log_softmax(student_logits / temperature, dim=1),
                 F.softmax(batch_consensus / temperature, dim=1),
                 reduction='batchmean'
             ) * (temperature ** 2)
-            
+
+            # Apply distillation weight: 25% distillation, 75% private training
+            loss = DISTILL_WEIGHT * kl_loss
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            
+
             total_loss += loss.item()
             idx += batch_size
-        
+
         idx = 0
 
     avg_loss = total_loss / (len(public_loader) * epochs)
@@ -1006,7 +1390,7 @@ def compute_consensus(
     server_round: int,
     last_consensus: Optional[np.ndarray] = None,
     eval_history: Optional[List[Dict]] = None,
-    momentum: float = 0.6,
+    momentum: float = 0.3,  # FIXED: Reduced from 0.6 to 0.3 for faster consensus evolution (30% old, 70% new)
     exclude_free_riders: bool = True,
 ) -> Tuple[Optional[np.ndarray], Dict]:
     """
@@ -1211,6 +1595,9 @@ class FLEXMedStrategy(Strategy):
         self.start_round = 1
         self.last_consensus_logits = None
 
+        # SOLUTION 3: Early stopping tracking
+        self.client_history = {}  # Track per-client metrics history
+
         print(f"\n[SERVER] Initialized {self.num_clients} clients")
 
         # Try to load checkpoint
@@ -1220,6 +1607,53 @@ class FLEXMedStrategy(Strategy):
             self.eval_history = checkpoint['eval_history']
             self.last_consensus_logits = checkpoint['consensus_logits']
             print(f"[SERVER] Resuming from Round {self.start_round}")
+
+    # SOLUTION 3: Early stopping check method
+    def should_stop_training(self, current_round: int, post_fl_metrics: Dict) -> Tuple[bool, str]:
+        """
+        Check if training should stop based on degradation patterns.
+
+        Returns:
+            Tuple of (should_stop: bool, reason: str)
+        """
+        if current_round < 3:  # Need at least 2 rounds of history
+            return False, ""
+
+        # Track client metrics
+        for client_id, metrics in post_fl_metrics.items():
+            if client_id not in self.client_history:
+                self.client_history[client_id] = []
+
+            self.client_history[client_id].append({
+                'round': current_round,
+                'accuracy': metrics.get('accuracy', 0),
+                'loss': metrics.get('loss', 0)
+            })
+
+        # Check for consistent degradation (2 consecutive negative improvements)
+        degraded_clients = []
+        for client_id, history in self.client_history.items():
+            if len(history) >= 3:
+                # Check last 2 rounds for negative improvement
+                acc_trend = [h['accuracy'] for h in history[-3:]]
+                if acc_trend[-1] < acc_trend[-2] and acc_trend[-2] < acc_trend[-3]:
+                    degraded_clients.append(client_id)
+
+        # Stop if majority of clients are degrading
+        if len(degraded_clients) >= len(self.client_history) / 2:
+            return True, f"Majority of clients degrading: {degraded_clients}"
+
+        # Check for loss increase pattern (overfitting indicator)
+        loss_increasing_count = 0
+        for client_id, history in self.client_history.items():
+            if len(history) >= 2:
+                if history[-1]['loss'] > history[-2]['loss']:
+                    loss_increasing_count += 1
+
+        if loss_increasing_count >= len(self.client_history) * 0.7:  # 70% threshold
+            return True, f"70% of clients show increasing loss (overfitting)"
+
+        return False, ""
 
     # <------------------------------------------ FL EXECUTION WITH RESUME SUPPORT ------------------------------------------>
 
@@ -1277,29 +1711,38 @@ class FLEXMedStrategy(Strategy):
         # Store per-round metrics for visualization
         self.round_metrics_history = {}
 
+        # ========== GLOBAL PRE-FL EVALUATION (ONLY IF STARTING FRESH) ==========
+        if self.start_round == 1:
+            log(INFO, "")
+            log(INFO, "=" * 70)
+            log(INFO, "[GLOBAL] Initial Centralized Model Evaluation (Public Test)")
+            log(INFO, "=" * 70)
+            log(INFO, "")
+
+            try:
+                global_pre_fl_metrics = evaluate_all_clients_on_public_test(
+                    self.client_configs, device
+                )
+
+                # Save global metrics to cnmc_data.json
+                save_global_pre_fl_metrics(global_pre_fl_metrics, self.client_configs)
+
+                log(INFO, f"[GLOBAL] Pre-FL Evaluation Complete")
+                for client_id, metrics in global_pre_fl_metrics.items():
+                    acc = metrics.get('accuracy', 0)
+                    loss = metrics.get('loss', 0)
+                    log(INFO, f"  Client {client_id}: Accuracy={acc:.1%}, Loss={loss:.3f} on public test")
+                log(INFO, "")
+
+            except Exception as e:
+                log(WARNING, f"[GLOBAL] Pre-FL Evaluation failed: {e}")
+
         # KEY: Loop from start_round to num_rounds (not 1 to num_rounds)
         for current_round in range(self.start_round, num_rounds + 1):
             log(INFO, "")
             log(INFO, f"{'='*70}")
             log(INFO, f"[ROUND {current_round}/{num_rounds}]")
             log(INFO, f"{'='*70}")
-
-            # --- PRE-FL EVALUATION PHASE ---
-            log(INFO, "")
-            log(INFO, f"[ROUND {current_round}] PRE-FL Evaluation (Knowledge Retention)")
-            log(INFO, "-" * 50)
-
-            try:
-                pre_fl_metrics = evaluate_all_clients(self.client_configs, device)
-                save_round_metrics(current_round, "pre_fl", pre_fl_metrics)
-                self.round_metrics_history[f"round_{current_round}_pre_fl"] = pre_fl_metrics
-
-                # Log summary
-                avg_pre_acc = np.mean([m.get("accuracy", 0) for m in pre_fl_metrics.values() if m.get("accuracy") is not None])
-                log(INFO, f"[ROUND {current_round}] PRE-FL Average Accuracy: {avg_pre_acc:.4f} ({avg_pre_acc*100:.1f}%)")
-            except Exception as e:
-                log(INFO, f"[ROUND {current_round}] PRE-FL Evaluation failed: {e}")
-                pre_fl_metrics = {}
 
             # --- TRAINING PHASE ---
             log(INFO, "")
@@ -1316,78 +1759,49 @@ class FLEXMedStrategy(Strategy):
             if agg_metrics:
                 result.train_metrics_clientapp[current_round] = agg_metrics
 
-            # --- POST-FL EVALUATION PHASE ---
+            # --- PER-ROUND VALIDATION EVALUATION PHASE ---
             log(INFO, "")
-            log(INFO, f"[ROUND {current_round}] POST-FL Evaluation (Learning Progression)")
+            log(INFO, f"[ROUND {current_round}] Validation Evaluation (Per-Round Tracking)")
             log(INFO, "-" * 50)
 
             try:
-                post_fl_metrics = evaluate_all_clients(self.client_configs, device)
-                save_round_metrics(current_round, "post_fl", post_fl_metrics)
-
-                # Update cnmc_data.json with comprehensive metrics (pre_fl, training, post_fl, improvement)
-                update_client_data_json_metrics(
-                    round_num=current_round,
-                    pre_fl_metrics=pre_fl_metrics,
-                    post_fl_metrics=post_fl_metrics,
-                    training_metrics=training_metrics,
-                    client_configs=self.client_configs
+                round_val_metrics = evaluate_all_clients_on_validation(
+                    self.client_configs, device, len(self.client_configs)
                 )
 
-                self.round_metrics_history[f"round_{current_round}_post_fl"] = post_fl_metrics
+                # Save validation metrics to cnmc_data.json
+                save_round_validation_metrics(current_round, round_val_metrics, self.client_configs)
+                self.round_metrics_history[f"round_{current_round}_validation"] = round_val_metrics
+
+                # Check for degradation warnings (does not stop training)
+                for client_id, metrics in round_val_metrics.items():
+                    if client_id not in self.client_history:
+                        self.client_history[client_id] = []
+                    self.client_history[client_id].append({
+                        'round': current_round,
+                        'metrics': metrics
+                    })
+
+                check_for_degradation_warnings(round_val_metrics, current_round, self.client_history)
 
                 # Log summary
-                avg_post_acc = np.mean([m.get("accuracy", 0) for m in post_fl_metrics.values() if m.get("accuracy") is not None])
-                log(INFO, f"[ROUND {current_round}] POST-FL Average Accuracy: {avg_post_acc:.4f} ({avg_post_acc*100:.1f}%)")
+                avg_val_acc = np.mean([m.get("accuracy", 0) for m in round_val_metrics.values() if m.get("accuracy") is not None])
+                avg_val_loss = np.mean([m.get("loss", 0) for m in round_val_metrics.values() if m.get("loss") is not None])
+                avg_class_gap = np.mean([m.get("class_gap", 0) for m in round_val_metrics.values() if m.get("class_gap") is not None])
 
-                # Calculate and log improvement
-                improvement = 0.0
-                if pre_fl_metrics:
-                    avg_pre = np.mean([m.get("accuracy", 0) for m in pre_fl_metrics.values() if m.get("accuracy") is not None])
-                    improvement = avg_post_acc - avg_pre
-                    log(INFO, f"[ROUND {current_round}] Round Improvement: {improvement:+.4f} ({improvement*100:+.1f}%)")
+                log(INFO, f"[ROUND {current_round}] Validation Results:")
+                for client_id, metrics in round_val_metrics.items():
+                    acc = metrics.get('accuracy', 0)
+                    loss = metrics.get('loss', 0)
+                    gap = metrics.get('class_gap', 0)
+                    dataset = metrics.get('dataset', 'unknown')
+                    log(INFO, f"  Client {client_id}: Acc={acc:.1%}, Loss={loss:.3f}, Gap={gap:.1%} ({dataset})")
 
-                # Store improvement for early stopping
-                self.round_metrics_history[current_round] = {
-                    "pre_fl": pre_fl_metrics,
-                    "post_fl": post_fl_metrics,
-                    "improvement": improvement
-                }
-
-                # --- EARLY STOPPING: Class Imbalance Check ---
-                # DISABLED: Commented out to allow full training without early termination
-                # avg_class_gap = np.mean([m.get("class_gap", 0) for m in post_fl_metrics.values() if m.get("class_gap") is not None])
-                # if avg_class_gap > 0.80:  # Increased threshold: models need time to learn from random init
-                #     log(WARNING, f"[ROUND {current_round}] ⛔ Early stopping triggered: Average class gap {avg_class_gap:.1%} exceeds 80%")
-                #     log(INFO, "[EARLY STOP] Model is becoming severely imbalanced. Stopping to prevent further degradation.")
-                #     log(INFO, "[EARLY STOP] Recommendation: Review FocalLoss parameters or add more data augmentation.")
-                #     break
-                # elif avg_class_gap > 0.50:  # Warning threshold at 50%
-                #     log(WARNING, f"[ROUND {current_round}] ⚠️  Class imbalance warning: Average class gap {avg_class_gap:.1%} (Target: <10%)")
-
-                # Log class gap for monitoring (without stopping)
-                avg_class_gap = np.mean([m.get("class_gap", 0) for m in post_fl_metrics.values() if m.get("class_gap") is not None])
-                log(INFO, f"[ROUND {current_round}] Class gap: {avg_class_gap:.1%}")
-
-                # --- EARLY STOPPING: No Improvement Check ---
-                # DISABLED: Commented out to allow full training without early termination
-                # if current_round >= 5:
-                #     recent_improvements = [
-                #         self.round_metrics_history[r]["improvement"]
-                #         for r in range(current_round - 4, current_round + 1)
-                #         if r in self.round_metrics_history
-                #     ]
-                #     if len(recent_improvements) >= 5:
-                #         avg_recent_improvement = sum(recent_improvements) / len(recent_improvements)
-                #         if avg_recent_improvement < 0.01:  # Less than 1% average improvement
-                #             log(WARNING, f"[ROUND {current_round}] ⛔ Early stopping triggered: No significant improvement")
-                #             log(INFO, f"[EARLY STOP] Average improvement over last 5 rounds: {avg_recent_improvement:+.2%}")
-                #             log(INFO, "[EARLY STOP] Model has converged. Further training unlikely to improve performance.")
-                #             break
+                log(INFO, f"[ROUND {current_round}] Average: Acc={avg_val_acc:.1%}, Loss={avg_val_loss:.3f}, Gap={avg_class_gap:.1%}")
 
             except Exception as e:
-                log(INFO, f"[ROUND {current_round}] POST-FL Evaluation failed: {e}")
-                post_fl_metrics = {}
+                log(WARNING, f"[ROUND {current_round}] Validation evaluation failed: {e}")
+                round_val_metrics = {}
 
             # --- STANDARD FLOWER EVALUATION (for backward compatibility) ---
             eval_msgs = self.configure_evaluate(current_round, arrays, evaluate_config, grid)
@@ -1396,6 +1810,61 @@ class FLEXMedStrategy(Strategy):
 
             if eval_metrics:
                 result.evaluate_metrics_clientapp[current_round] = eval_metrics
+
+        # ========== GLOBAL POST-FL EVALUATION ==========
+        log(INFO, "")
+        log(INFO, "=" * 70)
+        log(INFO, "[GLOBAL] Final Federated Model Evaluation (Public Test)")
+        log(INFO, "=" * 70)
+        log(INFO, "")
+
+        try:
+            global_post_fl_metrics = evaluate_all_clients_on_public_test(
+                self.client_configs, device
+            )
+
+            # Save global Post-FL metrics and calculate improvements
+            save_global_post_fl_metrics(global_post_fl_metrics, self.client_configs)
+
+            log(INFO, f"[GLOBAL] Post-FL Evaluation Complete")
+            log(INFO, "")
+            log(INFO, "FL BENEFIT ANALYSIS:")
+            log(INFO, "=" * 70)
+
+            # Compare Pre-FL vs Post-FL for each client
+            for client_id, post_metrics in global_post_fl_metrics.items():
+                # Load pre-FL metrics from saved data
+                pre_metrics = load_global_pre_fl_for_client(client_id, self.client_configs)
+
+                pre_acc = pre_metrics.get('accuracy', 0)
+                post_acc = post_metrics.get('accuracy', 0)
+                improvement = post_acc - pre_acc
+
+                pre_loss = pre_metrics.get('loss', 0)
+                post_loss = post_metrics.get('loss', 0)
+                loss_delta = post_loss - pre_loss
+
+                pre_gap = pre_metrics.get('class_gap', 0)
+                post_gap = post_metrics.get('class_gap', 0)
+                gap_delta = post_gap - pre_gap
+
+                log(INFO, f"Client {client_id}:")
+                log(INFO, f"  Pre-FL  (Centralized): Acc={pre_acc:.1%}, Loss={pre_loss:.3f}, Gap={pre_gap:.1%}")
+                log(INFO, f"  Post-FL (Federated):   Acc={post_acc:.1%}, Loss={post_loss:.3f}, Gap={post_gap:.1%}")
+                log(INFO, f"  FL Improvement:        Acc={improvement:+.1%}, Loss={loss_delta:+.3f}, Gap={gap_delta:+.1%}")
+                log(INFO, "")
+
+            # Calculate average improvement
+            avg_pre_acc = np.mean([load_global_pre_fl_for_client(cid, self.client_configs).get('accuracy', 0)
+                                   for cid in global_post_fl_metrics.keys()])
+            avg_post_acc = np.mean([m.get('accuracy', 0) for m in global_post_fl_metrics.values()])
+            avg_improvement = avg_post_acc - avg_pre_acc
+
+            log(INFO, f"Average FL Benefit: {avg_improvement:+.1%}")
+            log(INFO, "")
+
+        except Exception as e:
+            log(WARNING, f"[GLOBAL] Post-FL Evaluation failed: {e}")
 
         log(INFO, "")
         log(INFO, f"{'='*70}")

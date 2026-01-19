@@ -143,6 +143,17 @@ def train(msg: Message, context: Context):
     # Extract model_type from client config for progressive fine-tuning
     model_type = client_config['model_type']
 
+    # SOLUTION 2: Learning Rate Decay to stabilize convergence
+    # Apply exponential decay: lr * (lr_decay ^ (round - 1))
+    # Round 1: lr = base_lr * 1.0
+    # Round 2: lr = base_lr * 0.9
+    # Round 5: lr = base_lr * 0.656
+    # Round 10: lr = base_lr * 0.387
+    lr_decay_factor = context.run_config.get("lr-decay", 0.90)  # Read from config, default 0.90
+    base_lr = msg.content["config"]["lr"]
+    decayed_lr = base_lr * (lr_decay_factor ** (server_round - 1))
+    print(f"[Client {partition_id}] Learning Rate: {decayed_lr:.6f} (base: {base_lr:.6f}, decay: {lr_decay_factor}, round: {server_round})")
+
     trainloader, _ = load_private_dataset(partition_id, num_partitions, batch_size=32)
 
     if trainloader is not None:
@@ -153,7 +164,7 @@ def train(msg: Message, context: Context):
             model=model,
             trainloader=trainloader,
             epochs=context.run_config["local-epochs"],
-            lr=msg.content["config"]["lr"],
+            lr=decayed_lr,  # Use decayed learning rate instead of base lr
             device=device,
             model_type=model_type  # Pass model_type for progressive fine-tuning
         )

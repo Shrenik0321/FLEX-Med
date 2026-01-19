@@ -38,6 +38,7 @@ fraction-train = 1.0             # Use all clients each round
 fraction-evaluate = 1.0          # Use all clients each round
 local-epochs = 4                 # Reduced from 6 - simpler training without freeze/unfreeze
 lr = 0.0001                      # Base LR (decays by round: 1x -> 0.5x -> 0.25x -> 0.1x)
+lr-decay = 0.98                  # Learning rate decay factor per round (0.98 = 2% reduction) - FIXED: More gradual decay to support distillation
 
 # Distillation configuration
 # Note: Epochs increase in later rounds (2 -> 3 -> 4) for stability
