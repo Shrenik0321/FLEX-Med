@@ -1,5 +1,10 @@
 """
-FLEX-Med Federated Learning Evaluation & Visualization Module
+FLEX-Med Federated Learning Evaluation & Visualization Module (IMPROVED)
+
+IMPROVEMENTS:
+- ✨ Smart dynamic y-axis scaling for better visualization clarity
+- ✨ Automatic range detection with intelligent padding
+- ✨ Per-metric optimization for accuracy, loss, and other metrics
 
 This module provides comprehensive graphical visualization of FL training metrics
 stored in cnmc_data.json. It generates:
@@ -47,16 +52,16 @@ CLIENT_COLORS = [
     '#00bcd4',  # Cyan
 ]
 
-# Metrics configuration
+# Metrics configuration (ylim=None means use smart auto-scaling)
 METRICS_CONFIG = {
-    'accuracy': {'label': 'Accuracy', 'format': '.2%', 'ylim': (0, 1)},
-    'f1_score': {'label': 'F1 Score', 'format': '.3f', 'ylim': (0, 1)},
-    'precision': {'label': 'Precision', 'format': '.3f', 'ylim': (0, 1)},
-    'recall': {'label': 'Recall (Sensitivity)', 'format': '.3f', 'ylim': (0, 1)},
-    'specificity': {'label': 'Specificity', 'format': '.3f', 'ylim': (0, 1)},
-    'roc_auc': {'label': 'ROC-AUC', 'format': '.3f', 'ylim': (0, 1)},
-    'loss': {'label': 'Loss', 'format': '.4f', 'ylim': None},
-    'class_gap': {'label': 'Class Gap', 'format': '.2%', 'ylim': (0, 1)},
+    'accuracy': {'label': 'Accuracy', 'format': '.2%', 'ylim': None, 'use_smart_scaling': True},
+    'f1_score': {'label': 'F1 Score', 'format': '.3f', 'ylim': None, 'use_smart_scaling': True},
+    'precision': {'label': 'Precision', 'format': '.3f', 'ylim': None, 'use_smart_scaling': True},
+    'recall': {'label': 'Recall (Sensitivity)', 'format': '.3f', 'ylim': None, 'use_smart_scaling': True},
+    'specificity': {'label': 'Specificity', 'format': '.3f', 'ylim': None, 'use_smart_scaling': True},
+    'roc_auc': {'label': 'ROC-AUC', 'format': '.3f', 'ylim': None, 'use_smart_scaling': True},
+    'loss': {'label': 'Loss', 'format': '.4f', 'ylim': None, 'use_smart_scaling': True},
+    'class_gap': {'label': 'Class Gap', 'format': '.2%', 'ylim': None, 'use_smart_scaling': True},
 }
 
 TRAINING_METRICS_CONFIG = {
@@ -64,6 +69,116 @@ TRAINING_METRICS_CONFIG = {
     'train_loss': {'label': 'Training Loss', 'format': '.4f'},
     'consensus_weight': {'label': 'Consensus Weight', 'format': '.2%'},
 }
+
+
+def smart_ylim(values: List[float], metric: str, padding: float = 0.15) -> Tuple[float, float]:
+    """
+    Intelligently calculate y-axis limits for better visualization.
+    
+    Similar to Weights & Biases auto-scaling, this function:
+    1. Finds the data range
+    2. Adds intelligent padding based on the metric type
+    3. Ensures minimum visibility range
+    4. Respects natural boundaries (0-1 for percentages)
+    
+    Args:
+        values: List of all values to be plotted
+        metric: Metric name (to apply metric-specific rules)
+        padding: Padding percentage (0.15 = 15% padding on each side)
+    
+    Returns:
+        Tuple of (ymin, ymax)
+    """
+    if not values or len(values) == 0:
+        return (0, 1)
+    
+    values = [v for v in values if v is not None and not np.isnan(v)]
+    if not values:
+        return (0, 1)
+    
+    min_val = float(min(values))
+    max_val = float(max(values))
+    value_range = max_val - min_val
+    
+    # Metrics that should be bounded between 0 and 1
+    bounded_metrics = ['accuracy', 'f1_score', 'precision', 'recall', 'specificity', 
+                       'roc_auc', 'class_gap', 'leukemia_accuracy', 'healthy_accuracy']
+    
+    if metric in bounded_metrics:
+        # Strategy: Focus on the actual data range with smart padding
+        
+        # If the range is very small, ensure minimum visibility
+        if value_range < 0.05:
+            center = (max_val + min_val) / 2
+            ymin = max(0, center - 0.05)
+            ymax = min(1.0, center + 0.05)
+        else:
+            # Add padding to the range
+            pad_amount = value_range * padding
+            
+            # For high values (>0.6), we can start higher than 0
+            if min_val > 0.6:
+                ymin = max(0, min_val - pad_amount)
+            elif min_val > 0.3:
+                ymin = max(0, min_val - pad_amount * 1.5)
+            else:
+                ymin = 0
+            
+            # Cap at 1.0 but add padding
+            ymax = min(1.0, max_val + pad_amount)
+        
+        # Ensure we have at least 10% range for clarity
+        if ymax - ymin < 0.1:
+            center = (ymax + ymin) / 2
+            ymin = max(0, center - 0.05)
+            ymax = min(1.0, center + 0.05)
+    
+    else:
+        # For unbounded metrics (loss, etc.)
+        if value_range < 0.01:
+            # Very small range
+            center = (ymax + ymin) / 2
+            ymin = max(0, center - 0.01)
+            ymax = center + 0.01
+        else:
+            pad_amount = value_range * padding
+            ymin = max(0, min_val - pad_amount)
+            ymax = max_val + pad_amount
+    
+    return (ymin, ymax)
+
+
+def collect_all_values(clients: List[Dict], metric: str, stage: str = 'validation') -> List[float]:
+    """
+    Collect all values for a metric across all clients to determine optimal y-axis range.
+    
+    Args:
+        clients: List of client data
+        metric: Metric name
+        stage: 'validation', 'pre_fl', 'post_fl', or 'global'
+    
+    Returns:
+        List of all values
+    """
+    all_values = []
+    
+    for client in clients:
+        if stage == 'validation':
+            _, values = extract_validation_series(client, metric)
+            all_values.extend(values)
+        elif stage == 'global':
+            global_metrics = extract_global_metrics(client)
+            pre_val = global_metrics.get('pre_fl', {}).get(metric)
+            post_val = global_metrics.get('post_fl', {}).get(metric)
+            if pre_val is not None:
+                all_values.append(pre_val)
+            if post_val is not None:
+                all_values.append(post_val)
+        elif stage in ['pre_fl', 'post_fl']:
+            _, values = extract_metric_series(client, metric, stage)
+            all_values.extend(values)
+    
+    return all_values
 
 
 def load_cnmc_data(data_path: str = DATA_JSON_PATH) -> List[Dict]:
@@ -226,7 +341,7 @@ def plot_metric_across_rounds(
     show_plot: bool = True
 ) -> str:
     """
-    Plot a single metric across rounds for all clients.
+    Plot a single metric across rounds for all clients with smart y-axis scaling.
 
     Args:
         clients: List of client data
@@ -240,10 +355,14 @@ def plot_metric_across_rounds(
     setup_plot_style()
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
-    config = METRICS_CONFIG.get(metric, {'label': metric, 'format': '.3f', 'ylim': None})
+    config = METRICS_CONFIG.get(metric, {'label': metric, 'format': '.3f', 'ylim': None, 'use_smart_scaling': True})
 
     # Left plot: Validation metrics across rounds
     ax1 = axes[0]
+    
+    # Collect all validation values for smart y-axis scaling
+    all_validation_values = collect_all_values(clients, metric, 'validation')
+    
     for i, client in enumerate(clients):
         color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
         name = client.get('client_name', f'Client {i}')
@@ -259,8 +378,14 @@ def plot_metric_across_rounds(
     ax1.set_title(f'{config["label"]} Progression (Validation)')
     ax1.legend(loc='best')
     ax1.grid(True, alpha=0.3)
-    if config['ylim']:
-        ax1.set_ylim(config['ylim'])
+    
+    # Apply smart y-axis scaling
+    if config.get('use_smart_scaling', True) and all_validation_values:
+        ymin, ymax = smart_ylim(all_validation_values, metric)
+        ax1.set_ylim(ymin, ymax)
+        ax1.text(0.02, 0.98, f'Range: [{ymin:.3f}, {ymax:.3f}]', 
+                transform=ax1.transAxes, fontsize=9, verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
 
     # Right plot: Pre-FL vs Post-FL comparison (from global metrics)
     ax2 = axes[1]
@@ -270,6 +395,7 @@ def plot_metric_across_rounds(
     pre_fl_values = []
     post_fl_values = []
     client_labels = []
+    all_global_values = []
 
     for client in clients:
         name = client.get('client_name', 'Unknown')[:15]
@@ -280,8 +406,12 @@ def plot_metric_across_rounds(
         pre_fl = global_metrics.get('pre_fl', {})
         post_fl = global_metrics.get('post_fl', {})
 
-        pre_fl_values.append(pre_fl.get(metric, 0) or 0)
-        post_fl_values.append(post_fl.get(metric, 0) or 0)
+        pre_val = pre_fl.get(metric, 0) or 0
+        post_val = post_fl.get(metric, 0) or 0
+        
+        pre_fl_values.append(pre_val)
+        post_fl_values.append(post_val)
+        all_global_values.extend([pre_val, post_val])
 
     bars1 = ax2.bar(x_positions - bar_width/2, pre_fl_values, bar_width,
                     label='Pre-FL', color='#e74c3c', alpha=0.8)
@@ -305,8 +435,11 @@ def plot_metric_across_rounds(
     ax2.set_xticklabels(client_labels, rotation=45, ha='right')
     ax2.legend()
     ax2.grid(True, alpha=0.3, axis='y')
-    if config['ylim']:
-        ax2.set_ylim(config['ylim'])
+    
+    # Apply smart y-axis scaling for global comparison
+    if config.get('use_smart_scaling', True) and all_global_values:
+        ymin, ymax = smart_ylim(all_global_values, metric)
+        ax2.set_ylim(ymin, ymax)
 
     plt.tight_layout()
 
@@ -372,6 +505,14 @@ def plot_improvement_analysis(
         ax.set_title(f'{config["label"]} Improvement After FL Training')
         ax.tick_params(axis='x', rotation=45)
         ax.grid(True, alpha=0.3, axis='y')
+        
+        # Smart y-axis scaling for improvement
+        if improvements:
+            ymin, ymax = smart_ylim(improvements, 'improvement_' + metric, padding=0.2)
+            # Ensure 0 is visible
+            ymin = min(ymin, -0.05)
+            ymax = max(ymax, 0.05)
+            ax.set_ylim(ymin, ymax)
 
     # Add legend
     improved_patch = mpatches.Patch(color='#2ecc71', label='Improved')
@@ -402,7 +543,7 @@ def plot_improvement_over_rounds(
     show_plot: bool = True
 ) -> str:
     """
-    Plot improvement trends over rounds for each client.
+    Plot improvement trends over rounds for each client with smart y-axis scaling.
     Calculates improvement as (validation_metric - pre_fl_baseline).
     """
     setup_plot_style()
@@ -414,6 +555,8 @@ def plot_improvement_over_rounds(
         ax = axes[idx // 2, idx % 2]
         config = METRICS_CONFIG.get(metric, {'label': metric})
 
+        all_improvements = []
+        
         for i, client in enumerate(clients):
             color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
             name = client.get('client_name', f'Client {i}')
@@ -429,6 +572,7 @@ def plot_improvement_over_rounds(
             if rounds and val_values:
                 # Calculate improvement relative to pre-FL baseline
                 improvements = [val - pre_fl_value for val in val_values]
+                all_improvements.extend(improvements)
 
                 ax.plot(rounds, [v * 100 for v in improvements], marker='o',
                        linewidth=2, markersize=6, color=color,
@@ -448,6 +592,15 @@ def plot_improvement_over_rounds(
         ax.set_title(f'{config["label"]} Improvement Per Round')
         ax.legend(loc='best', fontsize=9)
         ax.grid(True, alpha=0.3)
+        
+        # Smart y-axis scaling
+        if all_improvements:
+            improvement_pct = [v * 100 for v in all_improvements]
+            ymin, ymax = smart_ylim(improvement_pct, 'improvement_' + metric, padding=0.2)
+            # Ensure 0 is visible
+            ymin = min(ymin, -2)
+            ymax = max(ymax, 2)
+            ax.set_ylim(ymin, ymax)
 
     plt.suptitle('Per-Round Improvement Trends (Validation - Pre-FL Baseline)', fontsize=16, fontweight='bold')
     plt.tight_layout(rect=[0, 0, 1, 0.96])
@@ -473,13 +626,15 @@ def plot_training_convergence(
     show_plot: bool = True
 ) -> str:
     """
-    Plot training convergence showing distillation and training loss over rounds.
+    Plot training convergence showing distillation and training loss over rounds with smart scaling.
     """
     setup_plot_style()
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
     # Distillation Loss
     ax1 = axes[0]
+    all_distill_values = []
+    
     for i, client in enumerate(clients):
         color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
         name = client.get('client_name', f'Client {i}')
@@ -487,6 +642,7 @@ def plot_training_convergence(
 
         rounds, values = extract_training_metric_series(client, 'distill_loss')
         if rounds and values:
+            all_distill_values.extend(values)
             ax1.plot(rounds, values, marker='s', linewidth=2, markersize=6,
                     color=color, label=f'{name} ({model})')
 
@@ -495,9 +651,16 @@ def plot_training_convergence(
     ax1.set_title('Knowledge Distillation Loss Convergence')
     ax1.legend(loc='best')
     ax1.grid(True, alpha=0.3)
+    
+    # Smart y-axis scaling
+    if all_distill_values:
+        ymin, ymax = smart_ylim(all_distill_values, 'distill_loss')
+        ax1.set_ylim(ymin, ymax)
 
     # Training Loss
     ax2 = axes[1]
+    all_train_values = []
+    
     for i, client in enumerate(clients):
         color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
         name = client.get('client_name', f'Client {i}')
@@ -505,6 +668,7 @@ def plot_training_convergence(
 
         rounds, values = extract_training_metric_series(client, 'train_loss')
         if rounds and values:
+            all_train_values.extend(values)
             ax2.plot(rounds, values, marker='^', linewidth=2, markersize=6,
                     color=color, label=f'{name} ({model})')
 
@@ -513,6 +677,11 @@ def plot_training_convergence(
     ax2.set_title('Private Training Loss Convergence')
     ax2.legend(loc='best')
     ax2.grid(True, alpha=0.3)
+    
+    # Smart y-axis scaling
+    if all_train_values:
+        ymin, ymax = smart_ylim(all_train_values, 'train_loss')
+        ax2.set_ylim(ymin, ymax)
 
     plt.suptitle('Training Convergence Analysis', fontsize=16, fontweight='bold')
     plt.tight_layout(rect=[0, 0, 1, 0.96])
@@ -615,13 +784,15 @@ def plot_class_balance_analysis(
     show_plot: bool = True
 ) -> str:
     """
-    Plot per-class accuracy (leukemia vs healthy) to analyze class balance.
+    Plot per-class accuracy (leukemia vs healthy) to analyze class balance with smart scaling.
     """
     setup_plot_style()
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
 
     # Left: Per-class accuracy over rounds
     ax1 = axes[0]
+    all_class_acc = []
+    
     for i, client in enumerate(clients):
         color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
         name = client.get('client_name', f'Client {i}')[:12]
@@ -630,9 +801,11 @@ def plot_class_balance_analysis(
         rounds_h, healthy_acc = extract_validation_series(client, 'healthy_accuracy')
 
         if rounds_l and leukemia_acc:
+            all_class_acc.extend(leukemia_acc)
             ax1.plot(rounds_l, leukemia_acc, marker='o', linewidth=2,
                     color=color, linestyle='-', label=f'{name} (Leukemia)')
         if rounds_h and healthy_acc:
+            all_class_acc.extend(healthy_acc)
             ax1.plot(rounds_h, healthy_acc, marker='s', linewidth=2,
                     color=color, linestyle='--', label=f'{name} (Healthy)')
 
@@ -641,10 +814,16 @@ def plot_class_balance_analysis(
     ax1.set_title('Per-Class Accuracy Over Rounds')
     ax1.legend(loc='best', fontsize=8, ncol=2)
     ax1.grid(True, alpha=0.3)
-    ax1.set_ylim(0, 1)
+    
+    # Smart y-axis scaling
+    if all_class_acc:
+        ymin, ymax = smart_ylim(all_class_acc, 'accuracy')
+        ax1.set_ylim(ymin, ymax)
 
     # Right: Class gap reduction
     ax2 = axes[1]
+    all_gap_values = []
+    
     for i, client in enumerate(clients):
         color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
         name = client.get('client_name', f'Client {i}')
@@ -652,6 +831,7 @@ def plot_class_balance_analysis(
 
         rounds, class_gap = extract_validation_series(client, 'class_gap')
         if rounds and class_gap:
+            all_gap_values.extend(class_gap)
             ax2.plot(rounds, [v * 100 for v in class_gap], marker='o',
                     linewidth=2, markersize=6, color=color,
                     label=f'{name} ({model})')
@@ -662,6 +842,13 @@ def plot_class_balance_analysis(
     ax2.set_title('Class Imbalance Gap Over Rounds')
     ax2.legend(loc='best')
     ax2.grid(True, alpha=0.3)
+    
+    # Smart y-axis scaling
+    if all_gap_values:
+        gap_pct = [v * 100 for v in all_gap_values]
+        gap_pct.append(10)  # Include target in range calculation
+        ymin, ymax = smart_ylim(gap_pct, 'class_gap')
+        ax2.set_ylim(max(0, ymin), ymax)
 
     plt.suptitle('Class Balance Analysis', fontsize=16, fontweight='bold')
     plt.tight_layout(rect=[0, 0, 1, 0.96])
@@ -687,7 +874,7 @@ def plot_summary_dashboard(
     show_plot: bool = True
 ) -> str:
     """
-    Create a comprehensive summary dashboard with key metrics.
+    Create a comprehensive summary dashboard with key metrics and smart y-axis scaling.
     """
     setup_plot_style()
     fig = plt.figure(figsize=(20, 12))
@@ -697,6 +884,8 @@ def plot_summary_dashboard(
 
     # 1. Overall Accuracy Progress (top-left, spanning 2 columns)
     ax1 = fig.add_subplot(gs[0, :2])
+    all_acc_values = []
+    
     for i, client in enumerate(clients):
         color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
         name = client.get('client_name', f'Client {i}')
@@ -704,6 +893,7 @@ def plot_summary_dashboard(
 
         rounds, values = extract_validation_series(client, 'accuracy')
         if rounds and values:
+            all_acc_values.extend(values)
             ax1.plot(rounds, [v * 100 for v in values], marker='o',
                     linewidth=2.5, markersize=8, color=color,
                     label=f'{name} ({model})')
@@ -713,16 +903,24 @@ def plot_summary_dashboard(
     ax1.set_title('Accuracy Progression', fontsize=14, fontweight='bold')
     ax1.legend(loc='best')
     ax1.grid(True, alpha=0.3)
-    ax1.set_ylim(0, 100)
+    
+    # Smart scaling
+    if all_acc_values:
+        acc_pct = [v * 100 for v in all_acc_values]
+        ymin, ymax = smart_ylim(acc_pct, 'accuracy')
+        ax1.set_ylim(ymin, ymax)
 
     # 2. F1 Score Progress (top-right, spanning 2 columns)
     ax2 = fig.add_subplot(gs[0, 2:])
+    all_f1_values = []
+    
     for i, client in enumerate(clients):
         color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
         name = client.get('client_name', f'Client {i}')
 
         rounds, values = extract_validation_series(client, 'f1_score')
         if rounds and values:
+            all_f1_values.extend(values)
             ax2.plot(rounds, values, marker='s', linewidth=2.5,
                     markersize=8, color=color, label=name[:15])
 
@@ -731,7 +929,11 @@ def plot_summary_dashboard(
     ax2.set_title('F1 Score Progression', fontsize=14, fontweight='bold')
     ax2.legend(loc='best')
     ax2.grid(True, alpha=0.3)
-    ax2.set_ylim(0, 1)
+    
+    # Smart scaling
+    if all_f1_values:
+        ymin, ymax = smart_ylim(all_f1_values, 'f1_score')
+        ax2.set_ylim(ymin, ymax)
 
     # 3. Improvement Summary (middle-left)
     ax3 = fig.add_subplot(gs[1, :2])
@@ -765,10 +967,15 @@ def plot_summary_dashboard(
 
     pre_roc = []
     post_roc = []
+    all_roc = []
+    
     for client in clients:
         global_metrics = extract_global_metrics(client)
-        pre_roc.append(global_metrics.get('pre_fl', {}).get('roc_auc', 0) or 0)
-        post_roc.append(global_metrics.get('post_fl', {}).get('roc_auc', 0) or 0)
+        pre_val = global_metrics.get('pre_fl', {}).get('roc_auc', 0) or 0
+        post_val = global_metrics.get('post_fl', {}).get('roc_auc', 0) or 0
+        pre_roc.append(pre_val)
+        post_roc.append(post_val)
+        all_roc.extend([pre_val, post_val])
 
     x = np.arange(len(clients))
     ax4.bar(x - 0.2, pre_roc, 0.4, label='Pre-FL', color='#e74c3c', alpha=0.8)
@@ -781,16 +988,23 @@ def plot_summary_dashboard(
     ax4.set_xticklabels(client_names, rotation=45, ha='right')
     ax4.legend()
     ax4.grid(True, alpha=0.3, axis='y')
-    ax4.set_ylim(0, 1)
+    
+    # Smart scaling
+    if all_roc:
+        ymin, ymax = smart_ylim(all_roc, 'roc_auc')
+        ax4.set_ylim(ymin, ymax)
 
     # 5. Validation Loss Convergence (bottom-left)
     ax5 = fig.add_subplot(gs[2, :2])
+    all_loss_values = []
+    
     for i, client in enumerate(clients):
         color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
         name = client.get('client_name', f'Client {i}')
 
         rounds, values = extract_validation_series(client, 'loss')
         if rounds and values:
+            all_loss_values.extend(values)
             ax5.plot(rounds, values, marker='^', linewidth=2,
                     markersize=6, color=color, label=name[:15])
 
@@ -799,15 +1013,23 @@ def plot_summary_dashboard(
     ax5.set_title('Validation Loss Convergence', fontsize=14, fontweight='bold')
     ax5.legend(loc='best')
     ax5.grid(True, alpha=0.3)
+    
+    # Smart scaling
+    if all_loss_values:
+        ymin, ymax = smart_ylim(all_loss_values, 'loss')
+        ax5.set_ylim(ymin, ymax)
 
     # 6. Class Gap Trend (bottom-right)
     ax6 = fig.add_subplot(gs[2, 2:])
+    all_gap_values = []
+    
     for i, client in enumerate(clients):
         color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
         name = client.get('client_name', f'Client {i}')
 
         rounds, values = extract_validation_series(client, 'class_gap')
         if rounds and values:
+            all_gap_values.extend(values)
             ax6.plot(rounds, [v * 100 for v in values], marker='o',
                     linewidth=2, markersize=6, color=color, label=name[:15])
 
@@ -817,9 +1039,16 @@ def plot_summary_dashboard(
     ax6.set_title('Class Balance Improvement', fontsize=14, fontweight='bold')
     ax6.legend(loc='best')
     ax6.grid(True, alpha=0.3)
+    
+    # Smart scaling
+    if all_gap_values:
+        gap_pct = [v * 100 for v in all_gap_values]
+        gap_pct.append(10)  # Include target
+        ymin, ymax = smart_ylim(gap_pct, 'class_gap')
+        ax6.set_ylim(max(0, ymin), ymax)
 
     # Main title
-    plt.suptitle('FLEX-Med Federated Learning - Training Summary Dashboard',
+    plt.suptitle('FLEX-Med Federated Learning - Training Summary Dashboard\n✨ Smart Auto-Scaled Y-Axes',
                 fontsize=18, fontweight='bold', y=0.98)
 
     # Save plot
@@ -843,7 +1072,7 @@ def plot_global_fl_benefit(
     show_plot: bool = True
 ) -> str:
     """
-    Plot Global FL Benefit Analysis (Pre-FL vs Post-FL on public test dataset).
+    Plot Global FL Benefit Analysis (Pre-FL vs Post-FL on public test dataset) with smart scaling.
     Shows the overall improvement from federated learning.
     """
     setup_plot_style()
@@ -859,6 +1088,7 @@ def plot_global_fl_benefit(
         post_values = []
         client_labels = []
         improvements = []
+        all_values = []
 
         for i, client in enumerate(clients):
             name = client.get('client_name', f'Client {i}')[:15]
@@ -875,6 +1105,7 @@ def plot_global_fl_benefit(
             pre_values.append(pre_val)
             post_values.append(post_val)
             improvements.append(improvement)
+            all_values.extend([pre_val, post_val])
 
         x = np.arange(len(clients))
         width = 0.35
@@ -909,10 +1140,15 @@ def plot_global_fl_benefit(
         ax.set_xticklabels(client_labels, rotation=45, ha='right')
         ax.legend()
         ax.grid(True, alpha=0.3, axis='y')
-        if config['ylim']:
-            ax.set_ylim(config['ylim'])
+        
+        # Smart y-axis scaling
+        if all_values and config.get('use_smart_scaling', True):
+            ymin, ymax = smart_ylim(all_values, metric)
+            # Add extra space for annotations
+            ymax = ymax * 1.1
+            ax.set_ylim(ymin, ymax)
 
-    plt.suptitle('Global FL Benefit Analysis (Public Test Dataset)\nCentralized vs Federated Models',
+    plt.suptitle('Global FL Benefit Analysis (Public Test Dataset)\nCentralized vs Federated Models\n✨ Smart Auto-Scaled Y-Axes',
                 fontsize=16, fontweight='bold')
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
@@ -937,7 +1173,7 @@ def plot_validation_progression(
     show_plot: bool = True
 ) -> str:
     """
-    Plot per-round validation metrics progression.
+    Plot per-round validation metrics progression with smart y-axis scaling.
     Shows learning curves on validation sets (not test set).
     """
     setup_plot_style()
@@ -949,6 +1185,8 @@ def plot_validation_progression(
         ax = axes[idx // 2, idx % 2]
         config = METRICS_CONFIG.get(metric, {'label': metric})
 
+        all_values = []
+        
         for i, client in enumerate(clients):
             color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
             name = client.get('client_name', f'Client {i}')
@@ -957,11 +1195,15 @@ def plot_validation_progression(
             rounds, values = extract_validation_series(client, metric)
 
             if rounds and values:
+                all_values.extend(values)
+                
                 # Convert to percentage for class_gap and accuracy
                 if metric in ['accuracy', 'class_gap']:
-                    values = [v * 100 for v in values]
+                    display_values = [v * 100 for v in values]
+                else:
+                    display_values = values
 
-                ax.plot(rounds, values, marker='o', linewidth=2, markersize=6,
+                ax.plot(rounds, display_values, marker='o', linewidth=2, markersize=6,
                        color=color, label=f'{name} ({model})')
 
         ax.set_xlabel('Training Round')
@@ -975,8 +1217,18 @@ def plot_validation_progression(
         if metric == 'class_gap':
             ax.axhline(y=10, color='green', linestyle='--', linewidth=2,
                       alpha=0.7, label='Target (<10%)')
+            all_values.append(0.10)  # Include target in range
 
-    plt.suptitle('Per-Round Validation Metrics\n(Evaluated on Private Validation Sets)',
+        # Smart y-axis scaling
+        if all_values and config.get('use_smart_scaling', True):
+            if metric in ['accuracy', 'class_gap']:
+                display_all = [v * 100 for v in all_values]
+                ymin, ymax = smart_ylim(display_all, metric)
+            else:
+                ymin, ymax = smart_ylim(all_values, metric)
+            ax.set_ylim(ymin, ymax)
+
+    plt.suptitle('Per-Round Validation Metrics\n(Evaluated on Private Validation Sets)\n✨ Smart Auto-Scaled Y-Axes',
                 fontsize=16, fontweight='bold')
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
@@ -1001,7 +1253,7 @@ def plot_hybrid_evaluation_comparison(
     show_plot: bool = True
 ) -> str:
     """
-    Plot comparison between validation progression and global evaluation.
+    Plot comparison between validation progression and global evaluation with smart scaling.
     Shows how per-round validation metrics relate to final test performance.
     """
     setup_plot_style()
@@ -1018,9 +1270,12 @@ def plot_hybrid_evaluation_comparison(
         # Left plot: Accuracy progression (validation vs global)
         ax_left = axes[i][0] if len(clients) > 1 else axes[0]
 
+        all_acc_values = []
+        
         # Validation progression
         rounds, val_acc = extract_validation_series(client, 'accuracy')
         if rounds and val_acc:
+            all_acc_values.extend(val_acc)
             ax_left.plot(rounds, [v * 100 for v in val_acc], marker='o',
                         linewidth=2, markersize=6, color=color,
                         label='Validation (per-round)', linestyle='-')
@@ -1030,6 +1285,7 @@ def plot_hybrid_evaluation_comparison(
         if global_metrics['pre_fl'] and global_metrics['post_fl']:
             pre_acc = global_metrics['pre_fl'].get('accuracy', 0) * 100
             post_acc = global_metrics['post_fl'].get('accuracy', 0) * 100
+            all_acc_values.extend([pre_acc / 100, post_acc / 100])
 
             max_round = max(rounds) if rounds else 1
 
@@ -1045,14 +1301,22 @@ def plot_hybrid_evaluation_comparison(
         ax_left.set_title(f'{name} ({model}) - Accuracy Progression')
         ax_left.legend(loc='best')
         ax_left.grid(True, alpha=0.3)
-        ax_left.set_ylim(0, 100)
+        
+        # Smart scaling
+        if all_acc_values:
+            acc_pct = [v * 100 if v <= 1 else v for v in all_acc_values]
+            ymin, ymax = smart_ylim(acc_pct, 'accuracy')
+            ax_left.set_ylim(ymin, ymax)
 
         # Right plot: Loss progression
         ax_right = axes[i][1] if len(clients) > 1 else axes[1]
 
+        all_loss_values = []
+        
         # Validation loss
         rounds, val_loss = extract_validation_series(client, 'loss')
         if rounds and val_loss:
+            all_loss_values.extend(val_loss)
             ax_right.plot(rounds, val_loss, marker='s', linewidth=2,
                          markersize=6, color=color,
                          label='Validation (per-round)', linestyle='-')
@@ -1061,6 +1325,7 @@ def plot_hybrid_evaluation_comparison(
         if global_metrics['pre_fl'] and global_metrics['post_fl']:
             pre_loss = global_metrics['pre_fl'].get('loss', 0)
             post_loss = global_metrics['post_fl'].get('loss', 0)
+            all_loss_values.extend([pre_loss, post_loss])
 
             ax_right.scatter([0], [pre_loss], s=200, marker='D', color='#e74c3c',
                            edgecolors='black', linewidths=2, label='Global Pre-FL (Test)',
@@ -1074,8 +1339,13 @@ def plot_hybrid_evaluation_comparison(
         ax_right.set_title(f'{name} ({model}) - Loss Progression')
         ax_right.legend(loc='best')
         ax_right.grid(True, alpha=0.3)
+        
+        # Smart scaling
+        if all_loss_values:
+            ymin, ymax = smart_ylim(all_loss_values, 'loss')
+            ax_right.set_ylim(ymin, ymax)
 
-    plt.suptitle('Hybrid Evaluation Strategy\nValidation Progression vs Global Test Performance',
+    plt.suptitle('Hybrid Evaluation Strategy\nValidation Progression vs Global Test Performance\n✨ Smart Auto-Scaled Y-Axes',
                 fontsize=16, fontweight='bold')
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
@@ -1100,7 +1370,7 @@ def generate_all_visualizations(
     show_plots: bool = True
 ) -> Dict[str, str]:
     """
-    Generate all visualizations from cnmc_data.json.
+    Generate all visualizations from cnmc_data.json with smart auto-scaling.
 
     Args:
         data_path: Path to cnmc_data.json
@@ -1112,6 +1382,7 @@ def generate_all_visualizations(
     """
     print("=" * 70)
     print("FLEX-Med FL Evaluation - Generating Visualizations")
+    print("✨ IMPROVED VERSION with Smart Y-Axis Auto-Scaling ✨")
     print("=" * 70)
     print(f"Data source: {data_path}")
     print(f"Output directory: {output_dir}")
@@ -1138,7 +1409,7 @@ def generate_all_visualizations(
         print("Run FL training first to generate metrics.")
         return {}
 
-    print(f"\nGenerating visualizations...")
+    print(f"\nGenerating visualizations with smart auto-scaling...")
     print("-" * 40)
 
     saved_files = {}
@@ -1203,6 +1474,12 @@ def generate_all_visualizations(
     print("\n" + "=" * 70)
     print(f"Visualizations complete! {len(saved_files)} graphs saved to:")
     print(f"  {output_dir}")
+    print("\n✨ SMART Y-AXIS SCALING FEATURES:")
+    print("  • Dynamic range adjustment based on actual data")
+    print("  • 15% padding for visual clarity")
+    print("  • Metric-specific optimization (accuracy, loss, etc.)")
+    print("  • Minimum range enforcement to prevent flat graphs")
+    print("  • Similar to Weights & Biases auto-scaling")
     print("=" * 70)
 
     return saved_files
@@ -1272,7 +1549,7 @@ def print_metrics_summary(data_path: str = DATA_JSON_PATH):
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description='Generate FL evaluation visualizations')
+    parser = argparse.ArgumentParser(description='Generate FL evaluation visualizations with smart auto-scaling')
     parser.add_argument('--data', type=str, default=DATA_JSON_PATH,
                        help='Path to cnmc_data.json')
     parser.add_argument('--output', type=str, default=GRAPHS_OUTPUT_DIR,
