@@ -242,27 +242,27 @@ def plot_metric_across_rounds(
 
     config = METRICS_CONFIG.get(metric, {'label': metric, 'format': '.3f', 'ylim': None})
 
-    # Left plot: Post-FL metrics across rounds
+    # Left plot: Validation metrics across rounds
     ax1 = axes[0]
     for i, client in enumerate(clients):
         color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
         name = client.get('client_name', f'Client {i}')
         model = client.get('model_type', 'unknown')
 
-        rounds, values = extract_metric_series(client, metric, 'post_fl')
+        rounds, values = extract_validation_series(client, metric)
         if rounds and values:
             ax1.plot(rounds, values, marker='o', linewidth=2, markersize=6,
                     color=color, label=f'{name} ({model})')
 
     ax1.set_xlabel('Training Round')
     ax1.set_ylabel(config['label'])
-    ax1.set_title(f'{config["label"]} Progression (Post-FL)')
+    ax1.set_title(f'{config["label"]} Progression (Validation)')
     ax1.legend(loc='best')
     ax1.grid(True, alpha=0.3)
     if config['ylim']:
         ax1.set_ylim(config['ylim'])
 
-    # Right plot: Pre-FL vs Post-FL comparison
+    # Right plot: Pre-FL vs Post-FL comparison (from global metrics)
     ax2 = axes[1]
     bar_width = 0.35
     x_positions = np.arange(len(clients))
@@ -275,12 +275,10 @@ def plot_metric_across_rounds(
         name = client.get('client_name', 'Unknown')[:15]
         client_labels.append(name)
 
-        # Get latest round metrics
-        metrics = client.get('metrics', {})
-        current = metrics.get('current', {})
-
-        pre_fl = current.get('pre_fl', {})
-        post_fl = current.get('post_fl', {})
+        # Get global metrics
+        global_metrics = extract_global_metrics(client)
+        pre_fl = global_metrics.get('pre_fl', {})
+        post_fl = global_metrics.get('post_fl', {})
 
         pre_fl_values.append(pre_fl.get(metric, 0) or 0)
         post_fl_values.append(post_fl.get(metric, 0) or 0)
@@ -352,9 +350,8 @@ def plot_improvement_analysis(
             name = client.get('client_name', f'Client {i}')[:15]
             client_labels.append(name)
 
-            metrics = client.get('metrics', {})
-            current = metrics.get('current', {})
-            improvement = current.get('improvement', {})
+            global_metrics = extract_global_metrics(client)
+            improvement = global_metrics.get('improvement', {})
 
             imp_value = improvement.get(metric, 0) or 0
             improvements.append(imp_value)
@@ -406,6 +403,7 @@ def plot_improvement_over_rounds(
 ) -> str:
     """
     Plot improvement trends over rounds for each client.
+    Calculates improvement as (validation_metric - pre_fl_baseline).
     """
     setup_plot_style()
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
@@ -421,9 +419,17 @@ def plot_improvement_over_rounds(
             name = client.get('client_name', f'Client {i}')
             model = client.get('model_type', 'unknown')
 
-            rounds, improvements = extract_improvement_series(client, metric)
+            # Get validation series
+            rounds, val_values = extract_validation_series(client, metric)
 
-            if rounds and improvements:
+            # Get pre-FL baseline
+            global_metrics = extract_global_metrics(client)
+            pre_fl_value = global_metrics.get('pre_fl', {}).get(metric, 0) or 0
+
+            if rounds and val_values:
+                # Calculate improvement relative to pre-FL baseline
+                improvements = [val - pre_fl_value for val in val_values]
+
                 ax.plot(rounds, [v * 100 for v in improvements], marker='o',
                        linewidth=2, markersize=6, color=color,
                        label=f'{name} ({model})')
@@ -443,7 +449,7 @@ def plot_improvement_over_rounds(
         ax.legend(loc='best', fontsize=9)
         ax.grid(True, alpha=0.3)
 
-    plt.suptitle('Per-Round Improvement Trends (Post-FL - Pre-FL)', fontsize=16, fontweight='bold')
+    plt.suptitle('Per-Round Improvement Trends (Validation - Pre-FL Baseline)', fontsize=16, fontweight='bold')
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
     # Save plot
@@ -544,11 +550,9 @@ def plot_confusion_matrix_comparison(
     for i, client in enumerate(clients):
         name = client.get('client_name', f'Client {i}')
 
-        metrics = client.get('metrics', {})
-        current = metrics.get('current', {})
-
-        pre_fl = current.get('pre_fl', {})
-        post_fl = current.get('post_fl', {})
+        global_metrics = extract_global_metrics(client)
+        pre_fl = global_metrics.get('pre_fl', {})
+        post_fl = global_metrics.get('post_fl', {})
 
         for j, (stage, stage_data, title) in enumerate([
             ('pre_fl', pre_fl, f'{name} - Pre-FL'),
@@ -622,8 +626,8 @@ def plot_class_balance_analysis(
         color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
         name = client.get('client_name', f'Client {i}')[:12]
 
-        rounds_l, leukemia_acc = extract_metric_series(client, 'leukemia_accuracy', 'post_fl')
-        rounds_h, healthy_acc = extract_metric_series(client, 'healthy_accuracy', 'post_fl')
+        rounds_l, leukemia_acc = extract_validation_series(client, 'leukemia_accuracy')
+        rounds_h, healthy_acc = extract_validation_series(client, 'healthy_accuracy')
 
         if rounds_l and leukemia_acc:
             ax1.plot(rounds_l, leukemia_acc, marker='o', linewidth=2,
@@ -646,7 +650,7 @@ def plot_class_balance_analysis(
         name = client.get('client_name', f'Client {i}')
         model = client.get('model_type', 'unknown')
 
-        rounds, class_gap = extract_metric_series(client, 'class_gap', 'post_fl')
+        rounds, class_gap = extract_validation_series(client, 'class_gap')
         if rounds and class_gap:
             ax2.plot(rounds, [v * 100 for v in class_gap], marker='o',
                     linewidth=2, markersize=6, color=color,
@@ -698,7 +702,7 @@ def plot_summary_dashboard(
         name = client.get('client_name', f'Client {i}')
         model = client.get('model_type', 'unknown')
 
-        rounds, values = extract_metric_series(client, 'accuracy', 'post_fl')
+        rounds, values = extract_validation_series(client, 'accuracy')
         if rounds and values:
             ax1.plot(rounds, [v * 100 for v in values], marker='o',
                     linewidth=2.5, markersize=8, color=color,
@@ -717,7 +721,7 @@ def plot_summary_dashboard(
         color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
         name = client.get('client_name', f'Client {i}')
 
-        rounds, values = extract_metric_series(client, 'f1_score', 'post_fl')
+        rounds, values = extract_validation_series(client, 'f1_score')
         if rounds and values:
             ax2.plot(rounds, values, marker='s', linewidth=2.5,
                     markersize=8, color=color, label=name[:15])
@@ -739,9 +743,8 @@ def plot_summary_dashboard(
     for j, metric in enumerate(['accuracy', 'f1_score', 'precision', 'recall']):
         improvements = []
         for client in clients:
-            metrics = client.get('metrics', {})
-            current = metrics.get('current', {})
-            imp = current.get('improvement', {}).get(metric, 0) or 0
+            global_metrics = extract_global_metrics(client)
+            imp = global_metrics.get('improvement', {}).get(metric, 0) or 0
             improvements.append(imp * 100)
 
         bars = ax3.bar(x + j * width, improvements, width,
@@ -763,10 +766,9 @@ def plot_summary_dashboard(
     pre_roc = []
     post_roc = []
     for client in clients:
-        metrics = client.get('metrics', {})
-        current = metrics.get('current', {})
-        pre_roc.append(current.get('pre_fl', {}).get('roc_auc', 0) or 0)
-        post_roc.append(current.get('post_fl', {}).get('roc_auc', 0) or 0)
+        global_metrics = extract_global_metrics(client)
+        pre_roc.append(global_metrics.get('pre_fl', {}).get('roc_auc', 0) or 0)
+        post_roc.append(global_metrics.get('post_fl', {}).get('roc_auc', 0) or 0)
 
     x = np.arange(len(clients))
     ax4.bar(x - 0.2, pre_roc, 0.4, label='Pre-FL', color='#e74c3c', alpha=0.8)
@@ -781,20 +783,20 @@ def plot_summary_dashboard(
     ax4.grid(True, alpha=0.3, axis='y')
     ax4.set_ylim(0, 1)
 
-    # 5. Training Loss Convergence (bottom-left)
+    # 5. Validation Loss Convergence (bottom-left)
     ax5 = fig.add_subplot(gs[2, :2])
     for i, client in enumerate(clients):
         color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
         name = client.get('client_name', f'Client {i}')
 
-        rounds, values = extract_training_metric_series(client, 'train_loss')
+        rounds, values = extract_validation_series(client, 'loss')
         if rounds and values:
             ax5.plot(rounds, values, marker='^', linewidth=2,
                     markersize=6, color=color, label=name[:15])
 
     ax5.set_xlabel('Training Round')
-    ax5.set_ylabel('Training Loss')
-    ax5.set_title('Training Loss Convergence', fontsize=14, fontweight='bold')
+    ax5.set_ylabel('Validation Loss')
+    ax5.set_title('Validation Loss Convergence', fontsize=14, fontweight='bold')
     ax5.legend(loc='best')
     ax5.grid(True, alpha=0.3)
 
@@ -804,7 +806,7 @@ def plot_summary_dashboard(
         color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
         name = client.get('client_name', f'Client {i}')
 
-        rounds, values = extract_metric_series(client, 'class_gap', 'post_fl')
+        rounds, values = extract_validation_series(client, 'class_gap')
         if rounds and values:
             ax6.plot(rounds, [v * 100 for v in values], marker='o',
                     linewidth=2, markersize=6, color=color, label=name[:15])

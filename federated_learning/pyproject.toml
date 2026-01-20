@@ -33,10 +33,10 @@ clientapp = "flex_med.client_app:app"
 [tool.flwr.app.config]
 # Training configuration (optimized for stability with round-based LR decay)
 # SIMPLIFIED: Removed freeze/unfreeze, using simple fine-tuning with LR decay
-num-server-rounds = 15           # 15 rounds with LR decay schedule
+num-server-rounds = 10           # 10 rounds with LR decay schedule
 fraction-train = 1.0             # Use all clients each round
 fraction-evaluate = 1.0          # Use all clients each round
-local-epochs = 4                 # Reduced from 6 - simpler training without freeze/unfreeze
+local-epochs = 8                 # Reduced from 6 - simpler training without freeze/unfreeze
 lr = 0.0001                      # Base LR (decays by round: 1x -> 0.5x -> 0.25x -> 0.1x)
 lr-decay = 0.98                  # Learning rate decay factor per round (0.98 = 2% reduction) - FIXED: More gradual decay to support distillation
 
