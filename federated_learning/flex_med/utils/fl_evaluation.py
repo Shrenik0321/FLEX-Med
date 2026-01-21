@@ -266,13 +266,14 @@ def extract_improvement_series(client: Dict, metric: str) -> Tuple[List[int], Li
     return rounds, values
 
 
-def extract_validation_series(client: Dict, metric: str) -> Tuple[List[int], List[float]]:
+def extract_validation_series(client: Dict, metric: str, include_pre_fl: bool = True) -> Tuple[List[int], List[float]]:
     """
     Extract validation metric series across rounds (for hybrid evaluation strategy).
 
     Args:
         client: Client data dictionary
         metric: Metric name (accuracy, f1_score, etc.)
+        include_pre_fl: If True, prepend round 0 with Pre-FL baseline value
 
     Returns:
         Tuple of (rounds, values)
@@ -281,6 +282,19 @@ def extract_validation_series(client: Dict, metric: str) -> Tuple[List[int], Lis
     values = []
 
     metrics = client.get('metrics', {})
+    
+    # Add Pre-FL baseline as round 0 if available
+    if include_pre_fl:
+        global_metrics = metrics.get('global', {})
+        pre_fl = global_metrics.get('pre_fl', {})
+        
+        if pre_fl and metric in pre_fl:
+            pre_fl_value = pre_fl.get(metric)
+            if pre_fl_value is not None:
+                rounds.append(0)
+                values.append(pre_fl_value)
+    
+    # Add validation metrics from each round
     if not isinstance(metrics, dict) or 'rounds' not in metrics:
         return rounds, values
 

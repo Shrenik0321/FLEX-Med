@@ -66,6 +66,7 @@ def train(msg: Message, context: Context):
     # Extract client configuration from Flower context
     partition_id = context.node_config["partition-id"]
     num_partitions = context.node_config["num-partitions"]
+    total_rounds = context.run_config["num-server-rounds"]
 
     # Identify the current FL round from server message
     try:
@@ -117,7 +118,7 @@ def train(msg: Message, context: Context):
 
                 print(f"[Client {partition_id}] Phase 1: Knowledge Distillation ({distill_epochs} epochs)")
 
-                public_loader = load_public_dataset(batch_size=32)
+                public_loader = load_public_dataset(batch_size=32, round_num=server_round, total_rounds=total_rounds)
 
                 distill_loss = distill_knowledge(
                     model=model,
@@ -176,7 +177,7 @@ def train(msg: Message, context: Context):
         # This helps them learn from labeled public data in addition to distillation
         print(f"[Client {partition_id}] Phase 2b: Public Dataset Training (Free Rider)")
 
-        public_supervised_loader = load_public_dataset(batch_size=32)
+        public_supervised_loader = load_public_dataset(batch_size=32,round_num=server_round, total_rounds=total_rounds)
         dataset_len = len(public_supervised_loader.dataset)
 
         start_time = time.time()
@@ -207,7 +208,7 @@ def train(msg: Message, context: Context):
     # Generate predictions on public dataset for server aggregation
     # These logits will be aggregated into consensus for next round's distillation
     print(f"[Client {partition_id}] Generating public logits for aggregation...")
-    public_loader = load_public_dataset(batch_size=32)
+    public_loader = load_public_dataset(batch_size=32,round_num=server_round, total_rounds=total_rounds)
     public_logits = get_public_logits(model, public_loader, device)
 
     print(f"[Client {partition_id}] Round {server_round} Complete\n")
@@ -241,6 +242,13 @@ def evaluate(msg: Message, context: Context):
     partition_id = context.node_config["partition-id"]
     num_partitions = context.node_config["num-partitions"]
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    total_rounds = context.run_config["num-server-rounds"]
+
+    # Identify the current FL round from server message
+    try:
+        server_round = int(msg.metadata.group_id)
+    except:
+        server_round = 1
 
     print(f"\n[Client {partition_id}] Evaluation Phase")
 
@@ -260,7 +268,7 @@ def evaluate(msg: Message, context: Context):
 
     if valloader is None:
         print(f"[Client {partition_id}] Using public dataset for evaluation")
-        valloader = load_public_dataset(batch_size=32)
+        valloader = load_public_dataset(batch_size=32,round_num=server_round, total_rounds=total_rounds)
 
     # Run evaluation
     eval_loss, eval_acc = test_fn(model, valloader, device)

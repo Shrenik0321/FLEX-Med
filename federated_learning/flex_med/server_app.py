@@ -34,6 +34,12 @@ def main(grid: Grid, context: Context) -> None:
     else:
         print(f"\n[SERVER] Starting Federated Learning ({num_rounds} rounds, lr={lr})")
 
+    # Identify the current FL round from server message
+    try:
+        server_round = int(context.run_config["round"])
+    except:
+        server_round = 1
+
     # <------------------------------------------ CLIENT CONFIGURATION LOADING ------------------------------------------>
 
     # Load client metadata from data.json containing model types, dataset paths, etc.
@@ -55,7 +61,7 @@ def main(grid: Grid, context: Context) -> None:
     # Initialize consensus matrix for FedMD knowledge distillation
     # Matrix shape: (num_public_samples, num_classes) stores soft predictions
     # Round 1: Zero matrix (no consensus yet), Round 2+: Aggregated logits from previous round
-    public_loader = load_public_dataset(batch_size=1)
+    public_loader = load_public_dataset(batch_size=1, round_num=server_round, total_rounds=num_rounds)
     num_samples = len(public_loader.dataset)
     num_classes = NUM_CLASSES
 

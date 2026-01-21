@@ -211,14 +211,49 @@ def get_trainable_params(model):
 # Provides shared dataset for generating consensus logits across clients
 # Args: batch_size - Batch size for DataLoader
 # Returns: DataLoader with shuffle=False (order consistency critical for FL simulation)
-def load_public_dataset(batch_size=64):
+def load_public_dataset(batch_size=64, round_num=1, total_rounds=10):    
     if not os.path.exists(PUBLIC_ANCHOR_DATASET_PATH):
         raise FileNotFoundError(f"Public data not found at {PUBLIC_ANCHOR_DATASET_PATH}")
 
-    dataset = datasets.ImageFolder(root=PUBLIC_ANCHOR_DATASET_PATH, transform=COMMON_TRANSFORM)
+    # Load full dataset first
+    full_dataset = datasets.ImageFolder(root=PUBLIC_ANCHOR_DATASET_PATH, transform=COMMON_TRANSFORM)
+    
+    # Create deterministic subsets
+    # Strategy: Split indices for each class into `total_rounds` buckets
+    # Then take buckets 0 to `round_num` (exclusive if we used 0-indexing, but we want cumulative)
+    
+    # 1. Group indices by class
+    class_indices = {}
+    for idx, (_, label) in enumerate(full_dataset.samples):
+        if label not in class_indices:
+            class_indices[label] = []
+        class_indices[label].append(idx)
+        
+    # 2. Shuffle indices deterministically and split into chunks
+    selected_indices = []
+    generator = torch.Generator().manual_seed(42)  # Critical for consistency across clients
+    
+    for label, indices in class_indices.items():
+        # Shuffle indices for this class
+        indices_tensor = torch.tensor(indices)
+        perm = torch.randperm(len(indices), generator=generator)
+        shuffled_indices = indices_tensor[perm].tolist()
+        
+        # Determine chunk size per round
+        # Use ceil to ensure we cover all data even if not perfectly divisible
+        chunk_size = int(np.ceil(len(indices) / total_rounds))
+        
+        # Select accumulated chunks up to current round
+        end_idx = min(len(indices), chunk_size * round_num)
+        selected_indices.extend(shuffled_indices[:end_idx])
+        
+    # 3. Create Subset
+    # Do NOT sort indices. reliable appending depends on the order being [Round1_Indices, Round2_Indices, ...]
+    # selected_indices is already constructed in that order (shuffled_chunk_1 + shuffled_chunk_2 + ...).
+    subset = torch.utils.data.Subset(full_dataset, selected_indices)
     
     # Shuffle=False is CRITICAL for FL simulation so all clients see images in the same order
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=2)
+    loader = DataLoader(subset, batch_size=batch_size, shuffle=False, num_workers=2)
     return loader
 
 # Handles heterogeneous client datasets with 80/20 train/test split
@@ -1541,8 +1576,37 @@ def compute_consensus(
 
     # --- APPLY MOMENTUM SMOOTHING ---
     if last_consensus is not None and server_round > 1:
-        consensus_logits = (momentum * last_consensus +
-                          (1 - momentum) * new_consensus)
+        # Check for shape mismatch due to growing dataset (gradual release)
+        if last_consensus.shape != new_consensus.shape:
+            # Assume new_consensus is larger (superset)
+            if new_consensus.shape[0] > last_consensus.shape[0]:
+                # Create a padded version of last_consensus
+                # We can either zero-pad or just use new_consensus values for the new part
+                # Strategy: For the OLD part, use momentum. For the NEW part, use new_consensus only.
+                
+                # Verify standard width (num_classes) compatibility
+                if new_consensus.shape[1] != last_consensus.shape[1]:
+                     # This is a critical error (changed classes mid-training?)
+                     return None, {"error": "Class count mismatch in consensus resizing"}
+
+                old_len = last_consensus.shape[0]
+                new_len = new_consensus.shape[0]
+                
+                # Weighted blend on the overlapping part
+                balanced_part = (momentum * last_consensus + (1 - momentum) * new_consensus[:old_len])
+                
+                # New part relies entirely on current round (no history)
+                new_part = new_consensus[old_len:]
+                
+                consensus_logits = np.concatenate([balanced_part, new_part], axis=0)
+            else:
+                # Fallback: simple resizing or error (shouldn't happen with gradual release growing)
+                 consensus_logits = new_consensus
+        else:
+            # Shapes match, standard momentum
+            consensus_logits = (momentum * last_consensus +
+                              (1 - momentum) * new_consensus)
+        
         smoothing_applied = True
     else:
         consensus_logits = new_consensus
