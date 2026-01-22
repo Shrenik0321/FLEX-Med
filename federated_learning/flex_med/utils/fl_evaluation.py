@@ -137,7 +137,7 @@ def smart_ylim(values: List[float], metric: str, padding: float = 0.15) -> Tuple
         # For unbounded metrics (loss, etc.)
         if value_range < 0.01:
             # Very small range
-            center = (ymax + ymin) / 2
+            center = (max_val + min_val) / 2
             ymin = max(0, center - 0.01)
             ymax = center + 0.01
         else:
@@ -390,6 +390,7 @@ def plot_metric_across_rounds(
     ax1.set_xlabel('Training Round')
     ax1.set_ylabel(config['label'])
     ax1.set_title(f'{config["label"]} Progression (Validation)')
+    ax1.set_xlim(left=0)
     ax1.legend(loc='best')
     ax1.grid(True, alpha=0.3)
     
@@ -604,6 +605,7 @@ def plot_improvement_over_rounds(
         ax.set_xlabel('Training Round')
         ax.set_ylabel(f'{config["label"]} Improvement (%)')
         ax.set_title(f'{config["label"]} Improvement Per Round')
+        ax.set_xlim(left=0)
         ax.legend(loc='best', fontsize=9)
         ax.grid(True, alpha=0.3)
         
@@ -826,6 +828,7 @@ def plot_class_balance_analysis(
     ax1.set_xlabel('Training Round')
     ax1.set_ylabel('Per-Class Accuracy')
     ax1.set_title('Per-Class Accuracy Over Rounds')
+    ax1.set_xlim(left=0)
     ax1.legend(loc='best', fontsize=8, ncol=2)
     ax1.grid(True, alpha=0.3)
     
@@ -854,6 +857,7 @@ def plot_class_balance_analysis(
     ax2.set_xlabel('Training Round')
     ax2.set_ylabel('Class Gap (%)')
     ax2.set_title('Class Imbalance Gap Over Rounds')
+    ax2.set_xlim(left=0)
     ax2.legend(loc='best')
     ax2.grid(True, alpha=0.3)
     
@@ -915,6 +919,7 @@ def plot_summary_dashboard(
     ax1.set_xlabel('Training Round')
     ax1.set_ylabel('Accuracy (%)')
     ax1.set_title('Accuracy Progression', fontsize=14, fontweight='bold')
+    ax1.set_xlim(left=0)
     ax1.legend(loc='best')
     ax1.grid(True, alpha=0.3)
     
@@ -941,6 +946,7 @@ def plot_summary_dashboard(
     ax2.set_xlabel('Training Round')
     ax2.set_ylabel('F1 Score')
     ax2.set_title('F1 Score Progression', fontsize=14, fontweight='bold')
+    ax2.set_xlim(left=0)
     ax2.legend(loc='best')
     ax2.grid(True, alpha=0.3)
     
@@ -1025,6 +1031,7 @@ def plot_summary_dashboard(
     ax5.set_xlabel('Training Round')
     ax5.set_ylabel('Validation Loss')
     ax5.set_title('Validation Loss Convergence', fontsize=14, fontweight='bold')
+    ax5.set_xlim(left=0)
     ax5.legend(loc='best')
     ax5.grid(True, alpha=0.3)
     
@@ -1051,6 +1058,7 @@ def plot_summary_dashboard(
     ax6.set_xlabel('Training Round')
     ax6.set_ylabel('Class Gap (%)')
     ax6.set_title('Class Balance Improvement', fontsize=14, fontweight='bold')
+    ax6.set_xlim(left=0)
     ax6.legend(loc='best')
     ax6.grid(True, alpha=0.3)
     
@@ -1224,6 +1232,7 @@ def plot_validation_progression(
         ylabel = f'{config["label"]} (%)' if metric in ['accuracy', 'class_gap'] else config['label']
         ax.set_ylabel(ylabel)
         ax.set_title(f'{config["label"]} - Validation Progression')
+        ax.set_xlim(left=0)
         ax.legend(loc='best')
         ax.grid(True, alpha=0.3)
 
@@ -1313,6 +1322,7 @@ def plot_hybrid_evaluation_comparison(
         ax_left.set_xlabel('Training Round')
         ax_left.set_ylabel('Accuracy (%)')
         ax_left.set_title(f'{name} ({model}) - Accuracy Progression')
+        ax_left.set_xlim(left=0)
         ax_left.legend(loc='best')
         ax_left.grid(True, alpha=0.3)
         
@@ -1351,6 +1361,7 @@ def plot_hybrid_evaluation_comparison(
         ax_right.set_xlabel('Training Round')
         ax_right.set_ylabel('Loss')
         ax_right.set_title(f'{name} ({model}) - Loss Progression')
+        ax_right.set_xlim(left=0)
         ax_right.legend(loc='best')
         ax_right.grid(True, alpha=0.3)
         

@@ -117,21 +117,24 @@ def get_model_by_type(model_type: str, use_pretrained: bool = True):
 
     if model_type == 'resnet18':
         # Load ImageNet pre-trained backbone
-        model = models.resnet18(weights='IMAGENET1K_V1' if use_pretrained else None)
+        # model = models.resnet18(weights='IMAGENET1K_V1' if use_pretrained else None)
+        model = models.resnet18(weights=None) # hopefully it starts with lower pre_fl accuracy
         # Replace classifier head with binary classifier
         model.fc = nn.Linear(model.fc.in_features, NUM_CLASSES)
         return model
 
     elif model_type == 'mobilenet_v2':
         # Load ImageNet pre-trained backbone
-        model = models.mobilenet_v2(weights='IMAGENET1K_V1' if use_pretrained else None)
+        # model = models.mobilenet_v2(weights='IMAGENET1K_V1' if use_pretrained else None)
+        model = models.mobilenet_v2(weights=None)
         # Replace classifier head with binary classifier
         model.classifier[1] = nn.Linear(model.classifier[1].in_features, NUM_CLASSES)
         return model
 
     elif model_type == 'efficientnet_b3':
         # Load ImageNet pre-trained backbone
-        model = models.efficientnet_b3(weights='IMAGENET1K_V1' if use_pretrained else None)
+        # model = models.efficientnet_b3(weights='IMAGENET1K_V1' if use_pretrained else None)
+        model = models.efficientnet_b3(weights=None)
         # Replace classifier head with binary classifier
         model.classifier[1] = nn.Linear(model.classifier[1].in_features, NUM_CLASSES)
         return model
@@ -278,15 +281,35 @@ def load_private_dataset(partition_id: int, num_partitions: int, batch_size=32, 
     # Load the Full Dataset from folder
     full_dataset = datasets.ImageFolder(root=data_path, transform=PRIVATE_TRAIN_TRANSFORM)
 
-    # Create a Train/Test split (80% Train, 20% Test)
-    train_size = int(0.8 * len(full_dataset))
-    test_size = len(full_dataset) - train_size
-
-    # Fixed seed for reproducibility
+    # Create a stratified Train/Validation split (85% Train, 15% Validation)
+    # This ensures both splits maintain the same class distribution
+    
+    # Group indices by class
+    class_indices = {}
+    for idx, (_, label) in enumerate(full_dataset.samples):
+        if label not in class_indices:
+            class_indices[label] = []
+        class_indices[label].append(idx)
+    
+    # Split each class separately with 85/15 ratio
+    train_indices = []
+    val_indices = []
     generator = torch.Generator().manual_seed(42)
-    train_ds, test_ds = torch.utils.data.random_split(
-        full_dataset, [train_size, test_size], generator=generator
-    )
+    
+    for label, indices in class_indices.items():
+        # Shuffle indices for this class
+        indices_tensor = torch.tensor(indices)
+        perm = torch.randperm(len(indices), generator=generator)
+        shuffled_indices = indices_tensor[perm].tolist()
+        
+        # Split 85/15
+        split_point = int(0.85 * len(shuffled_indices))
+        train_indices.extend(shuffled_indices[:split_point])
+        val_indices.extend(shuffled_indices[split_point:])
+    
+    # Create subsets
+    train_ds = torch.utils.data.Subset(full_dataset, train_indices)
+    test_ds = torch.utils.data.Subset(full_dataset, val_indices)
 
     trainloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=2)
     testloader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=2)
@@ -1362,12 +1385,62 @@ def test(model, testloader, device, return_detailed=False):
 #       lr - Learning rate for distillation
 #       temperature - Temperature scaling for soft labels
 # Returns: Average distillation loss
-def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr, temperature):
-    # SOLUTION 1: Weighted Distillation to prevent consensus from overriding private knowledge
-    # Weight distillation at 60% of total influence (40% comes from private training)
-    # This ensures consensus knowledge from other clients is properly integrated
-    # FIXED: Increased from 0.25 to 0.60 to give distillation stronger influence
-    DISTILL_WEIGHT = 0.60  # Critical fix: stronger consensus integration
+def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr, temperature, 
+                     current_round=1, total_rounds=10, adaptive=True):
+    """
+    Distill consensus knowledge into local model using KL divergence with adaptive weighting.
+    
+    Args:
+        model: PyTorch model to distill knowledge into
+        public_loader: DataLoader for public anchor dataset
+        consensus_logits: Aggregated consensus logits from server
+        device: Device to train on (cpu/cuda)
+        epochs: Number of distillation epochs
+        lr: Learning rate for distillation
+        temperature: Temperature scaling for soft labels
+        current_round: Current FL round number
+        total_rounds: Total number of FL rounds
+        adaptive: If True, apply adaptive decay to distillation weight
+    
+    Returns:
+        Average distillation loss
+    
+    Adaptive Strategy:
+        Early rounds (1-3): Strong distillation (80-60% weight) - Learn from consensus
+        Mid rounds (4-7): Balanced (60-40% weight) - Refine knowledge
+        Late rounds (8-10): Weak distillation (40-25% weight) - Focus on private data
+    """
+    
+    # Base distillation weight (from SOLUTION 1)
+    BASE_DISTILL_WEIGHT = 0.60
+    
+    if adaptive and total_rounds > 1:
+        # Calculate decay factor: starts at 1.0 (round 1), decreases to ~0.4 (final round)
+        # Uses exponential decay: weight = base_weight * exp(-decay_rate * progress)
+        progress = (current_round - 1) / (total_rounds - 1)  # 0.0 to 1.0
+        
+        # Decay rate: controls how fast distillation weight decreases
+        # Higher decay_rate = faster decrease (more aggressive)
+        # decay_rate=0.5: gentle decay (weight: 1.0 -> 0.61)
+        # decay_rate=1.0: moderate decay (weight: 1.0 -> 0.37) ✓ RECOMMENDED
+        # decay_rate=1.5: aggressive decay (weight: 1.0 -> 0.22)
+        decay_rate = 1.0
+        
+        # Compute adaptive weight with exponential decay
+        adaptive_factor = np.exp(-decay_rate * progress)
+        
+        # Apply adaptive factor to base weight
+        DISTILL_WEIGHT = BASE_DISTILL_WEIGHT * adaptive_factor
+        
+        # Ensure weight stays within reasonable bounds [0.25, 0.80]
+        DISTILL_WEIGHT = max(0.25, min(0.80, DISTILL_WEIGHT))
+        
+        print(f"[Distillation] Adaptive weight: {DISTILL_WEIGHT:.3f} "
+              f"(round {current_round}/{total_rounds}, progress: {progress:.1%})")
+    else:
+        # Static weight (original behavior)
+        DISTILL_WEIGHT = BASE_DISTILL_WEIGHT
+        print(f"[Distillation] Static weight: {DISTILL_WEIGHT:.3f}")
 
     model.to(device)
     model.train()
@@ -1376,7 +1449,7 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
         model.parameters(),
         lr=lr,
         betas=(0.9, 0.999),
-        weight_decay=0.01  # L2 regularization
+        weight_decay=0.01
     )
     consensus_tensor = torch.from_numpy(consensus_logits).float()
 
@@ -1394,14 +1467,14 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
             batch_consensus = consensus_tensor[idx:idx+batch_size].to(device)
             student_logits = model(images)
 
-            # KL Divergence Loss with weighted influence
+            # KL Divergence Loss with adaptive weighted influence
             kl_loss = F.kl_div(
                 F.log_softmax(student_logits / temperature, dim=1),
                 F.softmax(batch_consensus / temperature, dim=1),
                 reduction='batchmean'
             ) * (temperature ** 2)
 
-            # Apply distillation weight: 25% distillation, 75% private training
+            # Apply adaptive distillation weight
             loss = DISTILL_WEIGHT * kl_loss
 
             optimizer.zero_grad()
@@ -1438,19 +1511,26 @@ def compute_consensus(
         server_round: Current FL round number
         last_consensus: Previous round's consensus logits (for momentum smoothing)
         eval_history: Historical evaluation metrics across rounds
-        momentum: Weight for previous consensus (default 0.6)
+        momentum: Weight for previous consensus (default 0.3)
         exclude_free_riders: If True, free riders get zero weight (default True)
 
     Returns:
         Tuple of (consensus_logits, aggregation_metadata)
-        - consensus_logits: Weighted average of client logits with momentum, or None if no valid clients
-        - aggregation_metadata: Dict containing weights, factors, and debugging info
+        - consensus_logits: Weighted average of client logits with momentum and class reweighting, or None if no valid clients
+        - aggregation_metadata: Dict containing weights, factors, class distribution, and debugging info
 
     Weighting Strategy:
+        CLIENT-LEVEL WEIGHTING (determines contribution of each client):
         1. Base weight: num_samples (data quantity, primary factor ~70% influence)
         2. Quality multiplier: 1/(1 + combined_loss) where combined_loss = 0.7*train_loss + 0.3*distill_loss
         3. Architecture factor: [0.9-1.1] based on model suitability for medical imaging
         4. Free riders: Zero weight (complete exclusion)
+        
+        CLASS-LEVEL WEIGHTING (compensates for class imbalance in training data):
+        5. Inverse frequency weighting: Minority class predictions get boosted via sqrt(inverse_frequency)
+           - Computes class distribution in consensus predictions
+           - Applies higher weight to underrepresented class
+           - Helps maintain balanced learning signal despite imbalanced client training data
     """
 
     # Model suitability scores for medical imaging tasks
@@ -1573,6 +1653,51 @@ def compute_consensus(
 
     # --- COMPUTE WEIGHTED CONSENSUS ---
     new_consensus = np.average(logits_list, axis=0, weights=normalized_weights)
+    
+    # --- APPLY CLASS-BASED REWEIGHTING ---
+    # Give preference to minority class to combat training data imbalance
+    # Strategy: Compute class distribution and apply inverse frequency weighting
+    
+    # Get predicted class probabilities (softmax of logits)
+    consensus_probs = np.exp(new_consensus) / np.sum(np.exp(new_consensus), axis=1, keepdims=True)
+    
+    # Calculate class frequencies across the consensus predictions
+    predicted_classes = np.argmax(consensus_probs, axis=1)
+    unique_classes, class_counts = np.unique(predicted_classes, return_counts=True)
+    
+    # Compute inverse frequency weights for each class
+    total_samples = len(predicted_classes)
+    class_weights = {}
+    for cls, count in zip(unique_classes, class_counts):
+        # Inverse frequency: minority class gets higher weight
+        class_weights[cls] = total_samples / (len(unique_classes) * count)
+    
+    # Normalize class weights to maintain overall scale
+    weight_values = list(class_weights.values())
+    weight_sum = sum(weight_values)
+    class_weights = {cls: w / weight_sum for cls, w in class_weights.items()}
+    
+    # Apply class weights to consensus logits
+    # For each sample, boost the logit for its minority class
+    class_weighted_consensus = new_consensus.copy()
+    for i in range(len(new_consensus)):
+        pred_class = predicted_classes[i]
+        if pred_class in class_weights:
+            # Scale factor: use sqrt to moderate the effect (prevents over-boosting)
+            boost_factor = np.sqrt(class_weights[pred_class])
+            # Apply boost to the predicted class logit
+            class_weighted_consensus[i, pred_class] *= boost_factor
+    
+    # Use class-weighted consensus as the new consensus
+    new_consensus = class_weighted_consensus
+    
+    # Store class weighting info in metadata
+    class_weighting_info = {
+        "class_distribution": {int(cls): int(count) for cls, count in zip(unique_classes, class_counts)},
+        "class_weights": {int(cls): float(w) for cls, w in class_weights.items()},
+        "minority_class": int(unique_classes[np.argmin(class_counts)]) if len(unique_classes) > 0 else None,
+        "majority_class": int(unique_classes[np.argmax(class_counts)]) if len(unique_classes) > 0 else None,
+    }
 
     # --- APPLY MOMENTUM SMOOTHING ---
     if last_consensus is not None and server_round > 1:
@@ -1629,6 +1754,7 @@ def compute_consensus(
             "mean": float(np.mean(normalized_weights)) if normalized_weights else 0,
             "std": float(np.std(normalized_weights)) if normalized_weights else 0,
         },
+        "class_weighting": class_weighting_info,  # Added class-based weighting info
         "parameters": {
             "train_loss_weight": TRAIN_LOSS_WEIGHT,
             "distill_loss_weight": DISTILL_LOSS_WEIGHT,

@@ -63,7 +63,6 @@ def load_model_for_client(partition_id: int, config_path: str = CLIENT_INFO_FILE
 
 @app.train()
 def train(msg: Message, context: Context):
-    # Extract client configuration from Flower context
     partition_id = context.node_config["partition-id"]
     num_partitions = context.node_config["num-partitions"]
     total_rounds = context.run_config["num-server-rounds"]
@@ -89,7 +88,7 @@ def train(msg: Message, context: Context):
     if not os.path.exists(model_dir):
         os.makedirs(model_dir, exist_ok=True)
 
-    # Resume from existing checkpoint if available (supports multi-round training)
+    # Resume from existing checkpoint if available
     if os.path.exists(model_path):
         try:
             model, metadata = load_existing_model(model, model_path, device)
@@ -100,8 +99,7 @@ def train(msg: Message, context: Context):
 
     model.to(device)
 
-    # Phase 1: Knowledge Distillation from Server Consensus
-    # Clients learn from aggregated soft predictions on shared public dataset
+    # Phase 1: Adaptive Knowledge Distillation from Server Consensus
     distill_loss = 0.0
     has_local_data = client_config['has_local_data']
 
@@ -109,17 +107,22 @@ def train(msg: Message, context: Context):
         try:
             consensus_logits = msg.content["arrays"]["0"].numpy()
 
-            # Skip distillation in Round 1 (no consensus yet from previous round)
+            # Skip distillation in Round 1 (no consensus yet)
             if np.any(consensus_logits != 0):
-                # Free riders need more distillation epochs since they can't train on private data
+                # Free riders need more distillation epochs
                 distill_epochs = 2 if has_local_data else 8
-                distill_lr = 0.001 if has_local_data else 0.002  # Slightly higher LR for free riders
-                temperature = 3.0  # Softer labels for better generalization
+                distill_lr = 0.001 if has_local_data else 0.002
+                temperature = 3.0
 
-                print(f"[Client {partition_id}] Phase 1: Knowledge Distillation ({distill_epochs} epochs)")
+                print(f"[Client {partition_id}] Phase 1: Adaptive Knowledge Distillation ({distill_epochs} epochs)")
 
-                public_loader = load_public_dataset(batch_size=32, round_num=server_round, total_rounds=total_rounds)
+                public_loader = load_public_dataset(
+                    batch_size=32, 
+                    round_num=server_round, 
+                    total_rounds=total_rounds
+                )
 
+                # KEY CHANGE: Pass current_round and total_rounds for adaptive weighting
                 distill_loss = distill_knowledge(
                     model=model,
                     public_loader=public_loader,
@@ -127,33 +130,29 @@ def train(msg: Message, context: Context):
                     device=device,
                     epochs=distill_epochs,
                     lr=distill_lr,
-                    temperature=temperature
+                    temperature=temperature,
+                    current_round=server_round,  # NEW
+                    total_rounds=total_rounds,   # NEW
+                    adaptive=True                # NEW: Enable adaptive decay
                 )
                 print(f"[Client {partition_id}] ✓ Distillation Loss: {distill_loss:.4f}")
         except Exception as e:
             print(f"[Client {partition_id}] ✗ Distillation failed: {e}")
 
     # Phase 2: Private Training on Client's Local Dataset
-    # Only clients with has_local_data=true participate in this phase
     print(f"[Client {partition_id}] Phase 2: Private Training")
 
     train_loss = 0.0
     training_time = 0.0
     dataset_len = 0
 
-    # Extract model_type from client config for progressive fine-tuning
     model_type = client_config['model_type']
 
-    # SOLUTION 2: Learning Rate Decay to stabilize convergence
-    # Apply exponential decay: lr * (lr_decay ^ (round - 1))
-    # Round 1: lr = base_lr * 1.0
-    # Round 2: lr = base_lr * 0.9
-    # Round 5: lr = base_lr * 0.656
-    # Round 10: lr = base_lr * 0.387
-    lr_decay_factor = context.run_config.get("lr-decay", 0.90)  # Read from config, default 0.90
+    # Learning Rate Decay
+    lr_decay_factor = context.run_config.get("lr-decay", 0.90)
     base_lr = msg.content["config"]["lr"]
     decayed_lr = base_lr * (lr_decay_factor ** (server_round - 1))
-    print(f"[Client {partition_id}] Learning Rate: {decayed_lr:.6f} (base: {base_lr:.6f}, decay: {lr_decay_factor}, round: {server_round})")
+    print(f"[Client {partition_id}] Learning Rate: {decayed_lr:.6f}")
 
     trainloader, _ = load_private_dataset(partition_id, num_partitions, batch_size=32)
 
@@ -165,35 +164,38 @@ def train(msg: Message, context: Context):
             model=model,
             trainloader=trainloader,
             epochs=context.run_config["local-epochs"],
-            lr=decayed_lr,  # Use decayed learning rate instead of base lr
+            lr=decayed_lr,
             device=device,
-            model_type=model_type  # Pass model_type for progressive fine-tuning
+            model_type=model_type
         )
         training_time = time.time() - start_time
 
         print(f"[Client {partition_id}] ✓ Training Loss: {train_loss:.4f} ({dataset_len} samples, {training_time:.1f}s)")
     else:
-        # Free riders: Supervised training on public anchor dataset
-        # This helps them learn from labeled public data in addition to distillation
+        # Free riders: Public dataset training
         print(f"[Client {partition_id}] Phase 2b: Public Dataset Training (Free Rider)")
 
-        public_supervised_loader = load_public_dataset(batch_size=32,round_num=server_round, total_rounds=total_rounds)
+        public_supervised_loader = load_public_dataset(
+            batch_size=32,
+            round_num=server_round, 
+            total_rounds=total_rounds
+        )
         dataset_len = len(public_supervised_loader.dataset)
 
         start_time = time.time()
         train_loss = train_fn(
             model=model,
             trainloader=public_supervised_loader,
-            epochs=3,  # Fewer epochs to prevent overfitting to public data
-            lr=0.0005,  # Lower LR for stability
+            epochs=3,
+            lr=0.0005,
             device=device,
-            model_type=model_type  # Pass model_type for progressive fine-tuning
+            model_type=model_type
         )
         training_time = time.time() - start_time
 
-        print(f"[Client {partition_id}] ✓ Public Training Loss: {train_loss:.4f} ({dataset_len} samples, {training_time:.1f}s)")
+        print(f"[Client {partition_id}] ✓ Public Training Loss: {train_loss:.4f}")
 
-    # Save updated model checkpoint with round metadata
+    # Save updated model checkpoint
     try:
         save_model_checkpoint(
             model=model,
@@ -205,15 +207,18 @@ def train(msg: Message, context: Context):
     except Exception as e:
         print(f"[Client {partition_id}] ✗ Save failed: {e}")
 
-    # Generate predictions on public dataset for server aggregation
-    # These logits will be aggregated into consensus for next round's distillation
+    # Generate public logits for aggregation
     print(f"[Client {partition_id}] Generating public logits for aggregation...")
-    public_loader = load_public_dataset(batch_size=32,round_num=server_round, total_rounds=total_rounds)
+    public_loader = load_public_dataset(
+        batch_size=32,
+        round_num=server_round, 
+        total_rounds=total_rounds
+    )
     public_logits = get_public_logits(model, public_loader, device)
 
     print(f"[Client {partition_id}] Round {server_round} Complete\n")
 
-    # Package results for server aggregation
+    # Package results
     logits_record = ArrayRecord([public_logits])
 
     metrics = {
