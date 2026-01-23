@@ -45,7 +45,7 @@ def get_clients(supabase: SupabaseClient = Depends(get_supabase_client)):
     response = supabase.from_("clients").select("*").execute()
     if response.data is None:
         raise HTTPException(status_code=404, detail="Clients not found")
-    
+
     # Fix incompatible data from DB to match new Schema
     cleaned_data = [fix_client_data(c) for c in response.data]
     return cleaned_data

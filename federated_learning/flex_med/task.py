@@ -7,7 +7,8 @@ import json
 import torch.nn as nn
 from torchvision import models, datasets, transforms
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
+from collections import Counter
 from torchvision.transforms import Compose, ToTensor, Normalize
 from typing import Tuple, Optional, Iterable, Dict, List
 import uuid
@@ -225,6 +226,31 @@ def get_trainable_params(model):
     return trainable, frozen, total
 
 
+
+# Computes a WeightedRandomSampler to handle class imbalance
+# Args: targets - List or array of class labels for the dataset
+# Returns: WeightedRandomSampler instance
+def get_weighted_sampler(targets):
+    # Calculate class counts
+    class_counts = Counter(targets)
+    
+    # Calculate weight for each class (inverse frequency)
+    # Strategy: Weight = 1.0 / count
+    class_weights = {cls: 1.0 / count for cls, count in class_counts.items()}
+    
+    # Assign weight to each sample
+    sample_weights = [class_weights[t] for t in targets]
+    
+    # Create sampler
+    # replacement=True is standard for oversampling minority classes
+    sampler = WeightedRandomSampler(
+        weights=sample_weights,
+        num_samples=len(sample_weights),
+        replacement=True
+    )
+    
+    return sampler
+
 # <------------------------------------------ DATA LOADER FUNCTION DEFINITIONS ------------------------------------------>
 
 # Provides shared dataset for generating consensus logits across clients
@@ -326,6 +352,18 @@ def load_private_dataset(partition_id: int, num_partitions: int, batch_size=32, 
     # Create subsets
     train_ds = torch.utils.data.Subset(full_dataset, train_indices)
     test_ds = torch.utils.data.Subset(full_dataset, val_indices)
+
+    # # <--- Weighted Random Sampler for Class Imbalance : COMMENTED BECUASE PERFORMANCE WAS BADE - CHECK ON THIS --->
+    # # Extract targets for the training subset
+    # # Note: subset.dataset returns the full dataset, so we need to index into it
+    # train_targets = [full_dataset.targets[i] for i in train_indices]
+    
+    # train_sampler = get_weighted_sampler(train_targets)
+    # print(f"[Data] Client {partition_id}: Activated WeightedRandomSampler for class balance")
+
+    # # Critical: shuffle must be False when using a sampler
+    # trainloader = DataLoader(train_ds, batch_size=batch_size, sampler=train_sampler, shuffle=False, num_workers=2)
+    # testloader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=2)
 
     trainloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=2)
     testloader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=2)
