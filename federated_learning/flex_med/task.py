@@ -21,7 +21,23 @@ from flwr.common import (
 )
 from flwr.server import Grid
 from flwr.serverapp.strategy import Strategy
-from flex_med.utils.config import BASE_PATH, CLIENT_INFO_FILE_PATH, DATASET_FILE_PATH, PUBLIC_ANCHOR_DATASET_PATH, PUBLIC_TEST_DATASET_PATH, MODEL_CHECKPOINT_FILE_PATH, ROUND_METRICS_FILE_PATH, GRAPHS_OUTPUT_DIR, NUM_CLASSES, IMG_SIZE, DATA_JSON_PATH
+from flex_med.utils.config import (
+    BASE_PATH, 
+    CLIENT_INFO_FILE_PATH, 
+    DATASET_FILE_PATH, 
+    PUBLIC_ANCHOR_DATASET_PATH, 
+    PUBLIC_TEST_DATASET_PATH, 
+    MODEL_CHECKPOINT_FILE_PATH, 
+    ROUND_METRICS_FILE_PATH, 
+    GRAPHS_OUTPUT_DIR, 
+    NUM_CLASSES, 
+    IMG_SIZE, 
+    DATA_JSON_PATH, 
+    MODEL_SUITABILITY_SCORES, 
+    TRAIN_LOSS_WEIGHT, 
+    DISTILL_LOSS_WEIGHT, 
+    CONSENSUS_MOMENTUM
+)
 from datetime import datetime
 
 # <------------------------------------------ DATA TRANSFORMS ------------------------------------------>
@@ -1492,38 +1508,40 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
 # <------------------------------------------ CONSENSUS COMPUTATION ------------------------------------------>
 
 def compute_consensus(
-    logits_list: List[np.ndarray],
+    logits_list: List[np.ndarray], 
     client_metrics: List[Dict],
     client_configs: List[Dict],
     server_round: int,
     last_consensus: Optional[np.ndarray] = None,
     eval_history: Optional[List[Dict]] = None,
-    momentum: float = 0.3,  # FIXED: Reduced from 0.6 to 0.3 for faster consensus evolution (30% old, 70% new)
+    momentum: float = CONSENSUS_MOMENTUM,
     exclude_free_riders: bool = True,
 ) -> Tuple[Optional[np.ndarray], Dict]:
-    """
-    Compute weighted consensus from client logits with sophisticated aggregation strategy.
-
+    """ 
+    Computes a robust consensus value by aggregating client logits from the anchor dataset using multi-factor quality weighting.
     Args:
-        logits_list: List of numpy arrays containing client predictions on public dataset
-        client_metrics: List of dicts with training metrics (train_loss, distill_loss, num-examples, has_local_data)
-        client_configs: List of client configuration dicts (model_type, client_name, etc.)
-        server_round: Current FL round number
-        last_consensus: Previous round's consensus logits (for momentum smoothing)
-        eval_history: Historical evaluation metrics across rounds
-        momentum: Weight for previous consensus (default 0.3)
-        exclude_free_riders: If True, free riders get zero weight (default True)
+        - logits_list: List of numpy arrays containing client predictions on public dataset
+            Ex : logits_list = [
+                    array_client_0, # Shape: (100, 2) - 100 rows of images and 2 columns (leukemia, healthy)
+                    array_client_1, # Shape: (100, 2)
+                ]
+        - server_round: Current FL round number
+        - client_configs: List of client configuration dicts (model_type, client_name, etc.)
+        - client_metrics: List of dicts with training metrics (train_loss, distill_loss, num-examples, has_local_data)
+        - last_consensus: Previous round's consensus logits (for momentum smoothing)
+        - eval_history: Historical evaluation metrics across rounds
+        - momentum: Weight for previous consensus (default 0.3)
+        - exclude_free_riders: If True, free riders get zero weight (default True)
 
     Returns:
-        Tuple of (consensus_logits, aggregation_metadata)
         - consensus_logits: Weighted average of client logits with momentum and class reweighting, or None if no valid clients
         - aggregation_metadata: Dict containing weights, factors, class distribution, and debugging info
 
     Weighting Strategy:
-        CLIENT-LEVEL WEIGHTING (determines contribution of each client):
-        1. Base weight: num_samples (data quantity, primary factor ~70% influence)
-        2. Quality multiplier: 1/(1 + combined_loss) where combined_loss = 0.7*train_loss + 0.3*distill_loss
-        3. Architecture factor: [0.9-1.1] based on model suitability for medical imaging
+        CLIENT-LEVEL WEIGHTING (determines weightage based on contribution by each client):
+        1. Number of data points for local trainig per client (highest influence)
+        2. Calculates the combined loss from both the private training loss and the distillation loss
+        3. Model architecture factor on model suitability for medical imaging
         4. Free riders: Zero weight (complete exclusion)
         
         CLASS-LEVEL WEIGHTING (compensates for class imbalance in training data):
@@ -1533,34 +1551,7 @@ def compute_consensus(
            - Helps maintain balanced learning signal despite imbalanced client training data
     """
 
-    # Model suitability scores for medical imaging tasks
-    MODEL_SUITABILITY_SCORES = {
-        # Tier 1: Excellent (ResNet, DenseNet - skip connections, dense features)
-        'resnet18': 1.10, 'resnet34': 1.10, 'resnet50': 1.10, 'resnet101': 1.10, 'resnet152': 1.10,
-        'densenet121': 1.10, 'densenet161': 1.10, 'densenet169': 1.10, 'densenet201': 1.10,
-
-        # Tier 2: Good (EfficientNet, Inception - balanced efficiency/accuracy)
-        'efficientnet_b0': 1.05, 'efficientnet_b1': 1.05, 'efficientnet_b2': 1.05,
-        'efficientnet_b3': 1.05, 'efficientnet_b4': 1.05, 'efficientnet_b5': 1.05,
-        'efficientnet_b6': 1.05, 'efficientnet_b7': 1.05,
-        'inception_v3': 1.05, 'googlenet': 1.05,
-
-        # Tier 3: Standard (VGG - proven baseline)
-        'vgg16': 1.00, 'vgg19': 1.00,
-
-        # Tier 4: Mobile-optimized (may sacrifice accuracy for efficiency)
-        'mobilenet_v2': 0.95, 'mobilenet_v3_small': 0.90, 'mobilenet_v3_large': 0.95,
-        'squeezenet': 0.90,
-
-        # Tier 5: Older/less suitable
-        'alexnet': 0.90, 'vgg11': 0.95, 'vgg13': 0.95,
-    }
-
-    # Loss weighting parameters (for quality multiplier)
-    TRAIN_LOSS_WEIGHT = 0.7  # Private training more important
-    DISTILL_LOSS_WEIGHT = 0.3  # Distillation secondary
-
-    # Validate inputs
+    # Validate Inputs
     if not logits_list or len(logits_list) == 0:
         return None, {"error": "No client logits provided"}
 
@@ -1585,9 +1576,9 @@ def compute_consensus(
         model_type = config.get("model_type", "unknown").lower()
         client_name = config.get("client_name", f"client_{i}")
 
-        # --- FACTOR 1: Free Rider Exclusion ---
+        # <------------------- 1. Free Rider Exclusion -------------------->
         if exclude_free_riders and not has_local_data:
-            weights.append(0.0)
+            weights.append(0.0) # Set to 0
             weight_breakdown.append({
                 "client_name": client_name,
                 "model_type": model_type,
@@ -1599,27 +1590,22 @@ def compute_consensus(
             })
             continue
 
-        # --- FACTOR 2: Base Weight (Data Quantity) ---
-        # Primary factor: clients with more data get higher base weight
+        # <------------------- 2. Local Dataset Point Quantity -------------------->
+        # Clients with more data get higher base weight
         base_weight = max(num_samples, 1)  # At least 1 to avoid zero division
 
-        # --- FACTOR 3: Quality Multiplier (Training Convergence) ---
+        # <------------------- 3. Combined Loss Calculation (Distill Loss and Train Loss) : Determines the quality of the logits -------------------->
         # Lower combined loss = better convergence = higher multiplier
         combined_loss = (TRAIN_LOSS_WEIGHT * train_loss +
                         DISTILL_LOSS_WEIGHT * distill_loss)
 
-        # Quality multiplier: 1/(1 + loss) maps loss to [0, 1]
-        # loss=0 -> multiplier=1.0, loss=1 -> multiplier=0.5, loss=10 -> multiplier=0.09
         quality_multiplier = 1.0 / (1.0 + combined_loss)
 
-        # --- FACTOR 4: Architecture Suitability Factor ---
-        # Small adjustment based on model's suitability for medical imaging
+        # <------------------- 4. Model Achitecture Suitability Factor -------------------->
         architecture_factor = MODEL_SUITABILITY_SCORES.get(model_type, 1.0)
 
-        # --- COMPUTE FINAL WEIGHT ---
-        final_weight = (base_weight *
-                       quality_multiplier *
-                       architecture_factor)
+        # <------------------- Compte Final Weight -------------------->
+        final_weight = (base_weight * quality_multiplier * architecture_factor)
 
         weights.append(final_weight)
         weight_breakdown.append({
@@ -1635,29 +1621,32 @@ def compute_consensus(
             "final_weight": final_weight,
         })
 
-    # --- NORMALIZE WEIGHTS ---
+    # <------------------- Normalize Weights -------------------->
     total_weight = sum(weights)
 
     if total_weight == 0:
-        # All clients are free riders or have zero weight
+            # All clients are free riders or have zero weight
         return None, {
             "error": "All clients excluded (free riders or zero weight)",
             "weight_breakdown": weight_breakdown
         }
 
-    normalized_weights = [w / total_weight for w in weights]
+    normalized_weights = []
+    for w in weights: 
+        value = w / total_weight
+        normalized_weights.append(value)
 
     # Update weight breakdown with normalized values
     for i, breakdown in enumerate(weight_breakdown):
         breakdown["normalized_weight"] = normalized_weights[i]
 
-    # --- COMPUTE WEIGHTED CONSENSUS ---
-    new_consensus = np.average(logits_list, axis=0, weights=normalized_weights)
-    
-    # --- APPLY CLASS-BASED REWEIGHTING ---
+    # <------------------- Calculate weighted consensus -------------------->
+    new_consensus = np.average(logits_list, axis=0, weights=normalized_weights) # Weights will be the multiplying factor here when averaging
+
+    # <------------------- Class based reweighting -------------------->
     # Give preference to minority class to combat training data imbalance
     # Strategy: Compute class distribution and apply inverse frequency weighting
-    
+
     # Get predicted class probabilities (softmax of logits)
     consensus_probs = np.exp(new_consensus) / np.sum(np.exp(new_consensus), axis=1, keepdims=True)
     
@@ -1699,7 +1688,7 @@ def compute_consensus(
         "majority_class": int(unique_classes[np.argmax(class_counts)]) if len(unique_classes) > 0 else None,
     }
 
-    # --- APPLY MOMENTUM SMOOTHING ---
+    # <------------------- Momentum Smoothing : Controls temporal smoothing (Technique to reduce fluctuations and noise over time) of the consensus logits across FL rounds.  -------------------->
     if last_consensus is not None and server_round > 1:
         # Check for shape mismatch due to growing dataset (gradual release)
         if last_consensus.shape != new_consensus.shape:
@@ -1707,7 +1696,6 @@ def compute_consensus(
             if new_consensus.shape[0] > last_consensus.shape[0]:
                 # Create a padded version of last_consensus
                 # We can either zero-pad or just use new_consensus values for the new part
-                # Strategy: For the OLD part, use momentum. For the NEW part, use new_consensus only.
                 
                 # Verify standard width (num_classes) compatibility
                 if new_consensus.shape[1] != last_consensus.shape[1]:
@@ -2234,7 +2222,7 @@ class FLEXMedStrategy(Strategy):
             server_round=server_round,
             last_consensus=self.last_consensus_logits,
             eval_history=self.eval_history,
-            momentum=0.6,
+            momentum=CONSENSUS_MOMENTUM,
             exclude_free_riders=True
         )
 
