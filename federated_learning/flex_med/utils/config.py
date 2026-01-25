@@ -74,4 +74,4 @@ MODEL_SUITABILITY_SCORES = {
 TRAIN_LOSS_WEIGHT = 0.7  # Private training more important
 DISTILL_LOSS_WEIGHT = 0.3  # Distillation secondary
 
-CONSENSUS_MOMENTUM=0.8
+CONSENSUS_MOMENTUM=0.5

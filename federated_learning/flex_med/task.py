@@ -50,19 +50,14 @@ COMMON_TRANSFORM = Compose([
     Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 
-# Enhanced Augmentation for Private Training (critical for small datasets like ALL-IDB2)
 PRIVATE_TRAIN_TRANSFORM = Compose([
     transforms.Resize((IMG_SIZE, IMG_SIZE)),
     transforms.RandomHorizontalFlip(p=0.5),
-    transforms.RandomVerticalFlip(p=0.5),
-    transforms.RandomRotation(30),
-    transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2, hue=0.1),
-    transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
-    transforms.RandomPerspective(distortion_scale=0.2, p=0.3),
-    transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 1.5)),
+    transforms.RandomVerticalFlip(p=0.3),
+    transforms.RandomRotation(15),
+    transforms.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.1, hue=0.05), 
     ToTensor(),
     Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    transforms.RandomErasing(p=0.2, scale=(0.02, 0.1)),  # Cutout augmentation (after ToTensor)
 ])
 
 # <------------------------------------------ UTILITY FUNCTIONS ------------------------------------------>
@@ -260,44 +255,20 @@ def load_public_dataset(batch_size=64, round_num=1, total_rounds=10):
     if not os.path.exists(PUBLIC_ANCHOR_DATASET_PATH):
         raise FileNotFoundError(f"Public data not found at {PUBLIC_ANCHOR_DATASET_PATH}")
 
-    # Load full dataset first
+    # Load full dataset
+    # Note: round_num and total_rounds are ignored as we now use the full dataset every round
+    # This change was requested to improve training stability by using the full anchor
     full_dataset = datasets.ImageFolder(root=PUBLIC_ANCHOR_DATASET_PATH, transform=COMMON_TRANSFORM)
     
-    # Create deterministic subsets
-    # Strategy: Split indices for each class into `total_rounds` buckets
-    # Then take buckets 0 to `round_num` (exclusive if we used 0-indexing, but we want cumulative)
+    # Deterministically shuffle all indices to ensure:
+    # 1. Consistent order across all clients and server (critical for consensus alignment)
+    # 2. Mixed classes in each batch (better for training/distillation)
+    generator = torch.Generator().manual_seed(42)
+    indices = torch.randperm(len(full_dataset), generator=generator).tolist()
     
-    # 1. Group indices by class
-    class_indices = {}
-    for idx, (_, label) in enumerate(full_dataset.samples):
-        if label not in class_indices:
-            class_indices[label] = []
-        class_indices[label].append(idx)
-        
-    # 2. Shuffle indices deterministically and split into chunks
-    selected_indices = []
-    generator = torch.Generator().manual_seed(42)  # Critical for consistency across clients
+    subset = torch.utils.data.Subset(full_dataset, indices)
     
-    for label, indices in class_indices.items():
-        # Shuffle indices for this class
-        indices_tensor = torch.tensor(indices)
-        perm = torch.randperm(len(indices), generator=generator)
-        shuffled_indices = indices_tensor[perm].tolist()
-        
-        # Determine chunk size per round
-        # Use ceil to ensure we cover all data even if not perfectly divisible
-        chunk_size = int(np.ceil(len(indices) / total_rounds))
-        
-        # Select accumulated chunks up to current round
-        end_idx = min(len(indices), chunk_size * round_num)
-        selected_indices.extend(shuffled_indices[:end_idx])
-        
-    # 3. Create Subset
-    # Do NOT sort indices. reliable appending depends on the order being [Round1_Indices, Round2_Indices, ...]
-    # selected_indices is already constructed in that order (shuffled_chunk_1 + shuffled_chunk_2 + ...).
-    subset = torch.utils.data.Subset(full_dataset, selected_indices)
-    
-    # Shuffle=False is CRITICAL for FL simulation so all clients see images in the same order
+    # Shuffle=False because we already shuffled indices deterministically
     loader = DataLoader(subset, batch_size=batch_size, shuffle=False, num_workers=2)
     return loader
 
@@ -353,19 +324,16 @@ def load_private_dataset(partition_id: int, num_partitions: int, batch_size=32, 
     train_ds = torch.utils.data.Subset(full_dataset, train_indices)
     test_ds = torch.utils.data.Subset(full_dataset, val_indices)
 
-    # # <--- Weighted Random Sampler for Class Imbalance : COMMENTED BECUASE PERFORMANCE WAS BADE - CHECK ON THIS --->
-    # # Extract targets for the training subset
-    # # Note: subset.dataset returns the full dataset, so we need to index into it
-    # train_targets = [full_dataset.targets[i] for i in train_indices]
+    # <--- Weighted Random Sampler for Class Imbalance --->
+    # Extract targets for the training subset
+    # Note: subset.dataset returns the full dataset, so we need to index into it
+    train_targets = [full_dataset.targets[i] for i in train_indices]
     
-    # train_sampler = get_weighted_sampler(train_targets)
-    # print(f"[Data] Client {partition_id}: Activated WeightedRandomSampler for class balance")
+    train_sampler = get_weighted_sampler(train_targets)
+    print(f"[Data] Client {partition_id}: Activated WeightedRandomSampler for class balance")
 
-    # # Critical: shuffle must be False when using a sampler
-    # trainloader = DataLoader(train_ds, batch_size=batch_size, sampler=train_sampler, shuffle=False, num_workers=2)
-    # testloader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=2)
-
-    trainloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=2)
+    # Critical: shuffle must be False when using a sampler
+    trainloader = DataLoader(train_ds, batch_size=batch_size, sampler=train_sampler, shuffle=False, num_workers=2)
     testloader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=2)
 
     return trainloader, testloader
@@ -1194,8 +1162,8 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None):
     model.to(device)
 
     # Use Focal Loss to handle class imbalance and hard examples
-    criterion = FocalLoss(alpha=0.25, gamma=2.0)
-    print(f"[Train] Using Focal Loss (alpha=0.25, gamma=2.0) for class imbalance handling")
+    criterion = FocalLoss(alpha=0.60, gamma=2.0)
+    print(f"[Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling")
 
     # Calculate epoch split for two-stage training
     # Stage 1: 40% of epochs (minimum 2 epochs)
@@ -1478,7 +1446,7 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
         # decay_rate=0.5: gentle decay (weight: 1.0 -> 0.61)
         # decay_rate=1.0: moderate decay (weight: 1.0 -> 0.37) ✓ RECOMMENDED
         # decay_rate=1.5: aggressive decay (weight: 1.0 -> 0.22)
-        decay_rate = 1.0
+        decay_rate = 0.3
         
         # Compute adaptive weight with exponential decay
         adaptive_factor = np.exp(-decay_rate * progress)

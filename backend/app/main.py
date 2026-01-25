@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import clients, federated, predict
+from app.routes import clients, federated, inference
 from app.config import get_settings
 
 settings = get_settings()
@@ -27,7 +27,7 @@ app.add_middleware(
 # Include routers
 app.include_router(clients.router, prefix="/api", tags=["Clients"])
 app.include_router(federated.router, prefix="/api", tags=["Federated Learning"])
-app.include_router(predict.router, prefix="/api", tags=["Predictions"])
+app.include_router(inference.router, prefix="/api", tags=["Inference"])
 
 
 @app.get("/")

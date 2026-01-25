@@ -75,20 +75,20 @@ export default function StartFLPage() {
     setSelectedClients((prev) =>
       prev.includes(clientId)
         ? prev.filter((id) => id !== clientId)
-        : [...prev, clientId]
+        : [...prev, clientId],
     );
   };
 
   const handleStart = async () => {
     // Validation
-    if (selectedClients.length === 0) {
-      toast.error("Please select at least one client");
-      return;
-    }
-    if (!selectedDataset) {
-      toast.error("Please select a dataset");
-      return;
-    }
+    // if (selectedClients.length === 0) {
+    //   toast.error("Please select at least one client");
+    //   return;
+    // }
+    // if (!selectedDataset) {
+    //   toast.error("Please select a dataset");
+    //   return;
+    // }
 
     try {
       setIsStarting(true);
@@ -115,19 +115,20 @@ export default function StartFLPage() {
 
       const data: StartFLResponse = await response.json();
 
-      toast.success(`Federated learning simulation started! (ID: ${data.simulation_id})`);
+      toast.success(
+        `Federated learning simulation started! (ID: ${data.simulation_id})`,
+      );
 
       // Redirect to the simulation details page after 1 second
       setTimeout(() => {
         router.push(`/federated/${data.simulation_id}`);
       }, 1000);
-
     } catch (error) {
       console.error("Failed to start federated learning:", error);
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to start simulation. Check backend service."
+          : "Failed to start simulation. Check backend service.",
       );
     } finally {
       setIsStarting(false);
@@ -209,7 +210,7 @@ export default function StartFLPage() {
                       <button
                         onClick={() =>
                           handleClientToggle(
-                            dummyClients.find((c) => c.name === name)!.id
+                            dummyClients.find((c) => c.name === name)!.id,
                           )
                         }
                         className="ml-1 hover:bg-primary/20 rounded-full p-0.5"
@@ -231,7 +232,10 @@ export default function StartFLPage() {
             </h2>
             <div className="space-y-3">
               <Label>Public Dataset</Label>
-              <Select value={selectedDataset} onValueChange={setSelectedDataset}>
+              <Select
+                value={selectedDataset}
+                onValueChange={setSelectedDataset}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select a dataset..." />
                 </SelectTrigger>
@@ -264,7 +268,10 @@ export default function StartFLPage() {
                   type="number"
                   value={config.numRounds}
                   onChange={(e) =>
-                    setConfig({ ...config, numRounds: parseInt(e.target.value) })
+                    setConfig({
+                      ...config,
+                      numRounds: parseInt(e.target.value),
+                    })
                   }
                   min="1"
                 />
@@ -277,7 +284,10 @@ export default function StartFLPage() {
                   type="number"
                   value={config.localEpochs}
                   onChange={(e) =>
-                    setConfig({ ...config, localEpochs: parseInt(e.target.value) })
+                    setConfig({
+                      ...config,
+                      localEpochs: parseInt(e.target.value),
+                    })
                   }
                   min="1"
                 />
@@ -306,7 +316,10 @@ export default function StartFLPage() {
                   type="number"
                   value={config.batchSize}
                   onChange={(e) =>
-                    setConfig({ ...config, batchSize: parseInt(e.target.value) })
+                    setConfig({
+                      ...config,
+                      batchSize: parseInt(e.target.value),
+                    })
                   }
                   min="1"
                 />
@@ -386,7 +399,9 @@ export default function StartFLPage() {
               </div>
               <div>
                 <p className="text-muted-foreground">Federated Rounds</p>
-                <p className="font-medium text-foreground">{config.numRounds}</p>
+                <p className="font-medium text-foreground">
+                  {config.numRounds}
+                </p>
               </div>
               <div>
                 <p className="text-muted-foreground">Local Epochs</p>
@@ -402,7 +417,9 @@ export default function StartFLPage() {
               </div>
               <div>
                 <p className="text-muted-foreground">Batch Size</p>
-                <p className="font-medium text-foreground">{config.batchSize}</p>
+                <p className="font-medium text-foreground">
+                  {config.batchSize}
+                </p>
               </div>
             </div>
           </div>
@@ -418,7 +435,8 @@ export default function StartFLPage() {
               {isStarting ? "Starting Simulation..." : "Start FL Simulation"}
             </button>
             <p className="text-xs text-muted-foreground mt-3 text-center">
-              This will initiate federated learning with the selected configuration
+              This will initiate federated learning with the selected
+              configuration
             </p>
           </div>
         </div>

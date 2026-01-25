@@ -22,7 +22,7 @@ router = APIRouter()
 
 # Load orchestrator URL from settings
 # Ngrok URL for local training orchestrator (update when Colab session changes)
-FEDERATED_TRAINING_ORCHESTRATOR_URL = "https://02d564fec0cd.ngrok-free.app"
+FEDERATED_TRAINING_ORCHESTRATOR_URL = "https://08261171662e.ngrok-free.app"
 
 # Global FL pipeline status tracker
 fl_status = {

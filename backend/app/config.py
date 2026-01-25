@@ -1,5 +1,6 @@
 """Configuration module for FLEX-Med FastAPI application."""
 import os
+from pathlib import Path
 from functools import lru_cache
 from pydantic_settings import BaseSettings
 from supabase import create_client, Client as SupabaseClient
@@ -11,15 +12,15 @@ load_dotenv()
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
-    
+
     # Supabase configuration
     supabase_url: str = os.getenv("SUPABASE_URL", "")
     supabase_key: str = os.getenv("SUPABASE_KEY", "")
-    
+
     # Application configuration
     app_name: str = "FLEX-Med API"
     debug: bool = os.getenv("DEBUG", "false").lower() == "true"
-    
+
     # Orchestrator URLs
     local_train_orchestrator_url: str = os.getenv(
         "LOCAL_TRAIN_ORCHESTRATOR_URL",
@@ -29,6 +30,15 @@ class Settings(BaseSettings):
         "FEDERATED_TRAINING_ORCHESTRATOR_URL",
         "https://40ff4102b2e7.ngrok-free.app"
     )
+
+    # Model inference configuration
+    model_path: Path = Path(os.getenv(
+        "MODEL_PATH",
+        str(Path(__file__).parent / "models" / "Durdans-mobilenet-cnmc.pt")
+    ))
+    device: str = os.getenv("DEVICE", "cpu")
+    class_names: list = ["Healthy", "ALL (Leukemia)"]
+    public_data_path: str = os.getenv("PUBLIC_DATA_PATH", "")
 
     class Config:
         env_file = ".env"
