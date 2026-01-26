@@ -1156,6 +1156,7 @@ export default function FLSimulationDetailsPage({
               backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
               tension: 0.3,
               pointRadius: 3,
+              borderWidth: 2,
             }))
           : [
               {
@@ -1165,6 +1166,7 @@ export default function FLSimulationDetailsPage({
                 backgroundColor: "#B80028",
                 tension: 0.3,
                 pointRadius: 4,
+                borderWidth: 2,
               },
             ],
     }),
@@ -1187,6 +1189,7 @@ export default function FLSimulationDetailsPage({
               backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
               tension: 0.3,
               pointRadius: 3,
+              borderWidth: 2,
             }))
           : [
               {
@@ -1197,6 +1200,7 @@ export default function FLSimulationDetailsPage({
                 tension: 0.3,
                 fill: true,
                 pointRadius: 4,
+                borderWidth: 2,
               },
             ],
     }),
@@ -1219,6 +1223,7 @@ export default function FLSimulationDetailsPage({
               backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
               tension: 0.3,
               pointRadius: 3,
+              borderWidth: 2,
             }))
           : [
               {
@@ -1228,6 +1233,7 @@ export default function FLSimulationDetailsPage({
                 backgroundColor: "#10b981",
                 tension: 0.3,
                 pointRadius: 4,
+                borderWidth: 2,
               },
             ],
     }),
@@ -1250,6 +1256,7 @@ export default function FLSimulationDetailsPage({
               backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
               tension: 0.3,
               pointRadius: 3,
+              borderWidth: 2,
             }))
           : [
               {
@@ -1259,6 +1266,7 @@ export default function FLSimulationDetailsPage({
                 backgroundColor: "#f59e0b",
                 tension: 0.3,
                 pointRadius: 4,
+                borderWidth: 2,
               },
             ],
     }),
@@ -1280,6 +1288,7 @@ export default function FLSimulationDetailsPage({
               backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
               tension: 0.3,
               pointRadius: 3,
+              borderWidth: 2,
             }))
           : [
               {
@@ -1289,6 +1298,7 @@ export default function FLSimulationDetailsPage({
                 backgroundColor: "#8b5cf6",
                 tension: 0.3,
                 pointRadius: 4,
+                borderWidth: 2,
               },
             ],
     }),
@@ -1300,17 +1310,17 @@ export default function FLSimulationDetailsPage({
       labels: (comparisonData || []).map((d) => d.name),
       datasets: [
         {
-          label: "Pre-FL Accuracy",
-          data: (comparisonData || []).map((d) => d.preFl),
-          backgroundColor: "rgba(148, 163, 184, 0.6)",
-          borderColor: "#94a3b8",
-          borderWidth: 1,
-        },
-        {
           label: "Post-FL Accuracy",
           data: (comparisonData || []).map((d) => d.postFl),
           backgroundColor: "rgba(184, 0, 40, 0.7)",
           borderColor: "#B80028",
+          borderWidth: 1,
+        },
+        {
+          label: "Pre-FL Accuracy",
+          data: (comparisonData || []).map((d) => d.preFl),
+          backgroundColor: "rgba(148, 163, 184, 0.6)",
+          borderColor: "#94a3b8",
           borderWidth: 1,
         },
       ],
@@ -1334,6 +1344,7 @@ export default function FLSimulationDetailsPage({
   const getChartOptions = (
     metricLimits: { min: number; max: number },
     isPercentage: boolean = false,
+    isRoundBased: boolean = true,
   ) => ({
     responsive: true,
     maintainAspectRatio: false,
@@ -1407,17 +1418,40 @@ export default function FLSimulationDetailsPage({
         },
         ticks: {
           font: { size: 11 },
-          callback: (v: any) =>
-            isPercentage ? `${(v * 100).toFixed(0)}%` : v.toFixed(3),
+          callback: (v: any) => {
+            if (isPercentage) {
+              if (Math.abs(Number(v) - 1) < 0.0001) return "100%";
+              return Number(v).toFixed(2);
+            }
+            return Number(v).toFixed(3);
+          },
         },
       },
       x: {
         offset: false,
         grid: {
-          display: false,
+          display: isRoundBased, // Show vertical grid lines for round-based charts
+          color: "rgba(0,0,0,0.05)",
         },
         ticks: {
           font: { size: 11 },
+          // Custom ticking for rounds: 0, 2, 4, ...
+          callback: isRoundBased
+            ? function (this: any, val: any, index: any) {
+                const label = this.getLabelForValue(val) as string;
+                // Try to extract number from "Round X"
+                const roundNum = parseInt(label.replace("Round ", ""));
+
+                if (!isNaN(roundNum)) {
+                  // Show only even numbers: 0, 2, 4...
+                  if (roundNum % 2 === 0) {
+                    return roundNum; // Show just the number
+                  }
+                  return ""; // Hide odd ones
+                }
+                return label; // Fallback
+              }
+            : undefined,
         },
       },
     },
@@ -1429,6 +1463,7 @@ export default function FLSimulationDetailsPage({
   const recallChartOptions = getChartOptions(recallLimits, true);
   const f1ChartOptions = getChartOptions(f1Limits, true);
   const lossChartOptions = getChartOptions(lossLimits, false);
+  const comparisonChartOptions = getChartOptions(accuracyLimits, true, false);
 
   // if (isLoading) {
   //   return (
@@ -1833,7 +1868,7 @@ export default function FLSimulationDetailsPage({
       </div>
 
       {/* Statistics Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8 mt-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-6">
         {/* Accuracy Progression Chart */}
         <EvalCard
           title="Accuracy"
@@ -1904,7 +1939,10 @@ export default function FLSimulationDetailsPage({
               : "Pre-FL baseline vs Post-FL final performance"
           }
           content={
-            <Bar data={comparisonChartConfig} options={accuracyChartOptions} />
+            <Bar
+              data={comparisonChartConfig}
+              options={comparisonChartOptions}
+            />
           }
         />
       </div>

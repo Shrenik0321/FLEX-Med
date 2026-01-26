@@ -11,44 +11,44 @@
     "metrics": {
       "global": {
         "pre_fl": {
-          "loss": 0.691839,
-          "accuracy": 0.498403,
+          "loss": 0.72848,
+          "accuracy": 0.5,
           "precision": 0.0,
           "recall": 0.0,
           "f1_score": 0.0,
-          "specificity": 0.996805,
-          "roc_auc": 0.41383,
+          "specificity": 1.0,
+          "roc_auc": 0.281155,
           "leukemia_accuracy": 0.0,
-          "healthy_accuracy": 0.996805,
-          "class_gap": 0.996805,
+          "healthy_accuracy": 1.0,
+          "class_gap": 1.0,
           "confusion_matrix": {
             "TP": 0,
-            "FP": 2,
+            "FP": 0,
             "FN": 626,
-            "TN": 624
+            "TN": 626
           },
           "num_samples": 1252,
           "num_leukemia_samples": 626,
           "num_healthy_samples": 626,
           "dataset": "public_test",
           "evaluation_type": "global",
-          "evaluated_at": "2026-01-24T21:51:34.277660"
+          "evaluated_at": "2026-01-25T16:47:28.102481"
         },
         "post_fl": {
-          "loss": 0.590043,
-          "accuracy": 0.726038,
-          "precision": 0.67362,
-          "recall": 0.876997,
-          "f1_score": 0.761971,
+          "loss": 0.585621,
+          "accuracy": 0.731629,
+          "precision": 0.676399,
+          "recall": 0.888179,
+          "f1_score": 0.767956,
           "specificity": 0.57508,
-          "roc_auc": 0.192099,
-          "leukemia_accuracy": 0.876997,
+          "roc_auc": 0.187799,
+          "leukemia_accuracy": 0.888179,
           "healthy_accuracy": 0.57508,
-          "class_gap": 0.301917,
+          "class_gap": 0.313099,
           "confusion_matrix": {
-            "TP": 549,
+            "TP": 556,
             "FP": 266,
-            "FN": 77,
+            "FN": 70,
             "TN": 360
           },
           "num_samples": 1252,
@@ -56,188 +56,188 @@
           "num_healthy_samples": 626,
           "dataset": "public_test",
           "evaluation_type": "global",
-          "evaluated_at": "2026-01-25T03:39:13.631859"
+          "evaluated_at": "2026-01-26T00:10:59.398162"
         },
         "improvement": {
-          "accuracy": 0.227635,
-          "loss": -0.101796,
-          "precision": 0.67362,
-          "recall": 0.876997,
-          "f1_score": 0.761971,
-          "class_gap": -0.694888,
-          "leukemia_accuracy": 0.876997,
-          "healthy_accuracy": -0.421725
+          "accuracy": 0.231629,
+          "loss": -0.142859,
+          "precision": 0.676399,
+          "recall": 0.888179,
+          "f1_score": 0.767956,
+          "class_gap": -0.686901,
+          "leukemia_accuracy": 0.888179,
+          "healthy_accuracy": -0.42492
         }
       },
       "rounds": [
         {
           "round": 1,
           "validation": {
-            "loss": 0.48867629276240904,
-            "accuracy": 0.8270106221547799,
-            "precision": 0.7064220183486238,
-            "recall": 0.48427672955974843,
-            "f1_score": 0.5746268656716418,
-            "class_gap": 0.4517232704402516,
-            "leukemia_accuracy": 0.48427672955974843,
-            "healthy_accuracy": 0.936,
-            "num_samples": 659,
+            "loss": 0.38389309536327015,
+            "accuracy": 0.9402597402597402,
+            "precision": 0.3333333333333333,
+            "recall": 0.4375,
+            "f1_score": 0.3783783783783784,
+            "class_gap": 0.524559620596206,
+            "leukemia_accuracy": 0.4375,
+            "healthy_accuracy": 0.962059620596206,
+            "num_samples": 385,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-24T22:17:39.811246"
+            "evaluated_at": "2026-01-25T17:32:32.156199"
           }
         },
         {
           "round": 2,
           "validation": {
-            "loss": 0.5377411655120676,
-            "accuracy": 0.8088012139605463,
-            "precision": 0.610738255033557,
-            "recall": 0.5723270440251572,
-            "f1_score": 0.5909090909090909,
-            "class_gap": 0.3116729559748428,
-            "leukemia_accuracy": 0.5723270440251572,
-            "healthy_accuracy": 0.884,
-            "num_samples": 659,
+            "loss": 0.4515808659714538,
+            "accuracy": 0.9038961038961039,
+            "precision": 0.23076923076923078,
+            "recall": 0.5625,
+            "f1_score": 0.32727272727272727,
+            "class_gap": 0.3561991869918699,
+            "leukemia_accuracy": 0.5625,
+            "healthy_accuracy": 0.9186991869918699,
+            "num_samples": 385,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-24T22:52:45.674457"
+            "evaluated_at": "2026-01-25T18:23:33.203528"
           }
         },
         {
           "round": 3,
           "validation": {
-            "loss": 0.5496897764379591,
-            "accuracy": 0.7966616084977238,
-            "precision": 0.5757575757575758,
-            "recall": 0.5974842767295597,
-            "f1_score": 0.5864197530864198,
-            "class_gap": 0.26251572327044026,
-            "leukemia_accuracy": 0.5974842767295597,
-            "healthy_accuracy": 0.86,
-            "num_samples": 659,
+            "loss": 0.4938967361078634,
+            "accuracy": 0.8909090909090909,
+            "precision": 0.20454545454545456,
+            "recall": 0.5625,
+            "f1_score": 0.3,
+            "class_gap": 0.34264905149051494,
+            "leukemia_accuracy": 0.5625,
+            "healthy_accuracy": 0.9051490514905149,
+            "num_samples": 385,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-24T23:28:12.681500"
+            "evaluated_at": "2026-01-25T19:09:39.448553"
           }
         },
         {
           "round": 4,
           "validation": {
-            "loss": 0.5449337712368943,
-            "accuracy": 0.8057663125948407,
-            "precision": 0.6115107913669064,
-            "recall": 0.5345911949685535,
-            "f1_score": 0.5704697986577181,
-            "class_gap": 0.35740880503144656,
-            "leukemia_accuracy": 0.5345911949685535,
-            "healthy_accuracy": 0.892,
-            "num_samples": 659,
+            "loss": 0.480427665834303,
+            "accuracy": 0.9012987012987013,
+            "precision": 0.225,
+            "recall": 0.5625,
+            "f1_score": 0.32142857142857145,
+            "class_gap": 0.3534891598915989,
+            "leukemia_accuracy": 0.5625,
+            "healthy_accuracy": 0.9159891598915989,
+            "num_samples": 385,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-25T00:03:55.002620"
+            "evaluated_at": "2026-01-25T19:46:04.032177"
           }
         },
         {
           "round": 5,
           "validation": {
-            "loss": 0.550116348972089,
-            "accuracy": 0.7921092564491654,
-            "precision": 0.56875,
-            "recall": 0.5723270440251572,
-            "f1_score": 0.5705329153605015,
-            "class_gap": 0.28967295597484277,
-            "leukemia_accuracy": 0.5723270440251572,
-            "healthy_accuracy": 0.862,
-            "num_samples": 659,
+            "loss": 0.48812366073781793,
+            "accuracy": 0.8935064935064935,
+            "precision": 0.20930232558139536,
+            "recall": 0.5625,
+            "f1_score": 0.3050847457627119,
+            "class_gap": 0.34535907859078596,
+            "leukemia_accuracy": 0.5625,
+            "healthy_accuracy": 0.907859078590786,
+            "num_samples": 385,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-25T00:39:15.007140"
+            "evaluated_at": "2026-01-25T20:25:13.616322"
           }
         },
         {
           "round": 6,
           "validation": {
-            "loss": 0.5422606685273745,
-            "accuracy": 0.8179059180576631,
-            "precision": 0.6344827586206897,
-            "recall": 0.5786163522012578,
-            "f1_score": 0.6052631578947368,
-            "class_gap": 0.3153836477987422,
-            "leukemia_accuracy": 0.5786163522012578,
-            "healthy_accuracy": 0.894,
-            "num_samples": 659,
+            "loss": 0.4945059717475594,
+            "accuracy": 0.8831168831168831,
+            "precision": 0.19148936170212766,
+            "recall": 0.5625,
+            "f1_score": 0.2857142857142857,
+            "class_gap": 0.3345189701897019,
+            "leukemia_accuracy": 0.5625,
+            "healthy_accuracy": 0.8970189701897019,
+            "num_samples": 385,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-25T01:14:38.147588"
+            "evaluated_at": "2026-01-25T21:11:33.943481"
           }
         },
         {
           "round": 7,
           "validation": {
-            "loss": 0.5424498699503711,
-            "accuracy": 0.8209408194233687,
-            "precision": 0.6496350364963503,
-            "recall": 0.559748427672956,
-            "f1_score": 0.6013513513513513,
-            "class_gap": 0.34425157232704406,
-            "leukemia_accuracy": 0.559748427672956,
-            "healthy_accuracy": 0.904,
-            "num_samples": 659,
+            "loss": 0.48909782635701166,
+            "accuracy": 0.8935064935064935,
+            "precision": 0.20930232558139536,
+            "recall": 0.5625,
+            "f1_score": 0.3050847457627119,
+            "class_gap": 0.34535907859078596,
+            "leukemia_accuracy": 0.5625,
+            "healthy_accuracy": 0.907859078590786,
+            "num_samples": 385,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-25T01:49:40.495015"
+            "evaluated_at": "2026-01-25T21:49:13.328825"
           }
         },
         {
           "round": 8,
           "validation": {
-            "loss": 0.5470855595128489,
-            "accuracy": 0.8133535660091047,
-            "precision": 0.6232876712328768,
-            "recall": 0.5723270440251572,
-            "f1_score": 0.5967213114754099,
-            "class_gap": 0.3176729559748428,
-            "leukemia_accuracy": 0.5723270440251572,
-            "healthy_accuracy": 0.89,
-            "num_samples": 659,
+            "loss": 0.4920811266094059,
+            "accuracy": 0.9064935064935065,
+            "precision": 0.23684210526315788,
+            "recall": 0.5625,
+            "f1_score": 0.3333333333333333,
+            "class_gap": 0.35890921409214094,
+            "leukemia_accuracy": 0.5625,
+            "healthy_accuracy": 0.9214092140921409,
+            "num_samples": 385,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-25T02:25:35.214967"
+            "evaluated_at": "2026-01-25T22:29:37.058981"
           }
         },
         {
           "round": 9,
           "validation": {
-            "loss": 0.5572788354478584,
-            "accuracy": 0.7890743550834598,
-            "precision": 0.5602409638554217,
-            "recall": 0.5849056603773585,
-            "f1_score": 0.5723076923076923,
-            "class_gap": 0.2690943396226415,
-            "leukemia_accuracy": 0.5849056603773585,
-            "healthy_accuracy": 0.854,
-            "num_samples": 659,
+            "loss": 0.4936331123500675,
+            "accuracy": 0.9064935064935065,
+            "precision": 0.2222222222222222,
+            "recall": 0.5,
+            "f1_score": 0.3076923076923077,
+            "class_gap": 0.42411924119241196,
+            "leukemia_accuracy": 0.5,
+            "healthy_accuracy": 0.924119241192412,
+            "num_samples": 385,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-25T03:01:43.647691"
+            "evaluated_at": "2026-01-25T23:17:48.862386"
           }
         },
         {
           "round": 10,
           "validation": {
-            "loss": 0.5504483489237715,
-            "accuracy": 0.7966616084977238,
-            "precision": 0.5827814569536424,
-            "recall": 0.5534591194968553,
-            "f1_score": 0.567741935483871,
-            "class_gap": 0.32054088050314467,
-            "leukemia_accuracy": 0.5534591194968553,
-            "healthy_accuracy": 0.874,
-            "num_samples": 659,
+            "loss": 0.5026692946235854,
+            "accuracy": 0.8935064935064935,
+            "precision": 0.20930232558139536,
+            "recall": 0.5625,
+            "f1_score": 0.3050847457627119,
+            "class_gap": 0.34535907859078596,
+            "leukemia_accuracy": 0.5625,
+            "healthy_accuracy": 0.907859078590786,
+            "num_samples": 385,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-25T03:37:25.604710"
+            "evaluated_at": "2026-01-26T00:07:59.637792"
           }
         }
       ]
@@ -255,7 +255,7 @@
     "metrics": {
       "global": {
         "pre_fl": {
-          "loss": 0.692989,
+          "loss": 0.693069,
           "accuracy": 0.5,
           "precision": 0.0,
           "recall": 0.0,
@@ -276,212 +276,212 @@
           "num_healthy_samples": 626,
           "dataset": "public_test",
           "evaluation_type": "global",
-          "evaluated_at": "2026-01-24T21:52:01.545398"
+          "evaluated_at": "2026-01-25T16:48:05.152677"
         },
         "post_fl": {
-          "loss": 0.589058,
-          "accuracy": 0.726837,
-          "precision": 0.676179,
-          "recall": 0.870607,
-          "f1_score": 0.761173,
-          "specificity": 0.583067,
-          "roc_auc": 0.193056,
-          "leukemia_accuracy": 0.870607,
-          "healthy_accuracy": 0.583067,
-          "class_gap": 0.28754,
+          "loss": 0.583887,
+          "accuracy": 0.731629,
+          "precision": 0.680798,
+          "recall": 0.872204,
+          "f1_score": 0.764706,
+          "specificity": 0.591054,
+          "roc_auc": 0.181315,
+          "leukemia_accuracy": 0.872204,
+          "healthy_accuracy": 0.591054,
+          "class_gap": 0.28115,
           "confusion_matrix": {
-            "TP": 545,
-            "FP": 261,
-            "FN": 81,
-            "TN": 365
+            "TP": 546,
+            "FP": 256,
+            "FN": 80,
+            "TN": 370
           },
           "num_samples": 1252,
           "num_leukemia_samples": 626,
           "num_healthy_samples": 626,
           "dataset": "public_test",
           "evaluation_type": "global",
-          "evaluated_at": "2026-01-25T03:40:01.443686"
+          "evaluated_at": "2026-01-26T00:12:01.830981"
         },
         "improvement": {
-          "accuracy": 0.226837,
-          "loss": -0.103931,
-          "precision": 0.676179,
-          "recall": 0.870607,
-          "f1_score": 0.761173,
-          "class_gap": -0.71246,
-          "leukemia_accuracy": 0.870607,
-          "healthy_accuracy": -0.416933
+          "accuracy": 0.231629,
+          "loss": -0.109182,
+          "precision": 0.680798,
+          "recall": 0.872204,
+          "f1_score": 0.764706,
+          "class_gap": -0.71885,
+          "leukemia_accuracy": 0.872204,
+          "healthy_accuracy": -0.408946
         }
       },
       "rounds": [
         {
           "round": 1,
           "validation": {
-            "loss": 0.5977774697478878,
-            "accuracy": 0.7723823975720789,
-            "precision": 0.5540540540540541,
-            "recall": 0.4939759036144578,
-            "f1_score": 0.5222929936305732,
-            "class_gap": 0.3721498570346294,
-            "leukemia_accuracy": 0.4939759036144578,
-            "healthy_accuracy": 0.8661257606490872,
-            "num_samples": 659,
+            "loss": 0.5840008049052161,
+            "accuracy": 0.7607296137339056,
+            "precision": 0.6591760299625468,
+            "recall": 0.5714285714285714,
+            "f1_score": 0.6121739130434782,
+            "class_gap": 0.28273809523809523,
+            "leukemia_accuracy": 0.5714285714285714,
+            "healthy_accuracy": 0.8541666666666666,
+            "num_samples": 932,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-24T22:18:25.991933"
+            "evaluated_at": "2026-01-25T17:34:32.387914"
           }
         },
         {
           "round": 2,
           "validation": {
-            "loss": 0.5551386596762176,
-            "accuracy": 0.795144157814871,
-            "precision": 0.6099290780141844,
-            "recall": 0.5180722891566265,
-            "f1_score": 0.5602605863192183,
-            "class_gap": 0.3703658447176128,
-            "leukemia_accuracy": 0.5180722891566265,
-            "healthy_accuracy": 0.8884381338742393,
-            "num_samples": 659,
+            "loss": 0.5573230902524465,
+            "accuracy": 0.7757510729613734,
+            "precision": 0.7053941908713693,
+            "recall": 0.551948051948052,
+            "f1_score": 0.6193078324225865,
+            "class_gap": 0.3342698967698967,
+            "leukemia_accuracy": 0.551948051948052,
+            "healthy_accuracy": 0.8862179487179487,
+            "num_samples": 932,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-24T22:53:43.246063"
+            "evaluated_at": "2026-01-25T18:24:59.050691"
           }
         },
         {
           "round": 3,
           "validation": {
-            "loss": 0.5624740644724127,
-            "accuracy": 0.787556904400607,
-            "precision": 0.5928571428571429,
-            "recall": 0.5,
-            "f1_score": 0.5424836601307189,
-            "class_gap": 0.38438133874239355,
-            "leukemia_accuracy": 0.5,
-            "healthy_accuracy": 0.8843813387423936,
-            "num_samples": 659,
+            "loss": 0.5612877151996792,
+            "accuracy": 0.7671673819742489,
+            "precision": 0.6857142857142857,
+            "recall": 0.5454545454545454,
+            "f1_score": 0.6075949367088608,
+            "class_gap": 0.3311480186480187,
+            "leukemia_accuracy": 0.5454545454545454,
+            "healthy_accuracy": 0.8766025641025641,
+            "num_samples": 932,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-24T23:29:09.301009"
+            "evaluated_at": "2026-01-25T19:10:43.292170"
           }
         },
         {
           "round": 4,
           "validation": {
-            "loss": 0.5576311082145332,
-            "accuracy": 0.7905918057663126,
-            "precision": 0.5921052631578947,
-            "recall": 0.5421686746987951,
-            "f1_score": 0.5660377358490566,
-            "class_gap": 0.3320706762139838,
-            "leukemia_accuracy": 0.5421686746987951,
-            "healthy_accuracy": 0.8742393509127789,
-            "num_samples": 659,
+            "loss": 0.5570660287218544,
+            "accuracy": 0.7821888412017167,
+            "precision": 0.7196652719665272,
+            "recall": 0.5584415584415584,
+            "f1_score": 0.6288848263254113,
+            "class_gap": 0.33418664668664677,
+            "leukemia_accuracy": 0.5584415584415584,
+            "healthy_accuracy": 0.8926282051282052,
+            "num_samples": 932,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-25T00:04:55.787536"
+            "evaluated_at": "2026-01-25T19:47:13.733400"
           }
         },
         {
           "round": 5,
           "validation": {
-            "loss": 0.5562280803602274,
-            "accuracy": 0.8012139605462822,
-            "precision": 0.6223776223776224,
-            "recall": 0.536144578313253,
-            "f1_score": 0.5760517799352751,
-            "class_gap": 0.3543219531269093,
-            "leukemia_accuracy": 0.536144578313253,
-            "healthy_accuracy": 0.8904665314401623,
-            "num_samples": 659,
+            "loss": 0.5509873339546597,
+            "accuracy": 0.7821888412017167,
+            "precision": 0.7178423236514523,
+            "recall": 0.5616883116883117,
+            "f1_score": 0.6302367941712204,
+            "class_gap": 0.3293373293373294,
+            "leukemia_accuracy": 0.5616883116883117,
+            "healthy_accuracy": 0.8910256410256411,
+            "num_samples": 932,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-25T00:40:15.748908"
+            "evaluated_at": "2026-01-25T20:26:23.087250"
           }
         },
         {
           "round": 6,
           "validation": {
-            "loss": 0.5590003743338114,
-            "accuracy": 0.7905918057663126,
-            "precision": 0.5886075949367089,
-            "recall": 0.5602409638554217,
-            "f1_score": 0.5740740740740741,
-            "class_gap": 0.3079131943595885,
-            "leukemia_accuracy": 0.5602409638554217,
-            "healthy_accuracy": 0.8681541582150102,
-            "num_samples": 659,
+            "loss": 0.5570961052767709,
+            "accuracy": 0.7832618025751072,
+            "precision": 0.712,
+            "recall": 0.577922077922078,
+            "f1_score": 0.6379928315412187,
+            "class_gap": 0.30669330669330663,
+            "leukemia_accuracy": 0.577922077922078,
+            "healthy_accuracy": 0.8846153846153846,
+            "num_samples": 932,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-25T01:15:28.132013"
+            "evaluated_at": "2026-01-25T21:12:40.996882"
           }
         },
         {
           "round": 7,
           "validation": {
-            "loss": 0.5581234937734416,
-            "accuracy": 0.7996965098634294,
-            "precision": 0.6118421052631579,
-            "recall": 0.5602409638554217,
-            "f1_score": 0.5849056603773585,
-            "class_gap": 0.320083579755126,
-            "leukemia_accuracy": 0.5602409638554217,
-            "healthy_accuracy": 0.8803245436105477,
-            "num_samples": 659,
+            "loss": 0.5578907643776595,
+            "accuracy": 0.778969957081545,
+            "precision": 0.7007874015748031,
+            "recall": 0.577922077922078,
+            "f1_score": 0.6334519572953736,
+            "class_gap": 0.30028305028305025,
+            "leukemia_accuracy": 0.577922077922078,
+            "healthy_accuracy": 0.8782051282051282,
+            "num_samples": 932,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-25T01:50:29.208780"
+            "evaluated_at": "2026-01-25T21:50:16.461793"
           }
         },
         {
           "round": 8,
           "validation": {
-            "loss": 0.5590739507957366,
-            "accuracy": 0.8042488619119879,
-            "precision": 0.6225165562913907,
-            "recall": 0.5662650602409639,
-            "f1_score": 0.5930599369085173,
-            "class_gap": 0.31811627850142965,
-            "leukemia_accuracy": 0.5662650602409639,
-            "healthy_accuracy": 0.8843813387423936,
-            "num_samples": 659,
+            "loss": 0.5586173472997968,
+            "accuracy": 0.778969957081545,
+            "precision": 0.7007874015748031,
+            "recall": 0.577922077922078,
+            "f1_score": 0.6334519572953736,
+            "class_gap": 0.30028305028305025,
+            "leukemia_accuracy": 0.577922077922078,
+            "healthy_accuracy": 0.8782051282051282,
+            "num_samples": 932,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-25T02:26:28.760697"
+            "evaluated_at": "2026-01-25T22:30:47.638392"
           }
         },
         {
           "round": 9,
           "validation": {
-            "loss": 0.5585906929781658,
-            "accuracy": 0.7890743550834598,
-            "precision": 0.5894039735099338,
-            "recall": 0.536144578313253,
-            "f1_score": 0.5615141955835962,
-            "class_gap": 0.3380947725995259,
-            "leukemia_accuracy": 0.536144578313253,
-            "healthy_accuracy": 0.8742393509127789,
-            "num_samples": 659,
+            "loss": 0.5580804984968619,
+            "accuracy": 0.7854077253218884,
+            "precision": 0.716,
+            "recall": 0.5811688311688312,
+            "f1_score": 0.6415770609318996,
+            "class_gap": 0.30504911754911745,
+            "leukemia_accuracy": 0.5811688311688312,
+            "healthy_accuracy": 0.8862179487179487,
+            "num_samples": 932,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-25T03:02:35.174887"
+            "evaluated_at": "2026-01-25T23:19:15.243296"
           }
         },
         {
           "round": 10,
           "validation": {
-            "loss": 0.5597584334418336,
-            "accuracy": 0.7936267071320182,
-            "precision": 0.6041666666666666,
-            "recall": 0.5240963855421686,
-            "f1_score": 0.5612903225806452,
-            "class_gap": 0.3602849532002249,
-            "leukemia_accuracy": 0.5240963855421686,
-            "healthy_accuracy": 0.8843813387423936,
-            "num_samples": 659,
+            "loss": 0.5554312436877402,
+            "accuracy": 0.7778969957081545,
+            "precision": 0.701195219123506,
+            "recall": 0.5714285714285714,
+            "f1_score": 0.629695885509839,
+            "class_gap": 0.3083791208791209,
+            "leukemia_accuracy": 0.5714285714285714,
+            "healthy_accuracy": 0.8798076923076923,
+            "num_samples": 932,
             "dataset": "validation",
             "evaluation_type": "per_round",
-            "evaluated_at": "2026-01-25T03:38:17.458896"
+            "evaluated_at": "2026-01-26T00:09:37.768494"
           }
         }
       ]

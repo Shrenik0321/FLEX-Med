@@ -1,0 +1,1691 @@
+[Script] Starting Flex-Med Simulation at Sun Jan 25 04:43:00 PM UTC 2026...
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 821.0/821.0 MB 2.8 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 7.5/7.5 MB 92.2 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 393.1/393.1 MB 2.8 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8.9/8.9 MB 103.5 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 23.7/23.7 MB 79.2 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 897.7/897.7 kB 35.5 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 571.0/571.0 MB 2.4 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 200.2/200.2 MB 6.3 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.1/1.1 MB 32.0 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 56.3/56.3 MB 38.1 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 158.2/158.2 MB 6.8 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 216.6/216.6 MB 5.3 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 156.8/156.8 MB 9.8 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 201.3/201.3 MB 7.3 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 19.7/19.7 MB 39.8 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 89.3/89.3 kB 5.1 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 155.7/155.7 MB 7.0 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 87.0/87.0 kB 5.4 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 480.6/480.6 kB 27.9 MB/s eta 0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 179.3/179.3 kB 11.6 MB/s eta 0:00:00
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+gcsfs 2025.3.0 requires fsspec==2025.3.0, but you have fsspec 2024.9.0 which is incompatible.
+torchaudio 2.9.0+cpu requires torch==2.9.0, but you have torch 2.7.1 which is incompatible.
+Loading project configuration... 
+Success
+2026-01-25 16:45:25.531074: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:467] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1769359525.550921    2771 cuda_dnn.cc:8579] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+E0000 00:00:1769359525.556611    2771 cuda_blas.cc:1407] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+W0000 00:00:1769359525.570274    2771 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1769359525.570789    2771 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1769359525.571250    2771 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1769359525.571358    2771 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+2026-01-25 16:45:25.575842: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+INFO :      [SERVER] Evaluation device: cpu
+INFO :      [SERVER] Starting fresh training (10 rounds)
+INFO :      
+INFO :      ======================================================================
+INFO :      [GLOBAL] Initial Centralized Model Evaluation (Public Test)
+INFO :      ======================================================================
+INFO :      
+[CHECKPOINT] Looking for: /content/drive/MyDrive/College/FLEX-Med/checkpoints/latest_checkpoint.pt
+[CHECKPOINT] Exists: False
+[CHECKPOINT] BASE_PATH env: NOT SET
+[CHECKPOINT] Trying fallback: /content/drive/MyDrive/College/FLEX-Med/checkpoints/latest_checkpoint.pt
+[CHECKPOINT] Not found at fallback either
+
+[SERVER] Starting Federated Learning (10 rounds, lr=0.0001)
+[SERVER] Loaded 2 clients:
+  [0] Asiri-resnet-allidb2 | resnet18        | ✓
+  [1] Durdans-mobilenet-cnmc | mobilenet_v2    | ✓
+[SERVER] Consensus matrix: (2504, 2)
+[CHECKPOINT] Looking for: /content/drive/MyDrive/College/FLEX-Med/checkpoints/latest_checkpoint.pt
+[CHECKPOINT] Exists: False
+[CHECKPOINT] BASE_PATH env: NOT SET
+[CHECKPOINT] Trying fallback: /content/drive/MyDrive/College/FLEX-Med/checkpoints/latest_checkpoint.pt
+[CHECKPOINT] Not found at fallback either
+[SERVER] ✓ Starting fresh training
+
+[SERVER] Initialized 2 clients
+[CHECKPOINT] Looking for: /content/drive/MyDrive/College/FLEX-Med/checkpoints/latest_checkpoint.pt
+[CHECKPOINT] Exists: False
+[CHECKPOINT] BASE_PATH env: NOT SET
+[CHECKPOINT] Trying fallback: /content/drive/MyDrive/College/FLEX-Med/checkpoints/latest_checkpoint.pt
+[CHECKPOINT] Not found at fallback either
+
+======================================================================
+[SERVER] Executing Federated Learning
+======================================================================
+
+[Global Eval] Evaluating client 0: Asiri-resnet-allidb2 (resnet18) on public test
+[Global Eval] Client 0: No checkpoint found, using fresh model
+[Data] Loaded public test dataset: 1252 samples
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/ray/_private/worker.py:2051: FutureWarning: Tip: In future versions of Ray, Ray will no longer override accelerator visible devices env var if num_gpus=0 or num_gpus=None (default). To enable this behavior and turn off this error message, set RAY_ACCEL_ENV_VAR_OVERRIDE_ON_ZERO=0
+  warnings.warn(
+(pid=4427) 2026-01-25 16:46:02.361512: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:467] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+(pid=4427) WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+(pid=4427) E0000 00:00:1769359562.391754    4427 cuda_dnn.cc:8579] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+(pid=4427) E0000 00:00:1769359562.400026    4427 cuda_blas.cc:1407] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+(pid=4428) W0000 00:00:1769359562.498977    4428 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+(pid=4428) W0000 00:00:1769359562.499062    4428 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+(pid=4428) W0000 00:00:1769359562.499066    4428 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+(pid=4428) W0000 00:00:1769359562.499068    4428 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+(pid=4427) AttributeError: 'MessageFactory' object has no attribute 'GetPrototype'
+(pid=4421) 2026-01-25 16:46:02.654742: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:467] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered [repeated 3x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#log-deduplication for more options.)
+(pid=4421) WARNING: All log messages before absl::InitializeLog() is called are written to STDERR [repeated 3x across cluster]
+(pid=4421) E0000 00:00:1769359562.685782    4421 cuda_dnn.cc:8579] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered [repeated 3x across cluster]
+(pid=4421) E0000 00:00:1769359562.694044    4421 cuda_blas.cc:1407] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered [repeated 3x across cluster]
+(pid=4421) W0000 00:00:1769359562.715629    4421 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once. [repeated 12x across cluster]
+(pid=4427) AttributeError: 'MessageFactory' object has no attribute 'GetPrototype' [repeated 12x across cluster]
+(pid=gcs_server) [2026-01-25 16:46:10,536 E 2877 2877] (gcs_server) gcs_server.cc:302: Failed to establish connection to the event+metrics exporter agent. Events and metrics will not be exported. Exporter agent status: RpcError: Running out of retries to initialize the metrics agent. rpc_code: 14
+(raylet) [2026-01-25 16:46:14,104 E 3599 3599] (raylet) main.cc:975: Failed to establish connection to the metrics exporter agent. Metrics will not be exported. Exporter agent status: RpcError: Running out of retries to initialize the metrics agent. rpc_code: 14
+[2026-01-25 16:46:19,818 E 2771 3654] core_worker_process.cc:825: Failed to establish connection to the metrics exporter agent. Metrics will not be exported. Exporter agent status: RpcError: Running out of retries to initialize the metrics agent. rpc_code: 14
+(ClientAppActor pid=4428) [2026-01-25 16:46:30,923 E 4428 5051] core_worker_process.cc:825: Failed to establish connection to the metrics exporter agent. Metrics will not be exported. Exporter agent status: RpcError: Running out of retries to initialize the metrics agent. rpc_code: 14
+(pid=4428) AttributeError: 'MessageFactory' object has no attribute 'GetPrototype' [repeated 7x across cluster]
+INFO :      [EVAL] Overall: 50.0% | Leukemia: 0.0% | Healthy: 100.0% | Gap: 100.0%
+INFO :      [EVAL] Precision: 0.000 | Recall: 0.000 | F1: 0.000 | ROC-AUC: 0.281
+WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 100.0% (Target: <10%)
+[Global Eval] Client 0: Accuracy=50.0%, Loss=0.728
+[Global Eval] Evaluating client 1: Durdans-mobilenet-cnmc (mobilenet_v2) on public test
+[Global Eval] Client 1: No checkpoint found, using fresh model
+[Data] Loaded public test dataset: 1252 samples
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+INFO :      [EVAL] Overall: 50.0% | Leukemia: 0.0% | Healthy: 100.0% | Gap: 100.0%
+INFO :      [EVAL] Precision: 0.000 | Recall: 0.000 | F1: 0.000 | ROC-AUC: 0.500
+WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 100.0% (Target: <10%)
+INFO :      [GLOBAL] Pre-FL Evaluation Complete
+INFO :        Client 0: Accuracy=50.0%, Loss=0.728 on public test
+INFO :        Client 1: Accuracy=50.0%, Loss=0.693 on public test
+INFO :      
+INFO :      
+INFO :      ======================================================================
+INFO :      [ROUND 1/10]
+INFO :      ======================================================================
+INFO :      
+INFO :      [ROUND 1] FL Training Phase
+INFO :      --------------------------------------------------
+(ClientAppActor pid=4429) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4429) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4429)   self.pid = os.fork()
+(ClientAppActor pid=4421) [2026-01-25 16:46:31,362 E 4421 5166] core_worker_process.cc:825: Failed to establish connection to the metrics exporter agent. Metrics will not be exported. Exporter agent status: RpcError: Running out of retries to initialize the metrics agent. rpc_code: 14 [repeated 3x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4421) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4421)   self.pid = os.fork()
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 3x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 3x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 3x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 3x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+INFO :      
+INFO :      [ROUND 1] Validation Evaluation (Per-Round Tracking)
+INFO :      --------------------------------------------------
+[Global Eval] Client 1: Accuracy=50.0%, Loss=0.693
+[Global Metrics] Saved Pre-FL metrics to /content/drive/MyDrive/College/FLEX-Med/flex-med/cnmc_data.json
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [ROUND 1] Client 1 - Training Phase
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4429) [Client 1] Phase 2: Private Training
+(ClientAppActor pid=4429) [Client 1] Learning Rate: 0.000100
+(ClientAppActor pid=4429) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000100)
+(ClientAppActor pid=4429) [Transfer Learning] MobileNetV2 backbone frozen, training head only
+(ClientAppActor pid=4429) [Train] Parameters: 2,562 trainable, 2,223,872 frozen, 2,226,434 total
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000010)
+(ClientAppActor pid=4421) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) ============================================================ [repeated 2x across cluster]
+(ClientAppActor pid=4421) [ROUND 1] Client 0 - Training Phase
+(ClientAppActor pid=4421) [Client 0] Phase 2: Private Training
+(ClientAppActor pid=4421) [Client 0] Learning Rate: 0.000100
+(ClientAppActor pid=4421) [Data] Client 0: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4421) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4421) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000100)
+(ClientAppActor pid=4421) [Transfer Learning] ResNet18 backbone frozen, training head only
+(ClientAppActor pid=4421) [Train] Parameters: 11,177,538 trainable, 0 frozen, 11,177,538 total [repeated 2x across cluster]
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4429) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000010)
+(ClientAppActor pid=4429) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4429) [Train] Parameters: 2,226,434 trainable, 0 frozen, 2,226,434 total
+(ClientAppActor pid=4421) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4421) [Client 0] ✓ Training Loss: 0.0680 (2176 samples, 1008.3s)
+(ClientAppActor pid=4421) [Client 0] Generating public logits for aggregation...
+(ClientAppActor pid=4421) [Client 0] Round 1 Complete
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4429) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4429) [Client 1] ✓ Training Loss: 0.0778 (5280 samples, 2535.7s)
+(ClientAppActor pid=4429) [Client 1] Generating public logits for aggregation...
+(ClientAppActor pid=4429) [Client 1] Round 1 Complete
+(ClientAppActor pid=4429) 
+
+[SERVER] Round 1: Aggregating Consensus
+[SERVER] ✓ Consensus computed from 2/2 clients
+[SERVER]   Top contributors:
+[SERVER]     - Durdans-mobilenet-cnmc (mobilenet_v2): 67.6% weight [samples: 5280, loss: 0.054]
+[SERVER]     - Asiri-resnet-allidb2 (resnet18): 32.4% weight [samples: 2176, loss: 0.048]
+[Round Eval] Evaluating client 0: Asiri-resnet-allidb2 (resnet18) on validation
+[Data] Client 0: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+[Round Eval] Client 0: Acc=94.0%, Loss=0.384, Gap=52.5%
+[Round Eval] Evaluating client 1: Durdans-mobilenet-cnmc (mobilenet_v2) on validation
+[Data] Client 1: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+INFO :      [ROUND 1] Validation Results:
+INFO :        Client 0: Acc=94.0%, Loss=0.384, Gap=52.5% (validation)
+INFO :        Client 1: Acc=76.1%, Loss=0.584, Gap=28.3% (validation)
+INFO :      [ROUND 1] Average: Acc=85.0%, Loss=0.484, Gap=40.4%
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) INFO :      [EVAL] Overall: 92.5% | Leukemia: 94.9% | Healthy: 37.5% | Gap: 57.4%
+(ClientAppActor pid=4429) INFO :      [EVAL] Precision: 0.972 | Recall: 0.949 | F1: 0.960 | ROC-AUC: 0.170
+(ClientAppActor pid=4429) WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 57.4% (Target: <10%)
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) INFO :      [EVAL] Overall: 77.4% | Leukemia: 86.7% | Healthy: 58.4% | Gap: 28.3%
+(ClientAppActor pid=4421) INFO :      [EVAL] Precision: 0.809 | Recall: 0.867 | F1: 0.837 | ROC-AUC: 0.222
+INFO :      
+INFO :      ======================================================================
+INFO :      [ROUND 2/10]
+INFO :      ======================================================================
+INFO :      
+INFO :      [ROUND 2] FL Training Phase
+INFO :      --------------------------------------------------
+(ClientAppActor pid=4429) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4429) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4429)   self.pid = os.fork()
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4421) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4421)   self.pid = os.fork()
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 4x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 4x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+INFO :      
+INFO :      [ROUND 2] Validation Evaluation (Per-Round Tracking)
+INFO :      --------------------------------------------------
+[Round Eval] Client 1: Acc=76.1%, Loss=0.584, Gap=28.3%
+[Round Metrics] Saved validation metrics for round 1 to /content/drive/MyDrive/College/FLEX-Med/flex-med/cnmc_data.json
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Client 0] Evaluation Phase
+(ClientAppActor pid=4429) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Client 0] ✓ Loss: 0.4189 | Accuracy: 0.9247 (92.5%)
+(ClientAppActor pid=4421) [Client 1] Evaluation Phase
+(ClientAppActor pid=4429) [Data] Client 0: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4421) [Client 1] ✓ Loss: 0.5939 | Accuracy: 0.7736 (77.4%)
+
+[ROUND 1] Evaluation Results:
+  Avg Loss: 0.5427 | Avg Accuracy: 0.8178 (81.8%)
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [ROUND 2] Client 1 - Training Phase
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4429) [Client 1] Loaded model (from Round 1)
+(ClientAppActor pid=4429) [Client 1] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4429) [Distillation] Adaptive weight: 0.580 (round 2/10, progress: 11.1%)
+(ClientAppActor pid=4421) [Client 0] ✓ Distillation Loss: 0.0091
+(ClientAppActor pid=4421) [Client 0] Phase 2: Private Training
+(ClientAppActor pid=4421) [Client 0] Learning Rate: 0.000098
+(ClientAppActor pid=4421) ============================================================ [repeated 2x across cluster]
+(ClientAppActor pid=4421) [ROUND 2] Client 0 - Training Phase
+(ClientAppActor pid=4421) [Client 0] Loaded model (from Round 1)
+(ClientAppActor pid=4421) [Client 0] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4421) [Distillation] Adaptive weight: 0.580 (round 2/10, progress: 11.1%)
+(ClientAppActor pid=4421) [Data] Client 0: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4421) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000098)
+(ClientAppActor pid=4421) [Transfer Learning] ResNet18 backbone frozen, training head only
+(ClientAppActor pid=4421) [Train] Parameters: 1,026 trainable, 11,176,512 frozen, 11,177,538 total
+(ClientAppActor pid=4429) [Client 1] ✓ Distillation Loss: 0.0056
+(ClientAppActor pid=4429) [Client 1] Phase 2: Private Training
+(ClientAppActor pid=4429) [Client 1] Learning Rate: 0.000098
+(ClientAppActor pid=4429) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000098)
+(ClientAppActor pid=4429) [Transfer Learning] MobileNetV2 backbone frozen, training head only
+(ClientAppActor pid=4429) [Train] Parameters: 2,562 trainable, 2,223,872 frozen, 2,226,434 total
+(ClientAppActor pid=4421) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000010)
+(ClientAppActor pid=4421) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Parameters: 11,177,538 trainable, 0 frozen, 11,177,538 total
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Parameters: 2,226,434 trainable, 0 frozen, 2,226,434 total
+(ClientAppActor pid=4429) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4429) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000010)
+(ClientAppActor pid=4429) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4421) [Client 0] ✓ Training Loss: 0.0588 (2176 samples, 1001.1s)
+(ClientAppActor pid=4421) [Client 0] Generating public logits for aggregation...
+(ClientAppActor pid=4421) [Client 0] Round 2 Complete
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4429) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4429) [Client 1] ✓ Training Loss: 0.0692 (5280 samples, 2163.8s)
+(ClientAppActor pid=4429) [Client 1] Generating public logits for aggregation...
+(ClientAppActor pid=4429) [Client 1] Round 2 Complete
+(ClientAppActor pid=4429) 
+
+[SERVER] Round 2: Aggregating Consensus
+[SERVER] ✓ Consensus computed from 2/2 clients
+[SERVER]   Top contributors:
+[SERVER]     - Durdans-mobilenet-cnmc (mobilenet_v2): 67.6% weight [samples: 5280, loss: 0.050]
+[SERVER]     - Asiri-resnet-allidb2 (resnet18): 32.4% weight [samples: 2176, loss: 0.044]
+[Round Eval] Evaluating client 0: Asiri-resnet-allidb2 (resnet18) on validation
+[Data] Client 0: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+[Round Eval] Client 0: Acc=90.4%, Loss=0.452, Gap=35.6%
+[Round Eval] Evaluating client 1: Durdans-mobilenet-cnmc (mobilenet_v2) on validation
+[Data] Client 1: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+INFO :      [ROUND 2] Validation Results:
+INFO :        Client 0: Acc=90.4%, Loss=0.452, Gap=35.6% (validation)
+INFO :        Client 1: Acc=77.6%, Loss=0.557, Gap=33.4% (validation)
+INFO :      [ROUND 2] Average: Acc=84.0%, Loss=0.504, Gap=34.5%
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) INFO :      [EVAL] Overall: 90.4% | Leukemia: 91.6% | Healthy: 62.5% | Gap: 29.1%
+(ClientAppActor pid=4429) INFO :      [EVAL] Precision: 0.983 | Recall: 0.916 | F1: 0.948 | ROC-AUC: 0.166
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+INFO :      
+(ClientAppActor pid=4421) WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 31.3% (Target: <10%)
+INFO :      ======================================================================
+(ClientAppActor pid=4421) INFO :      [EVAL] Overall: 77.8% | Leukemia: 88.1% | Healthy: 56.8% | Gap: 31.3%
+(ClientAppActor pid=4421) INFO :      [EVAL] Precision: 0.805 | Recall: 0.881 | F1: 0.842 | ROC-AUC: 0.190
+INFO :      [ROUND 3/10]
+INFO :      ======================================================================
+INFO :      
+INFO :      [ROUND 3] FL Training Phase
+INFO :      --------------------------------------------------
+(ClientAppActor pid=4429) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4429) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4429)   self.pid = os.fork()
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4421) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4421)   self.pid = os.fork()
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+INFO :      
+INFO :      [ROUND 3] Validation Evaluation (Per-Round Tracking)
+INFO :      --------------------------------------------------
+[Round Eval] Client 1: Acc=77.6%, Loss=0.557, Gap=33.4%
+[Round Metrics] Saved validation metrics for round 2 to /content/drive/MyDrive/College/FLEX-Med/flex-med/cnmc_data.json
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Client 0] Evaluation Phase
+(ClientAppActor pid=4429) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Client 0] ✓ Loss: 0.4771 | Accuracy: 0.9039 (90.4%)
+(ClientAppActor pid=4421) [Client 1] Evaluation Phase
+(ClientAppActor pid=4429) [Data] Client 0: Activated WeightedRandomSampler for class balance
+
+[ROUND 2] Evaluation Results:
+  Avg Loss: 0.5414 | Avg Accuracy: 0.8147 (81.5%)
+(ClientAppActor pid=4421) [Client 1] ✓ Loss: 0.5680 | Accuracy: 0.7779 (77.8%)
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [ROUND 3] Client 1 - Training Phase
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4429) [Client 1] Loaded model (from Round 2)
+(ClientAppActor pid=4429) [Client 1] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4429) [Distillation] Adaptive weight: 0.561 (round 3/10, progress: 22.2%)
+(ClientAppActor pid=4421) [Client 0] ✓ Distillation Loss: 0.0039
+(ClientAppActor pid=4421) [Client 0] Phase 2: Private Training
+(ClientAppActor pid=4421) [Client 0] Learning Rate: 0.000096
+(ClientAppActor pid=4421) ============================================================ [repeated 2x across cluster]
+(ClientAppActor pid=4421) [ROUND 3] Client 0 - Training Phase
+(ClientAppActor pid=4421) [Client 0] Loaded model (from Round 2)
+(ClientAppActor pid=4421) [Client 0] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4421) [Distillation] Adaptive weight: 0.561 (round 3/10, progress: 22.2%)
+(ClientAppActor pid=4421) [Data] Client 0: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4421) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000096)
+(ClientAppActor pid=4421) [Transfer Learning] ResNet18 backbone frozen, training head only
+(ClientAppActor pid=4421) [Train] Parameters: 1,026 trainable, 11,176,512 frozen, 11,177,538 total
+(ClientAppActor pid=4429) [Client 1] ✓ Distillation Loss: 0.0042
+(ClientAppActor pid=4429) [Client 1] Phase 2: Private Training
+(ClientAppActor pid=4429) [Client 1] Learning Rate: 0.000096
+(ClientAppActor pid=4429) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000096)
+(ClientAppActor pid=4429) [Transfer Learning] MobileNetV2 backbone frozen, training head only
+(ClientAppActor pid=4429) [Train] Parameters: 2,562 trainable, 2,223,872 frozen, 2,226,434 total
+(ClientAppActor pid=4421) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000010)
+(ClientAppActor pid=4421) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Parameters: 11,177,538 trainable, 0 frozen, 11,177,538 total
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Parameters: 2,226,434 trainable, 0 frozen, 2,226,434 total
+(ClientAppActor pid=4429) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4429) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000010)
+(ClientAppActor pid=4429) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4421) [Client 0] ✓ Training Loss: 0.0594 (2176 samples, 985.4s)
+(ClientAppActor pid=4421) [Client 0] Generating public logits for aggregation...
+(ClientAppActor pid=4421) [Client 0] Round 3 Complete
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4429) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4429) [Client 1] ✓ Training Loss: 0.0683 (5280 samples, 1908.1s)
+(ClientAppActor pid=4429) [Client 1] Generating public logits for aggregation...
+(ClientAppActor pid=4429) [Client 1] Round 3 Complete
+(ClientAppActor pid=4429) 
+
+[SERVER] Round 3: Aggregating Consensus
+[SERVER] ✓ Consensus computed from 2/2 clients
+[SERVER]   Top contributors:
+[SERVER]     - Durdans-mobilenet-cnmc (mobilenet_v2): 67.6% weight [samples: 5280, loss: 0.049]
+[SERVER]     - Asiri-resnet-allidb2 (resnet18): 32.4% weight [samples: 2176, loss: 0.043]
+[Round Eval] Evaluating client 0: Asiri-resnet-allidb2 (resnet18) on validation
+[Data] Client 0: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+[Round Eval] Client 0: Acc=89.1%, Loss=0.494, Gap=34.3%
+[Round Eval] Evaluating client 1: Durdans-mobilenet-cnmc (mobilenet_v2) on validation
+[Data] Client 1: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+WARNING :   
+WARNING :   ⚠️  DEGRADATION WARNING ⚠️
+WARNING :   Client 0: Validation accuracy declining for 2 consecutive rounds
+WARNING :     Round 1: 94.026%
+WARNING :     Round 2: 90.390%
+WARNING :     Round 3: 89.091%
+WARNING :   Consider reviewing hyperparameters or stopping early.
+WARNING :   
+WARNING :   
+WARNING :   ⚠️  OVERFITTING WARNING ⚠️
+WARNING :   Client 0: Validation loss increasing for 2 consecutive rounds
+WARNING :     Round 1: 0.384
+WARNING :     Round 2: 0.452
+WARNING :     Round 3: 0.494
+WARNING :   Model may be overfitting to training data.
+WARNING :   
+INFO :      [ROUND 3] Validation Results:
+INFO :        Client 0: Acc=89.1%, Loss=0.494, Gap=34.3% (validation)
+INFO :        Client 1: Acc=76.7%, Loss=0.561, Gap=33.1% (validation)
+INFO :      [ROUND 3] Average: Acc=82.9%, Loss=0.528, Gap=33.7%
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) INFO :      [EVAL] Overall: 88.6% | Leukemia: 90.0% | Healthy: 56.2% | Gap: 33.7%
+(ClientAppActor pid=4429) INFO :      [EVAL] Precision: 0.979 | Recall: 0.900 | F1: 0.938 | ROC-AUC: 0.166
+(ClientAppActor pid=4429) WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 33.7% (Target: <10%)
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+INFO :      
+(ClientAppActor pid=4421) INFO :      [EVAL] Overall: 77.7% | Leukemia: 88.8% | Healthy: 55.2% | Gap: 33.6%
+INFO :      ======================================================================
+INFO :      [ROUND 4/10]
+(ClientAppActor pid=4421) INFO :      [EVAL] Precision: 0.801 | Recall: 0.888 | F1: 0.842 | ROC-AUC: 0.186
+INFO :      ======================================================================
+INFO :      
+(ClientAppActor pid=4421) WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 33.6% (Target: <10%)
+INFO :      [ROUND 4] FL Training Phase
+INFO :      --------------------------------------------------
+(ClientAppActor pid=4429) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4429) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4429)   self.pid = os.fork()
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4421) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4421)   self.pid = os.fork()
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+INFO :      
+INFO :      [ROUND 4] Validation Evaluation (Per-Round Tracking)
+INFO :      --------------------------------------------------
+[Round Eval] Client 1: Acc=76.7%, Loss=0.561, Gap=33.1%
+[Round Metrics] Saved validation metrics for round 3 to /content/drive/MyDrive/College/FLEX-Med/flex-med/cnmc_data.json
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Client 0] Evaluation Phase
+(ClientAppActor pid=4429) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Client 0] ✓ Loss: 0.5225 | Accuracy: 0.8857 (88.6%)
+(ClientAppActor pid=4421) [Client 1] Evaluation Phase
+(ClientAppActor pid=4429) [Data] Client 0: Activated WeightedRandomSampler for class balance
+
+[ROUND 3] Evaluation Results:
+  Avg Loss: 0.5570 | Avg Accuracy: 0.8087 (80.9%)
+(ClientAppActor pid=4421) [Client 1] ✓ Loss: 0.5713 | Accuracy: 0.7768 (77.7%)
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [ROUND 4] Client 1 - Training Phase
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4429) [Client 1] Loaded model (from Round 3)
+(ClientAppActor pid=4429) [Client 1] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4429) [Distillation] Adaptive weight: 0.543 (round 4/10, progress: 33.3%)
+(ClientAppActor pid=4429) [Client 1] ✓ Distillation Loss: 0.0028
+(ClientAppActor pid=4429) [Client 1] Phase 2: Private Training
+(ClientAppActor pid=4429) [Client 1] Learning Rate: 0.000094
+(ClientAppActor pid=4421) ============================================================ [repeated 2x across cluster]
+(ClientAppActor pid=4421) [ROUND 4] Client 0 - Training Phase
+(ClientAppActor pid=4421) [Client 0] Loaded model (from Round 3)
+(ClientAppActor pid=4421) [Client 0] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4421) [Distillation] Adaptive weight: 0.543 (round 4/10, progress: 33.3%)
+(ClientAppActor pid=4429) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000094)
+(ClientAppActor pid=4429) [Transfer Learning] MobileNetV2 backbone frozen, training head only
+(ClientAppActor pid=4429) [Train] Parameters: 2,562 trainable, 2,223,872 frozen, 2,226,434 total
+(ClientAppActor pid=4421) [Client 0] ✓ Distillation Loss: 0.0029
+(ClientAppActor pid=4421) [Client 0] Phase 2: Private Training
+(ClientAppActor pid=4421) [Client 0] Learning Rate: 0.000094
+(ClientAppActor pid=4421) [Data] Client 0: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4421) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000094)
+(ClientAppActor pid=4421) [Transfer Learning] ResNet18 backbone frozen, training head only
+(ClientAppActor pid=4421) [Train] Parameters: 1,026 trainable, 11,176,512 frozen, 11,177,538 total
+(ClientAppActor pid=4421) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000009)
+(ClientAppActor pid=4421) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Parameters: 11,177,538 trainable, 0 frozen, 11,177,538 total
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Parameters: 2,226,434 trainable, 0 frozen, 2,226,434 total
+(ClientAppActor pid=4429) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4429) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000009)
+(ClientAppActor pid=4429) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4421) [Client 0] ✓ Training Loss: 0.0602 (2176 samples, 865.6s)
+(ClientAppActor pid=4421) [Client 0] Generating public logits for aggregation...
+(ClientAppActor pid=4421) [Client 0] Round 4 Complete
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4429) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4429) [Client 1] ✓ Training Loss: 0.0665 (5280 samples, 1580.6s)
+(ClientAppActor pid=4429) [Client 1] Generating public logits for aggregation...
+(ClientAppActor pid=4429) [Client 1] Round 4 Complete
+(ClientAppActor pid=4429) 
+
+[SERVER] Round 4: Aggregating Consensus
+[SERVER] ✓ Consensus computed from 2/2 clients
+[SERVER]   Top contributors:
+[SERVER]     - Durdans-mobilenet-cnmc (mobilenet_v2): 67.6% weight [samples: 5280, loss: 0.047]
+[SERVER]     - Asiri-resnet-allidb2 (resnet18): 32.4% weight [samples: 2176, loss: 0.043]
+[Round Eval] Evaluating client 0: Asiri-resnet-allidb2 (resnet18) on validation
+[Data] Client 0: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+[Round Eval] Client 0: Acc=90.1%, Loss=0.480, Gap=35.3%
+[Round Eval] Evaluating client 1: Durdans-mobilenet-cnmc (mobilenet_v2) on validation
+[Data] Client 1: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+INFO :      [ROUND 4] Validation Results:
+INFO :        Client 0: Acc=90.1%, Loss=0.480, Gap=35.3% (validation)
+INFO :        Client 1: Acc=78.2%, Loss=0.557, Gap=33.4% (validation)
+INFO :      [ROUND 4] Average: Acc=84.2%, Loss=0.519, Gap=34.4%
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) INFO :      [EVAL] Overall: 90.1% | Leukemia: 91.6% | Healthy: 56.2% | Gap: 35.3%
+(ClientAppActor pid=4429) INFO :      [EVAL] Precision: 0.980 | Recall: 0.916 | F1: 0.947 | ROC-AUC: 0.171
+(ClientAppActor pid=4429) WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 35.3% (Target: <10%)
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+INFO :      
+INFO :      ======================================================================
+INFO :      [ROUND 5/10]
+INFO :      ======================================================================
+INFO :      
+INFO :      [ROUND 5] FL Training Phase
+INFO :      --------------------------------------------------
+(ClientAppActor pid=4429) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4429) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4429)   self.pid = os.fork()
+(ClientAppActor pid=4421) INFO :      [EVAL] Overall: 78.0% | Leukemia: 88.1% | Healthy: 57.5% | Gap: 30.7%
+(ClientAppActor pid=4421) INFO :      [EVAL] Precision: 0.808 | Recall: 0.881 | F1: 0.843 | ROC-AUC: 0.188
+(ClientAppActor pid=4421) WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 30.7% (Target: <10%)
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4421) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4421)   self.pid = os.fork()
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+INFO :      
+INFO :      [ROUND 5] Validation Evaluation (Per-Round Tracking)
+INFO :      --------------------------------------------------
+[Round Eval] Client 1: Acc=78.2%, Loss=0.557, Gap=33.4%
+[Round Metrics] Saved validation metrics for round 4 to /content/drive/MyDrive/College/FLEX-Med/flex-med/cnmc_data.json
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Client 0] Evaluation Phase
+(ClientAppActor pid=4429) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Client 0] ✓ Loss: 0.5064 | Accuracy: 0.9013 (90.1%)
+(ClientAppActor pid=4421) [Client 1] Evaluation Phase
+(ClientAppActor pid=4429) [Data] Client 0: Activated WeightedRandomSampler for class balance
+
+[ROUND 4] Evaluation Results:
+  Avg Loss: 0.5503 | Avg Accuracy: 0.8155 (81.5%)
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [ROUND 5] Client 1 - Training Phase
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4429) [Client 1] Loaded model (from Round 4)
+(ClientAppActor pid=4429) [Client 1] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4429) [Distillation] Adaptive weight: 0.525 (round 5/10, progress: 44.4%)
+(ClientAppActor pid=4429) [Client 1] ✓ Distillation Loss: 0.0015
+(ClientAppActor pid=4429) [Client 1] Phase 2: Private Training
+(ClientAppActor pid=4429) [Client 1] Learning Rate: 0.000092
+(ClientAppActor pid=4421) [Client 1] ✓ Loss: 0.5684 | Accuracy: 0.7800 (78.0%)
+(ClientAppActor pid=4421) ============================================================ [repeated 2x across cluster]
+(ClientAppActor pid=4421) [ROUND 5] Client 0 - Training Phase
+(ClientAppActor pid=4421) [Client 0] Loaded model (from Round 4)
+(ClientAppActor pid=4421) [Client 0] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4421) [Distillation] Adaptive weight: 0.525 (round 5/10, progress: 44.4%)
+(ClientAppActor pid=4429) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000092)
+(ClientAppActor pid=4429) [Transfer Learning] MobileNetV2 backbone frozen, training head only
+(ClientAppActor pid=4429) [Train] Parameters: 2,562 trainable, 2,223,872 frozen, 2,226,434 total
+(ClientAppActor pid=4421) [Client 0] ✓ Distillation Loss: 0.0022
+(ClientAppActor pid=4421) [Client 0] Phase 2: Private Training
+(ClientAppActor pid=4421) [Client 0] Learning Rate: 0.000092
+(ClientAppActor pid=4421) [Data] Client 0: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4421) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000092)
+(ClientAppActor pid=4421) [Transfer Learning] ResNet18 backbone frozen, training head only
+(ClientAppActor pid=4421) [Train] Parameters: 1,026 trainable, 11,176,512 frozen, 11,177,538 total
+(ClientAppActor pid=4421) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000009)
+(ClientAppActor pid=4421) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Parameters: 11,177,538 trainable, 0 frozen, 11,177,538 total
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Parameters: 2,226,434 trainable, 0 frozen, 2,226,434 total
+(ClientAppActor pid=4429) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4429) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000009)
+(ClientAppActor pid=4429) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4421) [Client 0] ✓ Training Loss: 0.0601 (2176 samples, 861.0s)
+(ClientAppActor pid=4421) [Client 0] Generating public logits for aggregation...
+(ClientAppActor pid=4421) [Client 0] Round 5 Complete
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4429) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4429) [Client 1] ✓ Training Loss: 0.0664 (5280 samples, 1671.2s)
+(ClientAppActor pid=4429) [Client 1] Generating public logits for aggregation...
+
+[SERVER] Round 5: Aggregating Consensus
+[SERVER] ✓ Consensus computed from 2/2 clients
+[SERVER]   Top contributors:
+[SERVER]     - Durdans-mobilenet-cnmc (mobilenet_v2): 67.6% weight [samples: 5280, loss: 0.047]
+[SERVER]     - Asiri-resnet-allidb2 (resnet18): 32.4% weight [samples: 2176, loss: 0.043]
+[Round Eval] Evaluating client 0: Asiri-resnet-allidb2 (resnet18) on validation
+(ClientAppActor pid=4429) [Client 1] Round 5 Complete
+(ClientAppActor pid=4429) 
+[Data] Client 0: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+[Round Eval] Client 0: Acc=89.4%, Loss=0.488, Gap=34.5%
+[Round Eval] Evaluating client 1: Durdans-mobilenet-cnmc (mobilenet_v2) on validation
+[Data] Client 1: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+INFO :      [ROUND 5] Validation Results:
+INFO :        Client 0: Acc=89.4%, Loss=0.488, Gap=34.5% (validation)
+INFO :        Client 1: Acc=78.2%, Loss=0.551, Gap=32.9% (validation)
+INFO :      [ROUND 5] Average: Acc=83.8%, Loss=0.520, Gap=33.7%
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) INFO :      [EVAL] Overall: 89.9% | Leukemia: 91.6% | Healthy: 50.0% | Gap: 41.6%
+(ClientAppActor pid=4429) INFO :      [EVAL] Precision: 0.977 | Recall: 0.916 | F1: 0.945 | ROC-AUC: 0.150
+(ClientAppActor pid=4429) WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 41.6% (Target: <10%)
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) INFO :      [EVAL] Overall: 78.5% | Leukemia: 88.8% | Healthy: 57.8% | Gap: 31.0%
+(ClientAppActor pid=4421) INFO :      [EVAL] Precision: 0.810 | Recall: 0.888 | F1: 0.847 | ROC-AUC: 0.175
+(ClientAppActor pid=4421) WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 31.0% (Target: <10%)
+INFO :      
+INFO :      ======================================================================
+INFO :      [ROUND 6/10]
+INFO :      ======================================================================
+INFO :      
+INFO :      [ROUND 6] FL Training Phase
+INFO :      --------------------------------------------------
+(ClientAppActor pid=4429) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4429) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4429)   self.pid = os.fork()
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4421) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4421)   self.pid = os.fork()
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+INFO :      
+INFO :      [ROUND 6] Validation Evaluation (Per-Round Tracking)
+INFO :      --------------------------------------------------
+[Round Eval] Client 1: Acc=78.2%, Loss=0.551, Gap=32.9%
+[Round Metrics] Saved validation metrics for round 5 to /content/drive/MyDrive/College/FLEX-Med/flex-med/cnmc_data.json
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Client 0] Evaluation Phase
+(ClientAppActor pid=4429) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Client 0] ✓ Loss: 0.5137 | Accuracy: 0.8987 (89.9%)
+(ClientAppActor pid=4421) [Client 1] Evaluation Phase
+(ClientAppActor pid=4429) [Data] Client 0: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4421) [Client 1] ✓ Loss: 0.5625 | Accuracy: 0.7854 (78.5%)
+
+[ROUND 5] Evaluation Results:
+  Avg Loss: 0.5482 | Avg Accuracy: 0.8185 (81.9%)
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [ROUND 6] Client 1 - Training Phase
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4429) [Client 1] Loaded model (from Round 5)
+(ClientAppActor pid=4429) [Client 1] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4429) [Distillation] Adaptive weight: 0.508 (round 6/10, progress: 55.6%)
+(ClientAppActor pid=4429) [Client 1] ✓ Distillation Loss: 0.0010
+(ClientAppActor pid=4429) [Client 1] Phase 2: Private Training
+(ClientAppActor pid=4429) [Client 1] Learning Rate: 0.000090
+(ClientAppActor pid=4421) ============================================================ [repeated 2x across cluster]
+(ClientAppActor pid=4421) [ROUND 6] Client 0 - Training Phase
+(ClientAppActor pid=4421) [Client 0] Loaded model (from Round 5)
+(ClientAppActor pid=4421) [Client 0] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4421) [Distillation] Adaptive weight: 0.508 (round 6/10, progress: 55.6%)
+(ClientAppActor pid=4429) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000090)
+(ClientAppActor pid=4429) [Transfer Learning] MobileNetV2 backbone frozen, training head only
+(ClientAppActor pid=4429) [Train] Parameters: 2,562 trainable, 2,223,872 frozen, 2,226,434 total
+(ClientAppActor pid=4421) [Client 0] ✓ Distillation Loss: 0.0019
+(ClientAppActor pid=4421) [Client 0] Phase 2: Private Training
+(ClientAppActor pid=4421) [Client 0] Learning Rate: 0.000090
+(ClientAppActor pid=4421) [Data] Client 0: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4421) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000090)
+(ClientAppActor pid=4421) [Transfer Learning] ResNet18 backbone frozen, training head only
+(ClientAppActor pid=4421) [Train] Parameters: 1,026 trainable, 11,176,512 frozen, 11,177,538 total
+(ClientAppActor pid=4421) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000009)
+(ClientAppActor pid=4421) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Parameters: 11,177,538 trainable, 0 frozen, 11,177,538 total
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Parameters: 2,226,434 trainable, 0 frozen, 2,226,434 total
+(ClientAppActor pid=4429) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4429) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000009)
+(ClientAppActor pid=4429) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4421) [Client 0] ✓ Training Loss: 0.0586 (2176 samples, 1023.1s)
+(ClientAppActor pid=4421) [Client 0] Generating public logits for aggregation...
+(ClientAppActor pid=4421) [Client 0] Round 6 Complete
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4429) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4429) [Client 1] ✓ Training Loss: 0.0661 (5280 samples, 2074.3s)
+(ClientAppActor pid=4429) [Client 1] Generating public logits for aggregation...
+(ClientAppActor pid=4429) [Client 1] Round 6 Complete
+(ClientAppActor pid=4429) 
+
+[SERVER] Round 6: Aggregating Consensus
+[SERVER] ✓ Consensus computed from 2/2 clients
+[SERVER]   Top contributors:
+[SERVER]     - Durdans-mobilenet-cnmc (mobilenet_v2): 67.6% weight [samples: 5280, loss: 0.047]
+[SERVER]     - Asiri-resnet-allidb2 (resnet18): 32.4% weight [samples: 2176, loss: 0.042]
+[Round Eval] Evaluating client 0: Asiri-resnet-allidb2 (resnet18) on validation
+[Data] Client 0: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+[Round Eval] Client 0: Acc=88.3%, Loss=0.495, Gap=33.5%
+[Round Eval] Evaluating client 1: Durdans-mobilenet-cnmc (mobilenet_v2) on validation
+[Data] Client 1: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+WARNING :   
+WARNING :   ⚠️  DEGRADATION WARNING ⚠️
+WARNING :   Client 0: Validation accuracy declining for 2 consecutive rounds
+WARNING :     Round 4: 90.130%
+WARNING :     Round 5: 89.351%
+WARNING :     Round 6: 88.312%
+WARNING :   Consider reviewing hyperparameters or stopping early.
+WARNING :   
+WARNING :   
+WARNING :   ⚠️  OVERFITTING WARNING ⚠️
+WARNING :   Client 0: Validation loss increasing for 2 consecutive rounds
+WARNING :     Round 4: 0.480
+WARNING :     Round 5: 0.488
+WARNING :     Round 6: 0.495
+WARNING :   Model may be overfitting to training data.
+WARNING :   
+INFO :      [ROUND 6] Validation Results:
+INFO :        Client 0: Acc=88.3%, Loss=0.495, Gap=33.5% (validation)
+INFO :        Client 1: Acc=78.3%, Loss=0.557, Gap=30.7% (validation)
+INFO :      [ROUND 6] Average: Acc=83.3%, Loss=0.526, Gap=32.1%
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) INFO :      [EVAL] Overall: 88.1% | Leukemia: 89.4% | Healthy: 56.2% | Gap: 33.2%
+(ClientAppActor pid=4429) INFO :      [EVAL] Precision: 0.979 | Recall: 0.894 | F1: 0.935 | ROC-AUC: 0.183
+(ClientAppActor pid=4429) WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 33.2% (Target: <10%)
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+INFO :      
+(ClientAppActor pid=4421) INFO :      [EVAL] Overall: 77.7% | Leukemia: 87.8% | Healthy: 57.1% | Gap: 30.7%
+(ClientAppActor pid=4421) INFO :      [EVAL] Precision: 0.806 | Recall: 0.878 | F1: 0.840 | ROC-AUC: 0.181
+INFO :      ======================================================================
+(ClientAppActor pid=4421) WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 30.7% (Target: <10%)
+INFO :      [ROUND 7/10]
+INFO :      ======================================================================
+INFO :      
+INFO :      [ROUND 7] FL Training Phase
+INFO :      --------------------------------------------------
+(ClientAppActor pid=4429) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4429) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4429)   self.pid = os.fork()
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4421) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4421)   self.pid = os.fork()
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+INFO :      
+INFO :      [ROUND 7] Validation Evaluation (Per-Round Tracking)
+INFO :      --------------------------------------------------
+[Round Eval] Client 1: Acc=78.3%, Loss=0.557, Gap=30.7%
+[Round Metrics] Saved validation metrics for round 6 to /content/drive/MyDrive/College/FLEX-Med/flex-med/cnmc_data.json
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Client 0] Evaluation Phase
+(ClientAppActor pid=4429) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Client 0] ✓ Loss: 0.5204 | Accuracy: 0.8805 (88.1%)
+(ClientAppActor pid=4421) [Client 1] Evaluation Phase
+(ClientAppActor pid=4429) [Data] Client 0: Activated WeightedRandomSampler for class balance
+
+[ROUND 6] Evaluation Results:
+  Avg Loss: 0.5525 | Avg Accuracy: 0.8071 (80.7%)
+(ClientAppActor pid=4421) [Client 1] ✓ Loss: 0.5658 | Accuracy: 0.7768 (77.7%)
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [ROUND 7] Client 1 - Training Phase
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4429) [Client 1] Loaded model (from Round 6)
+(ClientAppActor pid=4429) [Client 1] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4429) [Distillation] Adaptive weight: 0.491 (round 7/10, progress: 66.7%)
+(ClientAppActor pid=4429) [Client 1] ✓ Distillation Loss: 0.0007
+(ClientAppActor pid=4429) [Client 1] Phase 2: Private Training
+(ClientAppActor pid=4429) [Client 1] Learning Rate: 0.000089
+(ClientAppActor pid=4421) ============================================================ [repeated 2x across cluster]
+(ClientAppActor pid=4421) [ROUND 7] Client 0 - Training Phase
+(ClientAppActor pid=4421) [Client 0] Loaded model (from Round 6)
+(ClientAppActor pid=4421) [Client 0] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4421) [Distillation] Adaptive weight: 0.491 (round 7/10, progress: 66.7%)
+(ClientAppActor pid=4429) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000089)
+(ClientAppActor pid=4429) [Transfer Learning] MobileNetV2 backbone frozen, training head only
+(ClientAppActor pid=4429) [Train] Parameters: 2,562 trainable, 2,223,872 frozen, 2,226,434 total
+(ClientAppActor pid=4421) [Client 0] ✓ Distillation Loss: 0.0014
+(ClientAppActor pid=4421) [Client 0] Phase 2: Private Training
+(ClientAppActor pid=4421) [Client 0] Learning Rate: 0.000089
+(ClientAppActor pid=4421) [Data] Client 0: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4421) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000089)
+(ClientAppActor pid=4421) [Transfer Learning] ResNet18 backbone frozen, training head only
+(ClientAppActor pid=4421) [Train] Parameters: 1,026 trainable, 11,176,512 frozen, 11,177,538 total
+(ClientAppActor pid=4421) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000009)
+(ClientAppActor pid=4421) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Parameters: 11,177,538 trainable, 0 frozen, 11,177,538 total
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Parameters: 2,226,434 trainable, 0 frozen, 2,226,434 total
+(ClientAppActor pid=4429) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4429) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000009)
+(ClientAppActor pid=4429) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4421) [Client 0] ✓ Training Loss: 0.0588 (2176 samples, 865.8s)
+(ClientAppActor pid=4421) [Client 0] Generating public logits for aggregation...
+(ClientAppActor pid=4421) [Client 0] Round 7 Complete
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4429) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4429) [Client 1] ✓ Training Loss: 0.0656 (5280 samples, 1623.1s)
+(ClientAppActor pid=4429) [Client 1] Generating public logits for aggregation...
+(ClientAppActor pid=4429) [Client 1] Round 7 Complete
+(ClientAppActor pid=4429) 
+
+[SERVER] Round 7: Aggregating Consensus
+[SERVER] ✓ Consensus computed from 2/2 clients
+[SERVER]   Top contributors:
+[SERVER]     - Durdans-mobilenet-cnmc (mobilenet_v2): 67.6% weight [samples: 5280, loss: 0.046]
+[SERVER]     - Asiri-resnet-allidb2 (resnet18): 32.4% weight [samples: 2176, loss: 0.042]
+[Round Eval] Evaluating client 0: Asiri-resnet-allidb2 (resnet18) on validation
+[Data] Client 0: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+[Round Eval] Client 0: Acc=89.4%, Loss=0.489, Gap=34.5%
+[Round Eval] Evaluating client 1: Durdans-mobilenet-cnmc (mobilenet_v2) on validation
+[Data] Client 1: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+WARNING :   
+WARNING :   ⚠️  OVERFITTING WARNING ⚠️
+WARNING :   Client 1: Validation loss increasing for 2 consecutive rounds
+WARNING :     Round 5: 0.551
+WARNING :     Round 6: 0.557
+WARNING :     Round 7: 0.558
+WARNING :   Model may be overfitting to training data.
+WARNING :   
+INFO :      [ROUND 7] Validation Results:
+INFO :        Client 0: Acc=89.4%, Loss=0.489, Gap=34.5% (validation)
+INFO :        Client 1: Acc=77.9%, Loss=0.558, Gap=30.0% (validation)
+INFO :      [ROUND 7] Average: Acc=83.6%, Loss=0.523, Gap=32.3%
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) INFO :      [EVAL] Overall: 90.6% | Leukemia: 92.1% | Healthy: 56.2% | Gap: 35.9%
+(ClientAppActor pid=4429) INFO :      [EVAL] Precision: 0.980 | Recall: 0.921 | F1: 0.950 | ROC-AUC: 0.170
+(ClientAppActor pid=4429) WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 35.9% (Target: <10%)
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+INFO :      
+INFO :      ======================================================================
+INFO :      [ROUND 8/10]
+INFO :      ======================================================================
+INFO :      
+INFO :      [ROUND 8] FL Training Phase
+INFO :      --------------------------------------------------
+(ClientAppActor pid=4429) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4429) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4429)   self.pid = os.fork()
+(ClientAppActor pid=4421) INFO :      [EVAL] Overall: 78.3% | Leukemia: 88.5% | Healthy: 57.8% | Gap: 30.7%
+(ClientAppActor pid=4421) INFO :      [EVAL] Precision: 0.809 | Recall: 0.885 | F1: 0.845 | ROC-AUC: 0.173
+(ClientAppActor pid=4421) WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 30.7% (Target: <10%)
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4421) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4421)   self.pid = os.fork()
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 4x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 4x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+INFO :      
+INFO :      [ROUND 8] Validation Evaluation (Per-Round Tracking)
+INFO :      --------------------------------------------------
+[Round Eval] Client 1: Acc=77.9%, Loss=0.558, Gap=30.0%
+[Round Metrics] Saved validation metrics for round 7 to /content/drive/MyDrive/College/FLEX-Med/flex-med/cnmc_data.json
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Client 0] Evaluation Phase
+(ClientAppActor pid=4429) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Client 0] ✓ Loss: 0.5158 | Accuracy: 0.9065 (90.6%)
+(ClientAppActor pid=4421) [Client 1] Evaluation Phase
+(ClientAppActor pid=4429) [Data] Client 0: Activated WeightedRandomSampler for class balance
+
+[ROUND 7] Evaluation Results:
+  Avg Loss: 0.5509 | Avg Accuracy: 0.8193 (81.9%)
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [ROUND 8] Client 1 - Training Phase
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4429) [Client 1] Loaded model (from Round 7)
+(ClientAppActor pid=4429) [Client 1] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4429) [Distillation] Adaptive weight: 0.475 (round 8/10, progress: 77.8%)
+(ClientAppActor pid=4429) [Client 1] ✓ Distillation Loss: 0.0006
+(ClientAppActor pid=4429) [Client 1] Phase 2: Private Training
+(ClientAppActor pid=4429) [Client 1] Learning Rate: 0.000087
+(ClientAppActor pid=4421) [Client 1] ✓ Loss: 0.5654 | Accuracy: 0.7833 (78.3%)
+(ClientAppActor pid=4421) ============================================================ [repeated 2x across cluster]
+(ClientAppActor pid=4421) [ROUND 8] Client 0 - Training Phase
+(ClientAppActor pid=4421) [Client 0] Loaded model (from Round 7)
+(ClientAppActor pid=4421) [Client 0] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4421) [Distillation] Adaptive weight: 0.475 (round 8/10, progress: 77.8%)
+(ClientAppActor pid=4429) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000087)
+(ClientAppActor pid=4429) [Transfer Learning] MobileNetV2 backbone frozen, training head only
+(ClientAppActor pid=4429) [Train] Parameters: 2,562 trainable, 2,223,872 frozen, 2,226,434 total
+(ClientAppActor pid=4421) [Client 0] ✓ Distillation Loss: 0.0013
+(ClientAppActor pid=4421) [Client 0] Phase 2: Private Training
+(ClientAppActor pid=4421) [Client 0] Learning Rate: 0.000087
+(ClientAppActor pid=4421) [Data] Client 0: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4421) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000087)
+(ClientAppActor pid=4421) [Transfer Learning] ResNet18 backbone frozen, training head only
+(ClientAppActor pid=4421) [Train] Parameters: 1,026 trainable, 11,176,512 frozen, 11,177,538 total
+(ClientAppActor pid=4421) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000009)
+(ClientAppActor pid=4421) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Parameters: 11,177,538 trainable, 0 frozen, 11,177,538 total
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Parameters: 2,226,434 trainable, 0 frozen, 2,226,434 total
+(ClientAppActor pid=4429) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4429) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000009)
+(ClientAppActor pid=4429) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4421) [Client 0] ✓ Training Loss: 0.0596 (2176 samples, 931.9s)
+(ClientAppActor pid=4421) [Client 0] Generating public logits for aggregation...
+(ClientAppActor pid=4421) [Client 0] Round 8 Complete
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4429) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4429) [Client 1] ✓ Training Loss: 0.0667 (5280 samples, 1772.3s)
+(ClientAppActor pid=4429) [Client 1] Generating public logits for aggregation...
+(ClientAppActor pid=4429) [Client 1] Round 8 Complete
+(ClientAppActor pid=4429) 
+
+[SERVER] Round 8: Aggregating Consensus
+[SERVER] ✓ Consensus computed from 2/2 clients
+[SERVER]   Top contributors:
+[SERVER]     - Durdans-mobilenet-cnmc (mobilenet_v2): 67.6% weight [samples: 5280, loss: 0.047]
+[SERVER]     - Asiri-resnet-allidb2 (resnet18): 32.4% weight [samples: 2176, loss: 0.042]
+[Round Eval] Evaluating client 0: Asiri-resnet-allidb2 (resnet18) on validation
+[Data] Client 0: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+[Round Eval] Client 0: Acc=90.6%, Loss=0.492, Gap=35.9%
+[Round Eval] Evaluating client 1: Durdans-mobilenet-cnmc (mobilenet_v2) on validation
+[Data] Client 1: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+WARNING :   
+WARNING :   ⚠️  OVERFITTING WARNING ⚠️
+WARNING :   Client 1: Validation loss increasing for 2 consecutive rounds
+WARNING :     Round 6: 0.557
+WARNING :     Round 7: 0.558
+WARNING :     Round 8: 0.559
+WARNING :   Model may be overfitting to training data.
+WARNING :   
+INFO :      [ROUND 8] Validation Results:
+INFO :        Client 0: Acc=90.6%, Loss=0.492, Gap=35.9% (validation)
+INFO :        Client 1: Acc=77.9%, Loss=0.559, Gap=30.0% (validation)
+INFO :      [ROUND 8] Average: Acc=84.3%, Loss=0.525, Gap=33.0%
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) INFO :      [EVAL] Overall: 90.1% | Leukemia: 91.6% | Healthy: 56.2% | Gap: 35.3%
+(ClientAppActor pid=4429) INFO :      [EVAL] Precision: 0.980 | Recall: 0.916 | F1: 0.947 | ROC-AUC: 0.144
+(ClientAppActor pid=4429) WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 35.3% (Target: <10%)
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+INFO :      
+INFO :      ======================================================================
+INFO :      [ROUND 9/10]
+INFO :      ======================================================================
+INFO :      
+INFO :      [ROUND 9] FL Training Phase
+INFO :      --------------------------------------------------
+(ClientAppActor pid=4429) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4429) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4429)   self.pid = os.fork()
+(ClientAppActor pid=4421) INFO :      [EVAL] Overall: 78.6% | Leukemia: 88.1% | Healthy: 59.4% | Gap: 28.7%
+(ClientAppActor pid=4421) INFO :      [EVAL] Precision: 0.815 | Recall: 0.881 | F1: 0.847 | ROC-AUC: 0.176
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4421) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4421)   self.pid = os.fork()
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+INFO :      
+INFO :      [ROUND 9] Validation Evaluation (Per-Round Tracking)
+INFO :      --------------------------------------------------
+[Round Eval] Client 1: Acc=77.9%, Loss=0.559, Gap=30.0%
+[Round Metrics] Saved validation metrics for round 8 to /content/drive/MyDrive/College/FLEX-Med/flex-med/cnmc_data.json
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Client 0] Evaluation Phase
+(ClientAppActor pid=4429) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Client 0] ✓ Loss: 0.5148 | Accuracy: 0.9013 (90.1%)
+(ClientAppActor pid=4421) [Client 1] Evaluation Phase
+(ClientAppActor pid=4429) [Data] Client 0: Activated WeightedRandomSampler for class balance
+
+[ROUND 8] Evaluation Results:
+  Avg Loss: 0.5521 | Avg Accuracy: 0.8200 (82.0%)
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [ROUND 9] Client 1 - Training Phase
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4429) [Client 1] Loaded model (from Round 8)
+(ClientAppActor pid=4429) [Client 1] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4429) [Distillation] Adaptive weight: 0.460 (round 9/10, progress: 88.9%)
+(ClientAppActor pid=4429) [Client 1] ✓ Distillation Loss: 0.0005
+(ClientAppActor pid=4429) [Client 1] Phase 2: Private Training
+(ClientAppActor pid=4429) [Client 1] Learning Rate: 0.000085
+(ClientAppActor pid=4421) [Client 1] ✓ Loss: 0.5675 | Accuracy: 0.7865 (78.6%)
+(ClientAppActor pid=4421) ============================================================ [repeated 2x across cluster]
+(ClientAppActor pid=4421) [ROUND 9] Client 0 - Training Phase
+(ClientAppActor pid=4421) [Client 0] Loaded model (from Round 8)
+(ClientAppActor pid=4421) [Client 0] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4421) [Distillation] Adaptive weight: 0.460 (round 9/10, progress: 88.9%)
+(ClientAppActor pid=4429) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000085)
+(ClientAppActor pid=4429) [Transfer Learning] MobileNetV2 backbone frozen, training head only
+(ClientAppActor pid=4429) [Train] Parameters: 2,562 trainable, 2,223,872 frozen, 2,226,434 total
+(ClientAppActor pid=4421) [Client 0] ✓ Distillation Loss: 0.0010
+(ClientAppActor pid=4421) [Client 0] Phase 2: Private Training
+(ClientAppActor pid=4421) [Client 0] Learning Rate: 0.000085
+(ClientAppActor pid=4421) [Data] Client 0: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4421) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000085)
+(ClientAppActor pid=4421) [Transfer Learning] ResNet18 backbone frozen, training head only
+(ClientAppActor pid=4421) [Train] Parameters: 1,026 trainable, 11,176,512 frozen, 11,177,538 total
+(ClientAppActor pid=4421) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000009)
+(ClientAppActor pid=4421) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Parameters: 11,177,538 trainable, 0 frozen, 11,177,538 total
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Parameters: 2,226,434 trainable, 0 frozen, 2,226,434 total
+(ClientAppActor pid=4429) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4429) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000009)
+(ClientAppActor pid=4429) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4421) [Client 0] ✓ Training Loss: 0.0582 (2176 samples, 1004.4s)
+(ClientAppActor pid=4421) [Client 0] Generating public logits for aggregation...
+(ClientAppActor pid=4421) [Client 0] Round 9 Complete
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4429) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4429) [Client 1] ✓ Training Loss: 0.0655 (5280 samples, 2177.7s)
+(ClientAppActor pid=4429) [Client 1] Generating public logits for aggregation...
+
+[SERVER] Round 9: Aggregating Consensus
+(ClientAppActor pid=4429) [Client 1] Round 9 Complete
+(ClientAppActor pid=4429) 
+[SERVER] ✓ Consensus computed from 2/2 clients
+[SERVER]   Top contributors:
+[SERVER]     - Durdans-mobilenet-cnmc (mobilenet_v2): 67.6% weight [samples: 5280, loss: 0.046]
+[SERVER]     - Asiri-resnet-allidb2 (resnet18): 32.4% weight [samples: 2176, loss: 0.041]
+[Round Eval] Evaluating client 0: Asiri-resnet-allidb2 (resnet18) on validation
+[Data] Client 0: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+[Round Eval] Client 0: Acc=90.6%, Loss=0.494, Gap=42.4%
+[Round Eval] Evaluating client 1: Durdans-mobilenet-cnmc (mobilenet_v2) on validation
+[Data] Client 1: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+WARNING :   
+WARNING :   ⚠️  OVERFITTING WARNING ⚠️
+WARNING :   Client 0: Validation loss increasing for 2 consecutive rounds
+WARNING :     Round 7: 0.489
+WARNING :     Round 8: 0.492
+WARNING :     Round 9: 0.494
+WARNING :   Model may be overfitting to training data.
+WARNING :   
+INFO :      [ROUND 9] Validation Results:
+INFO :        Client 0: Acc=90.6%, Loss=0.494, Gap=42.4% (validation)
+INFO :        Client 1: Acc=78.5%, Loss=0.558, Gap=30.5% (validation)
+INFO :      [ROUND 9] Average: Acc=84.6%, Loss=0.526, Gap=36.5%
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) INFO :      [EVAL] Overall: 90.1% | Leukemia: 91.6% | Healthy: 56.2% | Gap: 35.3%
+(ClientAppActor pid=4429) INFO :      [EVAL] Precision: 0.980 | Recall: 0.916 | F1: 0.947 | ROC-AUC: 0.154
+(ClientAppActor pid=4429) WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 35.3% (Target: <10%)
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) INFO :      [EVAL] Overall: 78.0% | Leukemia: 87.8% | Healthy: 58.1% | Gap: 29.7%
+(ClientAppActor pid=4421) INFO :      [EVAL] Precision: 0.809 | Recall: 0.878 | F1: 0.842 | ROC-AUC: 0.175
+INFO :      
+INFO :      ======================================================================
+INFO :      [ROUND 10/10]
+INFO :      ======================================================================
+INFO :      
+INFO :      [ROUND 10] FL Training Phase
+INFO :      --------------------------------------------------
+(ClientAppActor pid=4429) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4429) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4429)   self.pid = os.fork()
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=4421) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=4421)   self.pid = os.fork()
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 3x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 3x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 3x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 3x across cluster]
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L")
+INFO :      
+INFO :      [ROUND 10] Validation Evaluation (Per-Round Tracking)
+INFO :      --------------------------------------------------
+[Round Eval] Client 1: Acc=78.5%, Loss=0.558, Gap=30.5%
+[Round Metrics] Saved validation metrics for round 9 to /content/drive/MyDrive/College/FLEX-Med/flex-med/cnmc_data.json
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Client 0] Evaluation Phase
+(ClientAppActor pid=4429) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Client 0] ✓ Loss: 0.5142 | Accuracy: 0.9013 (90.1%)
+(ClientAppActor pid=4421) [Client 1] Evaluation Phase
+(ClientAppActor pid=4429) [Data] Client 0: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4421) [Client 1] ✓ Loss: 0.5657 | Accuracy: 0.7800 (78.0%)
+
+[ROUND 9] Evaluation Results:
+  Avg Loss: 0.5506 | Avg Accuracy: 0.8155 (81.5%)
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [ROUND 10] Client 1 - Training Phase
+(ClientAppActor pid=4429) ============================================================
+(ClientAppActor pid=4429) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4429) [Client 1] Loaded model (from Round 9)
+(ClientAppActor pid=4429) [Client 1] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4429) [Distillation] Adaptive weight: 0.444 (round 10/10, progress: 100.0%)
+(ClientAppActor pid=4421) [Client 0] ✓ Distillation Loss: 0.0008
+(ClientAppActor pid=4421) [Client 0] Phase 2: Private Training
+(ClientAppActor pid=4421) [Client 0] Learning Rate: 0.000083
+(ClientAppActor pid=4421) [Data] Client 0: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4421) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000083)
+(ClientAppActor pid=4421) [Transfer Learning] ResNet18 backbone frozen, training head only
+(ClientAppActor pid=4421) [Train] Parameters: 1,026 trainable, 11,176,512 frozen, 11,177,538 total
+(ClientAppActor pid=4421) ============================================================ [repeated 2x across cluster]
+(ClientAppActor pid=4421) [ROUND 10] Client 0 - Training Phase
+(ClientAppActor pid=4421) [Client 0] Loaded model (from Round 9)
+(ClientAppActor pid=4421) [Client 0] Phase 1: Adaptive Knowledge Distillation (2 epochs)
+(ClientAppActor pid=4421) [Distillation] Adaptive weight: 0.444 (round 10/10, progress: 100.0%)
+(ClientAppActor pid=4429) [Client 1] ✓ Distillation Loss: 0.0005
+(ClientAppActor pid=4429) [Client 1] Phase 2: Private Training
+(ClientAppActor pid=4429) [Client 1] Learning Rate: 0.000083
+(ClientAppActor pid=4429) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Train] Using Focal Loss (alpha=0.60, gamma=2.0) for class imbalance handling
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Stage 1/2: Training classifier head only (2 epochs, lr=0.000083)
+(ClientAppActor pid=4429) [Transfer Learning] MobileNetV2 backbone frozen, training head only
+(ClientAppActor pid=4429) [Train] Parameters: 2,562 trainable, 2,223,872 frozen, 2,226,434 total
+(ClientAppActor pid=4421) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000008)
+(ClientAppActor pid=4421) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Parameters: 11,177,538 trainable, 0 frozen, 11,177,538 total
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Train] Parameters: 2,226,434 trainable, 0 frozen, 2,226,434 total
+(ClientAppActor pid=4429) [Train] Stage 1 complete: Head trained on task-specific features
+(ClientAppActor pid=4429) [Train] Stage 2/2: Fine-tuning full model (3 epochs, lr=0.000008)
+(ClientAppActor pid=4429) [Transfer Learning] Backbone unfrozen, full model fine-tuning enabled
+(ClientAppActor pid=4421) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4421) [Client 0] ✓ Training Loss: 0.0591 (2176 samples, 1011.1s)
+(ClientAppActor pid=4421) [Client 0] Generating public logits for aggregation...
+(ClientAppActor pid=4421) [Client 0] Round 10 Complete
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4429) [Train] Stage 2 complete: Full model fine-tuned for medical domain
+(ClientAppActor pid=4429) [Client 1] ✓ Training Loss: 0.0655 (5280 samples, 2150.7s)
+(ClientAppActor pid=4429) [Client 1] Generating public logits for aggregation...
+(ClientAppActor pid=4429) [Client 1] Round 10 Complete
+(ClientAppActor pid=4429) 
+
+[SERVER] Round 10: Aggregating Consensus
+[SERVER] ✓ Consensus computed from 2/2 clients
+[SERVER]   Top contributors:
+[SERVER]     - Durdans-mobilenet-cnmc (mobilenet_v2): 67.6% weight [samples: 5280, loss: 0.046]
+[SERVER]     - Asiri-resnet-allidb2 (resnet18): 32.4% weight [samples: 2176, loss: 0.042]
+[Round Eval] Evaluating client 0: Asiri-resnet-allidb2 (resnet18) on validation
+[Data] Client 0: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+[Round Eval] Client 0: Acc=89.4%, Loss=0.503, Gap=34.5%
+[Round Eval] Evaluating client 1: Durdans-mobilenet-cnmc (mobilenet_v2) on validation
+[Data] Client 1: Activated WeightedRandomSampler for class balance
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+/usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+  h = Image.fromarray(np_h, "L")
+WARNING :   
+WARNING :   ⚠️  OVERFITTING WARNING ⚠️
+WARNING :   Client 0: Validation loss increasing for 2 consecutive rounds
+WARNING :     Round 8: 0.492
+WARNING :     Round 9: 0.494
+WARNING :     Round 10: 0.503
+WARNING :   Model may be overfitting to training data.
+WARNING :   
+INFO :      [ROUND 10] Validation Results:
+INFO :        Client 0: Acc=89.4%, Loss=0.503, Gap=34.5% (validation)
+INFO :        Client 1: Acc=77.8%, Loss=0.555, Gap=30.8% (validation)
+INFO :      [ROUND 10] Average: Acc=83.6%, Loss=0.529, Gap=32.7%
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4421) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15)
+(ClientAppActor pid=4421)   h = Image.fromarray(np_h, "L")
+(ClientAppActor pid=4429) INFO :      [EVAL] Overall: 88.8% | Leukemia: 90.2% | Healthy: 56.2% | Gap: 34.0%
+(ClientAppActor pid=4429) INFO :      [EVAL] Precision: 0.979 | Recall: 0.902 | F1: 0.939 | ROC-AUC: 0.139
+(ClientAppActor pid=4429) WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 34.0% (Target: <10%)
+(ClientAppActor pid=4429) /usr/local/lib/python3.12/dist-packages/torchvision/transforms/_functional_pil.py:115: DeprecationWarning: 'mode' parameter is deprecated and will be removed in Pillow 13 (2026-10-15) [repeated 2x across cluster]
+(ClientAppActor pid=4429)   h = Image.fromarray(np_h, "L") [repeated 2x across cluster]
+INFO :      
+INFO :      ======================================================================
+(ClientAppActor pid=4421) INFO :      [EVAL] Overall: 78.3% | Leukemia: 87.3% | Healthy: 60.1% | Gap: 27.3%
+INFO :      [GLOBAL] Final Federated Model Evaluation (Public Test)
+(ClientAppActor pid=4421) INFO :      [EVAL] Precision: 0.816 | Recall: 0.873 | F1: 0.844 | ROC-AUC: 0.176
+INFO :      ======================================================================
+INFO :      
+[Round Eval] Client 1: Acc=77.8%, Loss=0.555, Gap=30.8%
+[Round Metrics] Saved validation metrics for round 10 to /content/drive/MyDrive/College/FLEX-Med/flex-med/cnmc_data.json
+(ClientAppActor pid=4429) 
+(ClientAppActor pid=4429) [Client 0] Evaluation Phase
+(ClientAppActor pid=4429) [Client 0] Asiri-resnet-allidb2 | resnet18
+(ClientAppActor pid=4421) 
+(ClientAppActor pid=4421) [Client 1] Durdans-mobilenet-cnmc | mobilenet_v2
+(ClientAppActor pid=4421) [Data] Client 1: Activated WeightedRandomSampler for class balance
+(ClientAppActor pid=4429) [Client 0] ✓ Loss: 0.5251 | Accuracy: 0.8883 (88.8%)
+(ClientAppActor pid=4421) [Client 1] Evaluation Phase
+(ClientAppActor pid=4429) [Data] Client 0: Activated WeightedRandomSampler for class balance
+
+[ROUND 10] Evaluation Results:
+  Avg Loss: 0.5525 | Avg Accuracy: 0.8140 (81.4%)
+(ClientAppActor pid=4421) [Client 1] ✓ Loss: 0.5638 | Accuracy: 0.7833 (78.3%)
+[Global Eval] Evaluating client 0: Asiri-resnet-allidb2 (resnet18) on public test
+[Global Eval] Client 0: Loaded checkpoint (round 10)
+[Data] Loaded public test dataset: 1252 samples
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+INFO :      [EVAL] Overall: 73.2% | Leukemia: 88.8% | Healthy: 57.5% | Gap: 31.3%
+INFO :      [EVAL] Precision: 0.676 | Recall: 0.888 | F1: 0.768 | ROC-AUC: 0.188
+WARNING :   [EVAL] ⚠️ Class imbalance detected! Gap: 31.3% (Target: <10%)
+[Global Eval] Client 0: Accuracy=73.2%, Loss=0.586
+[Global Eval] Evaluating client 1: Durdans-mobilenet-cnmc (mobilenet_v2) on public test
+[Global Eval] Client 1: Loaded checkpoint (round 10)
+[Data] Loaded public test dataset: 1252 samples
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2771) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+INFO :      [EVAL] Overall: 73.2% | Leukemia: 87.2% | Healthy: 59.1% | Gap: 28.1%
+INFO :      [EVAL] Precision: 0.681 | Recall: 0.872 | F1: 0.765 | ROC-AUC: 0.181
+INFO :      [GLOBAL] Post-FL Evaluation Complete
+INFO :      
+INFO :      FL BENEFIT ANALYSIS:
+INFO :      ======================================================================
+INFO :      Client 0:
+INFO :        Pre-FL  (Centralized): Acc=50.0%, Loss=0.728, Gap=100.0%
+INFO :        Post-FL (Federated):   Acc=73.2%, Loss=0.586, Gap=31.3%
+INFO :        FL Improvement:        Acc=+23.2%, Loss=-0.143, Gap=-68.7%
+INFO :      
+INFO :      Client 1:
+INFO :        Pre-FL  (Centralized): Acc=50.0%, Loss=0.693, Gap=100.0%
+INFO :        Post-FL (Federated):   Acc=73.2%, Loss=0.584, Gap=28.1%
+INFO :        FL Improvement:        Acc=+23.2%, Loss=-0.109, Gap=-71.9%
+INFO :      
+INFO :      Average FL Benefit: +23.2%
+INFO :      
+INFO :      
+INFO :      ======================================================================
+INFO :      Strategy execution finished in 26781.36s
+INFO :      ======================================================================
+INFO :      
+INFO :      [SUMMARY] Per-Round Metrics saved to: /content/drive/MyDrive/College/FLEX-Med/round_metrics.json
+INFO :      [SUMMARY] Generate visualizations with: python generate_graphs.py
+(ClientAppActor pid=4429) WARNING :   Manually terminating ClientAppActor
+(ClientAppActor pid=4421) WARNING :   Manually terminating ClientAppActor
+[Global Eval] Client 1: Accuracy=73.2%, Loss=0.584
+[Global Metrics] Saved Post-FL metrics and improvements to /content/drive/MyDrive/College/FLEX-Med/flex-med/cnmc_data.json
+
+======================================================================
+[SERVER] Federated Learning Complete
+======================================================================
+
+[SERVER] Saving results...
+  ✓ Consensus saved: final_consensus.npy
+  ✓ Summary saved: training_summary.json
+  ✓ Checkpoint saved: /content/drive/MyDrive/College/FLEX-Med/checkpoints
+
+[SERVER] Training complete!
+
+2026-01-26 00:12:17,510 - INFO - 
+======================================================================
+INFO:inference_logger:
+======================================================================
+2026-01-26 00:12:17,517 - INFO - ✅ Federated Learning Simulation COMPLETED Successfully
+INFO:inference_logger:✅ Federated Learning Simulation COMPLETED Successfully
+2026-01-26 00:12:17,521 - INFO - ======================================================================
+INFO:inference_logger:======================================================================
+2026-01-26 00:12:17,890 - INFO - ✅ Status saved to: /content/drive/MyDrive/College/FLEX-Med/flex-med/flex_med/utils/simulation_status.json
+INFO:inference_logger:✅ Status saved to: /content/drive/MyDrive/College/FLEX-Med/flex-med/flex_med/utils/simulation_status.json
