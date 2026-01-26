@@ -65,6 +65,10 @@ class ClientBase(BaseModel):
     model_path: str
     metrics: str  # ← String to store JSON
     
+    model_config = {
+        "protected_namespaces": ()
+    }
+    
     @field_validator('metrics', mode='before')
     @classmethod
     def ensure_metrics_is_string(cls, v):
@@ -131,6 +135,10 @@ class ClientCreate(BaseModel):
     dataset_path: Optional[str] = "/content/drive/MyDrive/College/FLEX-Med/datasets/all_idb2_raw"
     model_path: Optional[str] = None
     metrics: str = "{}"  # ← Default to empty JSON object
+
+    model_config = {
+        "protected_namespaces": ()
+    }
     
     @field_validator('metrics', mode='before')
     @classmethod
@@ -177,8 +185,9 @@ class Client(ClientBase):
     id: int
     created_at: str  # ISO format datetime string
     
-    class Config:
-        from_attributes = True  # Updated from orm_mode in Pydantic v2
+    model_config = {
+        "from_attributes": True
+    }
 
 # ==========================================
 # HELPER FUNCTIONS

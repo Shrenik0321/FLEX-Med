@@ -6,6 +6,7 @@ import json
 import subprocess
 import tempfile
 import os
+import sys
 from pathlib import Path
 from datetime import datetime
 from supabase import Client as SupabaseClient
@@ -16,7 +17,25 @@ from app.schemas.fl_simulations import (
 )
 import logging
 
+
+# Add federated_learning to Python path for importing FL logic
+FL_PATH = Path(__file__).parent.parent.parent / "federated_learning"
+if str(FL_PATH) not in sys.path:
+    sys.path.insert(0, str(FL_PATH))
+
+# Initialize logger
 logger = logging.getLogger(__name__)
+
+# Import FL simulation logic from flex_med package
+try:
+    from flex_med.task import load_client_config
+    # from flex_med.server import run_federated_learning # Removed: module does not exist and function is unused
+    FL_AVAILABLE = True
+    logger.info("FL simulation package imported successfully")
+except ImportError as e:
+    FL_AVAILABLE = False
+    logger.warning(f"FL simulation package not available: {e}")
+
 
 router = APIRouter()
 
@@ -470,3 +489,277 @@ async def complete_simulation(
     except Exception as e:
         logger.error(f"Error completing simulation {simulation_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error completing simulation: {str(e)}")
+
+@router.post("/start_fl_simulation")
+async def run_fl_simulation(
+    background_tasks: BackgroundTasks,
+    supabase: SupabaseClient = Depends(get_supabase_client),
+):
+    """
+    Run federated learning simulation locally (integrated approach).
+
+    This endpoint:
+    1. Fetches all clients from database
+    2. Saves client config to federated_learning/cnmc_data.json
+    3. Creates simulation record to track the FL run
+    4. Runs FL simulation locally using Flower CLI as background task
+    5. Updates simulation status upon completion
+
+    Returns:
+        - message: Success message
+        - simulation_id: ID of the created simulation record
+        - mode: "integrated" to indicate local execution
+    """
+
+    if not FL_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="FL simulation package not available. Please check federated_learning path."
+        )
+
+    # --------------------------------------------------------------
+    # Fetch clients
+    # --------------------------------------------------------------
+
+    response = supabase.from_("clients").select("*").execute()
+    clients_data = response.data or []
+
+    if not clients_data:
+        raise HTTPException(status_code=400, detail="No clients found in database")
+
+    client_ids = [c["id"] for c in clients_data]
+
+    # --------------------------------------------------------------
+    # FL Configuration
+    # --------------------------------------------------------------
+
+    configs = {
+        "num_server_rounds": 10,
+        "fraction_train": 1.0,
+        "fraction_evaluate": 1.0,
+        "local_epochs": 8,
+        "lr": 0.0001,
+        "lr_decay": 0.98,
+        "distill_lr": 0.001,
+        "distill_epochs": 2,
+        "temperature": 3.0,
+        "batch_size": 32,
+    }
+
+    sim_data = {
+        "client_ids": client_ids,
+        "configs": configs,
+        "status": SimulationStatus.PENDING.value,
+        "metrics": "{}",
+    }
+
+    # --------------------------------------------------------------
+    # Create simulation record
+    # --------------------------------------------------------------
+
+    try:
+        sim_response = supabase.from_("fl_simulations").insert(sim_data).execute()
+        if not sim_response.data:
+            raise RuntimeError("Simulation insert returned empty response")
+
+        simulation_id = sim_response.data[0]["id"]
+        logger.info(f"Created simulation record {simulation_id}")
+
+    except Exception as e:
+        logger.exception("Error creating simulation record")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+    # --------------------------------------------------------------
+    # Save client config JSON
+    # --------------------------------------------------------------
+
+    try:
+        data_json_path = FL_PATH / "cnmc_data.json"
+        with open(data_json_path, "w") as f:
+            json.dump(clients_data, f, indent=2)
+
+        logger.info(f"Saved {len(clients_data)} clients to {data_json_path}")
+
+    except Exception as e:
+        logger.exception("Error saving client config")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # --------------------------------------------------------------
+    # Background Task (MUST be sync)
+    # --------------------------------------------------------------
+
+    def run_fl_background():
+        try:
+            supabase.from_("fl_simulations").update({
+                "status": SimulationStatus.RUNNING.value,
+                "started_at": datetime.utcnow().isoformat(),
+            }).eq("id", simulation_id).execute()
+
+            logger.info(f"Starting FL simulation {simulation_id}")
+
+            # Redirect logs to simulation_run.log
+            log_file_path = FL_PATH / "flex_med" / "utils" / "simulation_run.log"
+            log_file_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Check if FL_PATH contains spaces (which breaks Ray/Flower subprocess spawning)
+            exec_path = FL_PATH
+            env_override = os.environ.copy()
+            run_cmd = ["flwr", "run", "."]
+            
+            if " " in str(FL_PATH):
+                logger.info("Spaces detected in FL_PATH, using space-free symlink workaround")
+                # Create a space-free symlink in /tmp for the WHOLE backend root
+                # This ensures relative paths to datasets/ etc work
+                backend_root = FL_PATH.parent
+                symlink_backend = Path("/tmp/flex_med_backend")
+                
+                if symlink_backend.exists():
+                    if symlink_backend.is_symlink():
+                        symlink_backend.unlink()
+                    elif symlink_backend.is_dir():
+                        import shutil
+                        shutil.rmtree(symlink_backend)
+                
+                try:
+                    symlink_backend.symlink_to(backend_root)
+                    exec_path = symlink_backend / "federated_learning"
+                    logger.info(f"Created symlink: {symlink_backend} -> {backend_root}")
+                    
+                    # Update environment variables to use the symlink path
+                    # This ensures Ray workers and config.py use the space-free path
+                    env_override["BASE_PATH"] = str(symlink_backend)
+                    env_override["FLEX_MED_PROJECT_DIR"] = str(exec_path)
+                    
+                    # CRITICAL: Use the symlinked python and update PATH/PYTHONPATH 
+                    # to avoid Ray worker startup failures due to spaces in original path
+                    sym_venv_bin = symlink_backend / ".venv" / "bin"
+                    env_override["PATH"] = f"{sym_venv_bin}:{env_override.get('PATH', '')}"
+                    env_override["PYTHONPATH"] = f"{symlink_backend}:{exec_path}:{env_override.get('PYTHONPATH', '')}"
+                    
+                    # Use the symlinked python executable directly to bypass shebang issues
+                    python_exec = sym_venv_bin / "python3"
+                    run_cmd = [str(python_exec), "-m", "flwr.cli.app", "run", "."]
+                    
+                    logger.info(f"Running command: {' '.join(run_cmd)}")
+                except Exception as sym_err:
+                    logger.error(f"Failed to create symlink workaround: {sym_err}")
+                    # Fallback to original path if symlink fails
+                    exec_path = FL_PATH
+                    run_cmd = ["flwr", "run", "."]
+
+
+            # Open log file for writing
+            with open(log_file_path, "w") as log_file:
+                # Write header
+                log_file.write(f"[API] Starting FL Simulation {simulation_id} at {datetime.now()}\n")
+                log_file.write(f"[API] Execution Path: {exec_path}\n")
+                log_file.write(f"[API] Command: {' '.join(run_cmd)}\n")
+                log_file.write("=" * 80 + "\n")
+                log_file.flush()
+                
+                # Run subprocess with output redirected to log file
+                result = subprocess.run(
+                    run_cmd,
+                    cwd=str(exec_path),
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,  # Redirect stderr to stdout (log file)
+                    env=env_override,
+                    text=True,
+                    timeout=3600,
+                )
+                
+                # Write footer
+                log_file.write("\n" + "=" * 80 + "\n")
+                log_file.write(f"[API] FL Simulation {simulation_id} finished at {datetime.now()}\n")
+                log_file.write(f"[API] Exit code: {result.returncode}\n")
+
+            if result.returncode == 0:
+                supabase.from_("fl_simulations").update({
+                    "status": SimulationStatus.COMPLETED.value,
+                    "completed_at": datetime.utcnow().isoformat(),
+                }).eq("id", simulation_id).execute()
+
+                logger.info(f"FL simulation {simulation_id} completed")
+
+            else:
+                error_msg = (result.stderr or "Unknown error")[-500:]
+                supabase.from_("fl_simulations").update({
+                    "status": SimulationStatus.FAILED.value,
+                    "error_message": error_msg,
+                }).eq("id", simulation_id).execute()
+
+                logger.error(f"FL simulation {simulation_id} failed")
+
+        except subprocess.TimeoutExpired:
+            error_msg = "FL simulation timeout (exceeded 1 hour)"
+            supabase.from_("fl_simulations").update({
+                "status": SimulationStatus.FAILED.value,
+                "error_message": error_msg,
+            }).eq("id", simulation_id).execute()
+
+            logger.error(error_msg)
+
+        except Exception as e:
+            supabase.from_("fl_simulations").update({
+                "status": SimulationStatus.FAILED.value,
+                "error_message": str(e),
+            }).eq("id", simulation_id).execute()
+
+            logger.exception("Unexpected FL simulation error")
+
+    # --------------------------------------------------------------
+    # Register background task
+    # --------------------------------------------------------------
+
+    background_tasks.add_task(run_fl_background)
+
+    return {
+        "message": "FL simulation started (integrated mode)",
+        "simulation_id": simulation_id,
+        "mode": "integrated",
+        "num_clients": len(client_ids),
+    }
+
+@router.get("/fl_simulation_logs")
+async def get_fl_simulation_logs(
+    lines: int = 100,
+    supabase: SupabaseClient = Depends(get_supabase_client),
+):
+    """
+    Get the latest logs from the FL simulation.
+    
+    Args:
+        lines: Number of lines to return from the end of the log file (default: 100)
+    
+    Returns:
+        - logs: List of log lines
+        - total_lines: Total number of lines in the log file
+        - log_file_path: Path to the log file
+    """
+    log_file_path = FL_PATH / "flex_med" / "utils" / "simulation_run.log"
+    
+    if not log_file_path.exists():
+        return {
+            "logs": [],
+            "total_lines": 0,
+            "log_file_path": str(log_file_path),
+            "message": "No log file found - simulation may not have started yet"
+        }
+    
+    try:
+        with open(log_file_path, "r") as f:
+            all_lines = f.readlines()
+        
+        # Get the last N lines
+        log_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
+        
+        return {
+            "logs": [line.strip() for line in log_lines],
+            "total_lines": len(all_lines),
+            "log_file_path": str(log_file_path),
+            "showing_lines": len(log_lines)
+        }
+    except Exception as e:
+        logger.exception("Error reading simulation logs")
+        raise HTTPException(status_code=500, detail=f"Error reading logs: {str(e)}")
+

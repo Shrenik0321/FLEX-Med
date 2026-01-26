@@ -101,7 +101,7 @@ export default function StartFLPage() {
       });
 
       // Call the API to start FL simulation
-      const response = await fetch(`${API_BASE_PATH}/start_fl`, {
+      const response = await fetch(`${API_BASE_PATH}/start_fl_simulation`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // In future, send the configuration in the body

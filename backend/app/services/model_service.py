@@ -11,8 +11,9 @@ from torchvision import datasets
 from app.config import Settings, get_settings
 
 # Make the local 0 package importable (lives in ../federated_learning)
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-FED_LEARNING_PATH = PROJECT_ROOT / "federated_learning"
+# backend/app/services/model_service.py -> services -> app -> backend
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+FED_LEARNING_PATH = BACKEND_ROOT / "federated_learning"
 if FED_LEARNING_PATH.exists():
     sys.path.append(str(FED_LEARNING_PATH))
 

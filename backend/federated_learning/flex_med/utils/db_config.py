@@ -1,15 +1,30 @@
 """flex-med: Database Configuration Helper."""
 
-from supabase import create_client, Client
+from supabase import Client
 import toml
 import os
+import sys
+from pathlib import Path
+
+# Try to import from app.config
+try:
+    from app.config import get_settings, get_supabase_client
+except ImportError:
+    current_file = Path(__file__).resolve()
+    backend_root = current_file.parent.parent.parent.parent
+    sys.path.append(str(backend_root))
+    try:
+        from app.config import get_settings, get_supabase_client
+    except ImportError:
+        from backend.app.config import get_settings, get_supabase_client
+
 
 # <--- CREDENTIALS --->
-SUPABASE_URL = "https://sxwclekerhjlyxehaywu.supabase.co"
-SUPABASE_KEY = "sb_secret_bDFZ4Q4ATX0q2TmMWibD_A_1t4j6YT2"
+# Retrieved from unified settings
+_settings = get_settings()
 
 # <--- PROJECT CONFIG PATH --->
-PYPROJECT_PATH = "/content/drive/MyDrive/College/FLEX-Med/flex-med/pyproject.toml"
+PYPROJECT_PATH = str(_settings.pyproject_path)
 
 def get_client_configuration(partition_id: int):
     """
@@ -19,7 +34,7 @@ def get_client_configuration(partition_id: int):
     """
     try:
         # 1. Initialize
-        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        supabase = get_supabase_client()
         
         # 2. Map Partition ID (0-indexed) to DB ID (1-indexed)
         # If your DB IDs are 0, 1, 2, remove the '+ 1'
@@ -74,7 +89,7 @@ def sync_client_count_to_config():
         print("="*70)
         
         # Step 1: Query database for client count
-        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        supabase = get_supabase_client()
         response = supabase.table('clients').select('id', count='exact').execute()
         
         # Handle different response formats
