@@ -2,11 +2,12 @@
 import io
 import logging
 import torch
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from PIL import Image
+from supabase import Client as SupabaseClient
 
-from app.config import get_settings
+from app.config import get_settings, get_supabase_client, Settings
 from app.services.model_service import (
     load_model,
     COMMON_TRANSFORM,
@@ -19,7 +20,12 @@ logger = logging.getLogger(__name__)
 
 
 @router.post("")
-async def inference(file: UploadFile = File(...)):
+async def inference(
+    client_id: int = Form(...),
+    file: UploadFile = File(...),
+    supabase: SupabaseClient = Depends(get_supabase_client),
+    settings: Settings = Depends(get_settings)
+):
     """
     Unified inference endpoint: Prediction + Grad-CAM + LIME explanations.
 
@@ -59,11 +65,28 @@ async def inference(file: UploadFile = File(...)):
         }
     """
     try:
-        logger.info(f"Received inference request for: {file.filename}")
+        logger.info(f"Received inference request for client ID {client_id}, file: {file.filename}")
 
-        # 1. Load model
-        settings = get_settings()
-        bundle = load_model(settings)
+        # 1. Fetch client and model path from database
+        client_response = supabase.from_("clients").select("model_path").eq("id", client_id).execute()
+        if not client_response.data:
+            logger.error(f"Inference failed: Client {client_id} not found.")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Client with ID {client_id} not found."
+            )
+        
+        client_model_path = client_response.data[0].get("model_path")
+        if not client_model_path:
+            logger.error(f"Inference failed: No model_path configured for client {client_id}.")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Client with ID {client_id} does not have a model path configured."
+            )
+
+        # 2. Load model
+        from pathlib import Path
+        bundle = load_model(settings, model_path=Path(client_model_path))
 
         if bundle is None or bundle.model is None:
             logger.critical("Inference failed: Model not loaded.")
@@ -147,8 +170,9 @@ async def inference(file: UploadFile = File(...)):
                 "confidence": confidence,
                 "class": class_idx,
                 "all_probabilities": all_probs,
+                "client_id": client_id,
                 "model": bundle.model_name,
-                "model_path": str(settings.model_path),
+                "model_path": str(client_model_path),
                 "device": str(bundle.device),
                 "xai": {
                     "gradcam": {

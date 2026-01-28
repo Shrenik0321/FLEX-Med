@@ -38,7 +38,5 @@ export default function ClientDetails() {
     );
   }
 
-  return (
-    <ClientDetailsPage client={client} onBack={() => router.push("/clients")} />
-  );
+  return <ClientDetailsPage client={client} />;
 }

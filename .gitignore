@@ -209,3 +209,10 @@ frontend/.vercel
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+#checkpoints
+checkpoints
+
+CLAUDE.md
+
+backend/models

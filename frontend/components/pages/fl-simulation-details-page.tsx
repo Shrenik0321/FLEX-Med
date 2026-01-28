@@ -1,14 +1,10 @@
 "use client";
 
-import { ArrowLeft, Users } from "lucide-react";
+import { Users, Loader2, Clock, XCircle, AlertCircle } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
-// import { toast } from "sonner"; // Commented out for static data
-// import { API_BASE_PATH } from "@/utils"; // Commented out for static data
-import {
-  FLSimulation,
-  parseMetrics,
-  FLSimulationMetrics,
-} from "@/types/fl-simulation";
+import { toast } from "sonner";
+import { API_BASE_PATH } from "@/utils";
+import { FLSimulation, parseMetrics } from "@/types/fl-simulation";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -73,507 +69,6 @@ interface ClientMetrics {
     };
   }>;
 }
-
-// ============================================================================
-// TEMPORARY: Static data from cnmc_data.json for testing/demo purposes
-// To revert to API:
-//   1. Remove this TEMP_CNMC_DATA constant
-//   2. Uncomment the API code in the useEffect (lines ~677-690)
-//   3. Remove the mock data code (lines ~599-673)
-// ============================================================================
-const TEMP_CNMC_DATA = [
-  {
-    id: 26,
-    created_at: "2026-01-14T16:46:50.703429+00:00",
-    client_name: "Asiri-resnet-allidb2",
-    model_type: "resnet18",
-    dataset_path:
-      "/content/drive/MyDrive/College/FLEX-Med/cnmc_datasets/cnmc_client_0",
-    status: "Training",
-    has_local_data: true,
-    model_path: "/content/drive/MyDrive/College/models/Asiri-resnet-allidb2.pt",
-    metrics: {
-      global: {
-        pre_fl: {
-          loss: 0.691839,
-          accuracy: 0.498403,
-          precision: 0.0,
-          recall: 0.0,
-          f1_score: 0.0,
-          specificity: 0.996805,
-          roc_auc: 0.41383,
-          leukemia_accuracy: 0.0,
-          healthy_accuracy: 0.996805,
-          class_gap: 0.996805,
-          confusion_matrix: {
-            TP: 0,
-            FP: 2,
-            FN: 626,
-            TN: 624,
-          },
-          num_samples: 1252,
-          num_leukemia_samples: 626,
-          num_healthy_samples: 626,
-          dataset: "public_test",
-          evaluation_type: "global",
-          evaluated_at: "2026-01-24T21:51:34.277660",
-        },
-        post_fl: {
-          loss: 0.590043,
-          accuracy: 0.726038,
-          precision: 0.67362,
-          recall: 0.876997,
-          f1_score: 0.761971,
-          specificity: 0.57508,
-          roc_auc: 0.192099,
-          leukemia_accuracy: 0.876997,
-          healthy_accuracy: 0.57508,
-          class_gap: 0.301917,
-          confusion_matrix: {
-            TP: 549,
-            FP: 266,
-            FN: 77,
-            TN: 360,
-          },
-          num_samples: 1252,
-          num_leukemia_samples: 626,
-          num_healthy_samples: 626,
-          dataset: "public_test",
-          evaluation_type: "global",
-          evaluated_at: "2026-01-25T03:39:13.631859",
-        },
-        improvement: {
-          accuracy: 0.227635,
-          loss: -0.101796,
-          precision: 0.67362,
-          recall: 0.876997,
-          f1_score: 0.761971,
-          class_gap: -0.694888,
-          leukemia_accuracy: 0.876997,
-          healthy_accuracy: -0.421725,
-        },
-      },
-      rounds: [
-        {
-          round: 1,
-          validation: {
-            loss: 0.48867629276240904,
-            accuracy: 0.8270106221547799,
-            precision: 0.7064220183486238,
-            recall: 0.48427672955974843,
-            f1_score: 0.5746268656716418,
-            class_gap: 0.4517232704402516,
-            leukemia_accuracy: 0.48427672955974843,
-            healthy_accuracy: 0.936,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-24T22:17:39.811246",
-          },
-        },
-        {
-          round: 2,
-          validation: {
-            loss: 0.5377411655120676,
-            accuracy: 0.8088012139605463,
-            precision: 0.610738255033557,
-            recall: 0.5723270440251572,
-            f1_score: 0.5909090909090909,
-            class_gap: 0.3116729559748428,
-            leukemia_accuracy: 0.5723270440251572,
-            healthy_accuracy: 0.884,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-24T22:52:45.674457",
-          },
-        },
-        {
-          round: 3,
-          validation: {
-            loss: 0.5496897764379591,
-            accuracy: 0.7966616084977238,
-            precision: 0.5757575757575758,
-            recall: 0.5974842767295597,
-            f1_score: 0.5864197530864198,
-            class_gap: 0.26251572327044026,
-            leukemia_accuracy: 0.5974842767295597,
-            healthy_accuracy: 0.86,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-24T23:28:12.681500",
-          },
-        },
-        {
-          round: 4,
-          validation: {
-            loss: 0.5449337712368943,
-            accuracy: 0.8057663125948407,
-            precision: 0.6115107913669064,
-            recall: 0.5345911949685535,
-            f1_score: 0.5704697986577181,
-            class_gap: 0.35740880503144656,
-            leukemia_accuracy: 0.5345911949685535,
-            healthy_accuracy: 0.892,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-25T00:03:55.002620",
-          },
-        },
-        {
-          round: 5,
-          validation: {
-            loss: 0.550116348972089,
-            accuracy: 0.7921092564491654,
-            precision: 0.56875,
-            recall: 0.5723270440251572,
-            f1_score: 0.5705329153605015,
-            class_gap: 0.28967295597484277,
-            leukemia_accuracy: 0.5723270440251572,
-            healthy_accuracy: 0.862,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-25T00:39:15.007140",
-          },
-        },
-        {
-          round: 6,
-          validation: {
-            loss: 0.5422606685273745,
-            accuracy: 0.8179059180576631,
-            precision: 0.6344827586206897,
-            recall: 0.5786163522012578,
-            f1_score: 0.6052631578947368,
-            class_gap: 0.3153836477987422,
-            leukemia_accuracy: 0.5786163522012578,
-            healthy_accuracy: 0.894,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-25T01:14:38.147588",
-          },
-        },
-        {
-          round: 7,
-          validation: {
-            loss: 0.5424498699503711,
-            accuracy: 0.8209408194233687,
-            precision: 0.6496350364963503,
-            recall: 0.559748427672956,
-            f1_score: 0.6013513513513513,
-            class_gap: 0.34425157232704406,
-            leukemia_accuracy: 0.559748427672956,
-            healthy_accuracy: 0.904,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-25T01:49:40.495015",
-          },
-        },
-        {
-          round: 8,
-          validation: {
-            loss: 0.5470855595128489,
-            accuracy: 0.8133535660091047,
-            precision: 0.6232876712328768,
-            recall: 0.5723270440251572,
-            f1_score: 0.5967213114754099,
-            class_gap: 0.3176729559748428,
-            leukemia_accuracy: 0.5723270440251572,
-            healthy_accuracy: 0.89,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-25T02:25:35.214967",
-          },
-        },
-        {
-          round: 9,
-          validation: {
-            loss: 0.5572788354478584,
-            accuracy: 0.7890743550834598,
-            precision: 0.5602409638554217,
-            recall: 0.5849056603773585,
-            f1_score: 0.5723076923076923,
-            class_gap: 0.2690943396226415,
-            leukemia_accuracy: 0.5849056603773585,
-            healthy_accuracy: 0.854,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-25T03:01:43.647691",
-          },
-        },
-        {
-          round: 10,
-          validation: {
-            loss: 0.5504483489237715,
-            accuracy: 0.7966616084977238,
-            precision: 0.5827814569536424,
-            recall: 0.5534591194968553,
-            f1_score: 0.567741935483871,
-            class_gap: 0.32054088050314467,
-            leukemia_accuracy: 0.5534591194968553,
-            healthy_accuracy: 0.874,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-25T03:37:25.604710",
-          },
-        },
-      ],
-    },
-  },
-  {
-    id: 27,
-    created_at: "2026-01-14T16:47:52.358916+00:00",
-    client_name: "Durdans-mobilenet-cnmc",
-    model_type: "mobilenet_v2",
-    dataset_path:
-      "/content/drive/MyDrive/College/FLEX-Med/cnmc_datasets/cnmc_client_1",
-    status: "Training",
-    has_local_data: true,
-    model_path:
-      "/content/drive/MyDrive/College/models/Durdans-mobilenet-cnmc.pt",
-    metrics: {
-      global: {
-        pre_fl: {
-          loss: 0.692989,
-          accuracy: 0.5,
-          precision: 0.0,
-          recall: 0.0,
-          f1_score: 0.0,
-          specificity: 1.0,
-          roc_auc: 0.5,
-          leukemia_accuracy: 0.0,
-          healthy_accuracy: 1.0,
-          class_gap: 1.0,
-          confusion_matrix: {
-            TP: 0,
-            FP: 0,
-            FN: 626,
-            TN: 626,
-          },
-          num_samples: 1252,
-          num_leukemia_samples: 626,
-          num_healthy_samples: 626,
-          dataset: "public_test",
-          evaluation_type: "global",
-          evaluated_at: "2026-01-24T21:52:01.545398",
-        },
-        post_fl: {
-          loss: 0.589058,
-          accuracy: 0.726837,
-          precision: 0.676179,
-          recall: 0.870607,
-          f1_score: 0.761173,
-          specificity: 0.583067,
-          roc_auc: 0.193056,
-          leukemia_accuracy: 0.870607,
-          healthy_accuracy: 0.583067,
-          class_gap: 0.28754,
-          confusion_matrix: {
-            TP: 545,
-            FP: 261,
-            FN: 81,
-            TN: 365,
-          },
-          num_samples: 1252,
-          num_leukemia_samples: 626,
-          num_healthy_samples: 626,
-          dataset: "public_test",
-          evaluation_type: "global",
-          evaluated_at: "2026-01-25T03:40:01.443686",
-        },
-        improvement: {
-          accuracy: 0.226837,
-          loss: -0.103931,
-          precision: 0.676179,
-          recall: 0.870607,
-          f1_score: 0.761173,
-          class_gap: -0.71246,
-          leukemia_accuracy: 0.870607,
-          healthy_accuracy: -0.416933,
-        },
-      },
-      rounds: [
-        {
-          round: 1,
-          validation: {
-            loss: 0.5977774697478878,
-            accuracy: 0.7723823975720789,
-            precision: 0.5540540540540541,
-            recall: 0.4939759036144578,
-            f1_score: 0.5222929936305732,
-            class_gap: 0.3721498570346294,
-            leukemia_accuracy: 0.4939759036144578,
-            healthy_accuracy: 0.8661257606490872,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-24T22:18:25.991933",
-          },
-        },
-        {
-          round: 2,
-          validation: {
-            loss: 0.5551386596762176,
-            accuracy: 0.795144157814871,
-            precision: 0.6099290780141844,
-            recall: 0.5180722891566265,
-            f1_score: 0.5602605863192183,
-            class_gap: 0.3703658447176128,
-            leukemia_accuracy: 0.5180722891566265,
-            healthy_accuracy: 0.8884381338742393,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-24T22:53:43.246063",
-          },
-        },
-        {
-          round: 3,
-          validation: {
-            loss: 0.5624740644724127,
-            accuracy: 0.787556904400607,
-            precision: 0.5928571428571429,
-            recall: 0.5,
-            f1_score: 0.5424836601307189,
-            class_gap: 0.38438133874239355,
-            leukemia_accuracy: 0.5,
-            healthy_accuracy: 0.8843813387423936,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-24T23:29:09.301009",
-          },
-        },
-        {
-          round: 4,
-          validation: {
-            loss: 0.5576311082145332,
-            accuracy: 0.7905918057663126,
-            precision: 0.5921052631578947,
-            recall: 0.5421686746987951,
-            f1_score: 0.5660377358490566,
-            class_gap: 0.3320706762139838,
-            leukemia_accuracy: 0.5421686746987951,
-            healthy_accuracy: 0.8742393509127789,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-25T00:04:55.787536",
-          },
-        },
-        {
-          round: 5,
-          validation: {
-            loss: 0.5562280803602274,
-            accuracy: 0.8012139605462822,
-            precision: 0.6223776223776224,
-            recall: 0.536144578313253,
-            f1_score: 0.5760517799352751,
-            class_gap: 0.3543219531269093,
-            leukemia_accuracy: 0.536144578313253,
-            healthy_accuracy: 0.8904665314401623,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-25T00:40:15.748908",
-          },
-        },
-        {
-          round: 6,
-          validation: {
-            loss: 0.5590003743338114,
-            accuracy: 0.7905918057663126,
-            precision: 0.5886075949367089,
-            recall: 0.5602409638554217,
-            f1_score: 0.5740740740740741,
-            class_gap: 0.3079131943595885,
-            leukemia_accuracy: 0.5602409638554217,
-            healthy_accuracy: 0.8681541582150102,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-25T01:15:28.132013",
-          },
-        },
-        {
-          round: 7,
-          validation: {
-            loss: 0.5581234937734416,
-            accuracy: 0.7996965098634294,
-            precision: 0.6118421052631579,
-            recall: 0.5602409638554217,
-            f1_score: 0.5849056603773585,
-            class_gap: 0.320083579755126,
-            leukemia_accuracy: 0.5602409638554217,
-            healthy_accuracy: 0.8803245436105477,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-25T01:50:29.208780",
-          },
-        },
-        {
-          round: 8,
-          validation: {
-            loss: 0.5590739507957366,
-            accuracy: 0.8042488619119879,
-            precision: 0.6225165562913907,
-            recall: 0.5662650602409639,
-            f1_score: 0.5930599369085173,
-            class_gap: 0.31811627850142965,
-            leukemia_accuracy: 0.5662650602409639,
-            healthy_accuracy: 0.8843813387423936,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-25T02:26:28.760697",
-          },
-        },
-        {
-          round: 9,
-          validation: {
-            loss: 0.5585906929781658,
-            accuracy: 0.7890743550834598,
-            precision: 0.5894039735099338,
-            recall: 0.536144578313253,
-            f1_score: 0.5615141955835962,
-            class_gap: 0.3380947725995259,
-            leukemia_accuracy: 0.536144578313253,
-            healthy_accuracy: 0.8742393509127789,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-25T03:02:35.174887",
-          },
-        },
-        {
-          round: 10,
-          validation: {
-            loss: 0.5597584334418336,
-            accuracy: 0.7936267071320182,
-            precision: 0.6041666666666666,
-            recall: 0.5240963855421686,
-            f1_score: 0.5612903225806452,
-            class_gap: 0.3602849532002249,
-            leukemia_accuracy: 0.5240963855421686,
-            healthy_accuracy: 0.8843813387423936,
-            num_samples: 659,
-            dataset: "validation",
-            evaluation_type: "per_round",
-            evaluated_at: "2026-01-25T03:38:17.458896",
-          },
-        },
-      ],
-    },
-  },
-];
 
 // Color palette for different clients
 const CLIENT_COLORS = [
@@ -694,224 +189,93 @@ export default function FLSimulationDetailsPage({
   const [simulation, setSimulation] = useState<FLSimulation | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<string>("all");
-  // const [isLoading, setIsLoading] = useState(true); // Commented out for static data
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Fetch simulation and client data
+  // Fetch simulation and client data once
   useEffect(() => {
-    const fetchData = () => {
+    const fetchData = async () => {
       try {
-        // setIsLoading(true); // Commented out for static data
+        setIsLoading(true);
+        setLoadError(null);
 
-        // TEMPORARY: Using static data from cnmc_data.json instead of API
-        // Convert the static data to match the expected format
-        const mockSimulation: FLSimulation = {
-          id: simulationId,
-          client_ids: TEMP_CNMC_DATA.map((c) => c.id),
-          status: "completed",
-          configs: {
-            num_server_rounds: 10,
-            fraction_train: 1.0,
-            fraction_evaluate: 1.0,
-            local_epochs: 5,
-            lr: 0.001,
-            lr_decay: 0.1,
-            distill_lr: 0.0005,
-            distill_epochs: 3,
-            temperature: 3.0,
-            batch_size: 32,
-          },
-          metrics: JSON.stringify({
-            rounds: TEMP_CNMC_DATA[0].metrics.rounds.map((round, idx) => ({
-              round: round.round,
-              avg_accuracy:
-                TEMP_CNMC_DATA.reduce(
-                  (sum, client) =>
-                    sum +
-                    (client.metrics.rounds[idx]?.validation.accuracy || 0),
-                  0,
-                ) / TEMP_CNMC_DATA.length,
-              avg_precision:
-                TEMP_CNMC_DATA.reduce(
-                  (sum, client) =>
-                    sum +
-                    (client.metrics.rounds[idx]?.validation.precision || 0),
-                  0,
-                ) / TEMP_CNMC_DATA.length,
-              avg_recall:
-                TEMP_CNMC_DATA.reduce(
-                  (sum, client) =>
-                    sum + (client.metrics.rounds[idx]?.validation.recall || 0),
-                  0,
-                ) / TEMP_CNMC_DATA.length,
-              avg_f1:
-                TEMP_CNMC_DATA.reduce(
-                  (sum, client) =>
-                    sum +
-                    (client.metrics.rounds[idx]?.validation.f1_score || 0),
-                  0,
-                ) / TEMP_CNMC_DATA.length,
-              avg_loss:
-                TEMP_CNMC_DATA.reduce(
-                  (sum, client) =>
-                    sum + (client.metrics.rounds[idx]?.validation.loss || 0),
-                  0,
-                ) / TEMP_CNMC_DATA.length,
-              num_clients_trained: TEMP_CNMC_DATA.length,
-              timestamp:
-                TEMP_CNMC_DATA[0].metrics.rounds[idx]?.validation
-                  .evaluated_at || "",
-            })),
-            aggregate: {
-              pre_fl: {
-                avg_accuracy:
-                  TEMP_CNMC_DATA.reduce(
-                    (sum, c) => sum + c.metrics.global.pre_fl.accuracy,
-                    0,
-                  ) / TEMP_CNMC_DATA.length,
-                avg_loss:
-                  TEMP_CNMC_DATA.reduce(
-                    (sum, c) => sum + c.metrics.global.pre_fl.loss,
-                    0,
-                  ) / TEMP_CNMC_DATA.length,
-                avg_precision:
-                  TEMP_CNMC_DATA.reduce(
-                    (sum, c) => sum + c.metrics.global.pre_fl.precision,
-                    0,
-                  ) / TEMP_CNMC_DATA.length,
-                avg_recall:
-                  TEMP_CNMC_DATA.reduce(
-                    (sum, c) => sum + c.metrics.global.pre_fl.recall,
-                    0,
-                  ) / TEMP_CNMC_DATA.length,
-                avg_f1:
-                  TEMP_CNMC_DATA.reduce(
-                    (sum, c) => sum + c.metrics.global.pre_fl.f1_score,
-                    0,
-                  ) / TEMP_CNMC_DATA.length,
-                std_accuracy: 0,
-                num_clients: TEMP_CNMC_DATA.length,
-              },
-              post_fl: {
-                avg_accuracy:
-                  TEMP_CNMC_DATA.reduce(
-                    (sum, c) => sum + c.metrics.global.post_fl.accuracy,
-                    0,
-                  ) / TEMP_CNMC_DATA.length,
-                avg_loss:
-                  TEMP_CNMC_DATA.reduce(
-                    (sum, c) => sum + c.metrics.global.post_fl.loss,
-                    0,
-                  ) / TEMP_CNMC_DATA.length,
-                avg_precision:
-                  TEMP_CNMC_DATA.reduce(
-                    (sum, c) => sum + c.metrics.global.post_fl.precision,
-                    0,
-                  ) / TEMP_CNMC_DATA.length,
-                avg_recall:
-                  TEMP_CNMC_DATA.reduce(
-                    (sum, c) => sum + c.metrics.global.post_fl.recall,
-                    0,
-                  ) / TEMP_CNMC_DATA.length,
-                avg_f1:
-                  TEMP_CNMC_DATA.reduce(
-                    (sum, c) => sum + c.metrics.global.post_fl.f1_score,
-                    0,
-                  ) / TEMP_CNMC_DATA.length,
-                std_accuracy: 0,
-                num_clients: TEMP_CNMC_DATA.length,
-              },
-              improvement: {
-                avg_accuracy:
-                  TEMP_CNMC_DATA.reduce(
-                    (sum, c) => sum + c.metrics.global.improvement.accuracy,
-                    0,
-                  ) / TEMP_CNMC_DATA.length,
-                avg_loss:
-                  TEMP_CNMC_DATA.reduce(
-                    (sum, c) => sum + c.metrics.global.improvement.loss,
-                    0,
-                  ) / TEMP_CNMC_DATA.length,
-                avg_precision:
-                  TEMP_CNMC_DATA.reduce(
-                    (sum, c) => sum + c.metrics.global.improvement.precision,
-                    0,
-                  ) / TEMP_CNMC_DATA.length,
-                avg_recall:
-                  TEMP_CNMC_DATA.reduce(
-                    (sum, c) => sum + c.metrics.global.improvement.recall,
-                    0,
-                  ) / TEMP_CNMC_DATA.length,
-                avg_f1:
-                  TEMP_CNMC_DATA.reduce(
-                    (sum, c) => sum + c.metrics.global.improvement.f1_score,
-                    0,
-                  ) / TEMP_CNMC_DATA.length,
-              },
-            },
-            best_round: {
-              round: 1,
-              avg_accuracy: Math.max(
-                ...TEMP_CNMC_DATA[0].metrics.rounds.map(
-                  (r) => r.validation.accuracy,
-                ),
-              ),
-            },
-            total_rounds_completed: 10,
-            total_clients: TEMP_CNMC_DATA.length,
-          }),
-          created_at: TEMP_CNMC_DATA[0].created_at,
-        };
-        setSimulation(mockSimulation);
+        // Fetch simulation details
+        const simResponse = await fetch(
+          `${API_BASE_PATH}/fl_simulations/${simulationId}`,
+        );
+        if (!simResponse.ok) throw new Error("Failed to fetch simulation");
 
-        // Convert static clients to match the expected Client interface
-        const clientsData = TEMP_CNMC_DATA.map((client) => ({
-          id: client.id,
-          client_name: client.client_name,
-          model_type: client.model_type,
-          metrics: JSON.stringify(client.metrics), // Convert object to JSON string
-        }));
-        setClients(clientsData);
+        const simData: FLSimulation = await simResponse.json();
+        setSimulation(simData);
 
-        // Original API-based implementation (commented out for temporary use)
-        // const simResponse = await fetch(
-        //   `${API_BASE_PATH}/fl_simulations/${simulationId}`,
-        // );
-        // if (!simResponse.ok) throw new Error("Failed to fetch simulation");
-        // const simData: FLSimulation = await simResponse.json();
-        // setSimulation(simData);
+        // Only fetch client metrics if simulation is completed
+        if (simData.status === "completed") {
+          await fetchClientMetrics();
+        }
 
-        // const clientIds = simData.client_ids;
-        // const clientPromises = clientIds.map((id) =>
-        //   fetch(`${API_BASE_PATH}/clients/${id}`).then((res) => res.json()),
-        // );
-        // const clientsData = await Promise.all(clientPromises);
-        // setClients(clientsData);
+        setIsLoading(false);
       } catch (error) {
-        console.error("Error loading static data:", error);
-        // toast.error("Failed to load simulation data"); // Commented out for static data
+        console.error("Error loading simulation:", error);
+        setLoadError("Failed to load simulation data");
+        toast.error("Failed to load simulation data");
+        setIsLoading(false);
       }
-      // finally {
-      //   setIsLoading(false); // Commented out for static data
-      // }
+    };
+
+    const fetchClientMetrics = async () => {
+      try {
+        // Fetch client metrics from client_simulation_metrics table
+        const metricsResponse = await fetch(
+          `${API_BASE_PATH}/client-simulation-metrics/simulation/${simulationId}`,
+        );
+
+        if (!metricsResponse.ok) {
+          throw new Error("Failed to fetch client metrics");
+        }
+
+        const clientMetricsData = await metricsResponse.json();
+
+        // Transform data to match Client interface
+        const clientsData: Client[] = clientMetricsData.map((record: any) => ({
+          id: record.client_id,
+          client_name:
+            record.clients?.client_name || `Client ${record.client_id}`,
+          model_type: record.clients?.model_type || "unknown",
+          metrics: JSON.stringify(record.metrics),
+        }));
+
+        setClients(clientsData);
+      } catch (error) {
+        console.error("Error loading client metrics:", error);
+        toast.error("Failed to load client metrics");
+      }
     };
 
     fetchData();
-  }, [simulationId, simulationName]);
+  }, [simulationId]);
 
   // Parse simulation metrics
   const simulationMetrics = simulation
-    ? parseMetrics(simulation.metrics)
+    ? parseMetrics(simulation.aggregate_metrics)
     : null;
 
-  // Debug logging
+  // Debug logging (can be removed in production)
   useEffect(() => {
     if (simulation) {
-      console.log("Raw metrics string:", simulation.metrics);
+      console.log("Simulation status:", simulation.status);
+      console.log("Raw aggregate_metrics:", simulation.aggregate_metrics);
       console.log("Parsed simulationMetrics:", simulationMetrics);
-      console.log("Has rounds?", simulationMetrics?.rounds?.length);
     }
   }, [simulation, simulationMetrics]);
 
+  // (Conditional rendering moved to bottom to fix Rules of Hooks - see below)
+
+  // If we reach here, simulation is completed - continue with existing rendering logic
+  // Parse simulation metrics (already done above)
+
+  // Continue with the rest of the component for completed simulations...
+
+  // Parse client metrics
   // Parse client metrics
   const clientMetricsMap = new Map<number, ClientMetrics>();
   clients.forEach((client) => {
@@ -1465,6 +829,127 @@ export default function FLSimulationDetailsPage({
   const lossChartOptions = getChartOptions(lossLimits, false);
   const comparisonChartOptions = getChartOptions(accuracyLimits, true, false);
 
+  // =====================================================================================
+  // CONDITIONAL RENDERING (Moved here to ensure all Hooks run before early returns)
+  // =====================================================================================
+
+  // Render loading/running state
+  if (isLoading && !simulation) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="mt-4 text-lg text-gray-600">Loading simulation...</p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px]">
+        <AlertCircle className="h-12 w-12 text-red-500" />
+        <p className="mt-4 text-lg text-gray-600">{loadError}</p>
+      </div>
+    );
+  }
+
+  // Render running/pending status
+  if (
+    simulation &&
+    (simulation.status === "running" || simulation.status === "pending")
+  ) {
+    return (
+      <div className="p-8">
+        <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 py-16">
+          <div className="relative">
+            <Loader2 className="h-16 w-16 animate-spin text-primary" />
+            <Clock className="absolute right-0 top-0 h-6 w-6 text-blue-500" />
+          </div>
+          <h2 className="mt-6 text-2xl font-semibold text-gray-900">
+            FL Simulation{" "}
+            {simulation.status === "pending" ? "Starting" : "In Progress"}
+          </h2>
+          <p className="mt-2 text-center text-gray-600 max-w-md">
+            {simulation.status === "pending"
+              ? "The federated learning simulation is being initialized. This may take a moment..."
+              : "The federated learning simulation is currently running. This may take several minutes depending on the configuration."}
+          </p>
+
+          <div className="mt-6 rounded-lg bg-blue-50 border border-blue-200 p-4 max-w-lg">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+              <div className="text-sm text-blue-800">
+                <p className="font-medium">
+                  Metrics will be available once training completes
+                </p>
+                <p className="mt-1 text-blue-700">
+                  Please refresh this page after the simulation finishes to view
+                  the results. The simulation runs in the background and may
+                  take 10-30 minutes depending on your configuration.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {simulation.configs && (
+            <div className="mt-8 w-full max-w-md">
+              <h3 className="text-sm font-medium text-gray-700">
+                Configuration:
+              </h3>
+              <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <dt className="text-gray-500">Rounds:</dt>
+                  <dd className="font-medium">
+                    {simulation.configs.num_server_rounds}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500">Local Epochs:</dt>
+                  <dd className="font-medium">
+                    {simulation.configs.local_epochs}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500">Learning Rate:</dt>
+                  <dd className="font-medium">{simulation.configs.lr}</dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500">Batch Size:</dt>
+                  <dd className="font-medium">
+                    {simulation.configs.batch_size}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Render failed status
+  if (simulation && simulation.status === "failed") {
+    return (
+      <div className="p-8">
+        <div className="flex flex-col items-center justify-center rounded-lg border-2 border-red-200 bg-red-50 py-16">
+          <XCircle className="h-16 w-16 text-red-500" />
+          <h2 className="mt-6 text-2xl font-semibold text-gray-900">
+            Simulation Failed
+          </h2>
+          <p className="mt-2 text-center text-gray-600 max-w-md">
+            The federated learning simulation encountered an error and could not
+            complete.
+          </p>
+          {simulation.error_message && (
+            <div className="mt-4 max-w-md rounded bg-white p-4 text-sm text-gray-700">
+              <p className="font-medium">Error details:</p>
+              <p className="mt-1">{simulation.error_message}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // if (isLoading) {
   //   return (
   //     <div className="p-8">
@@ -1493,98 +978,69 @@ export default function FLSimulationDetailsPage({
 
   return (
     <div className="p-8">
-      {/* Header */}
-      <div className="mb-12">
-        <button
-          onClick={onBack}
-          className="group flex items-center gap-2 text-slate-500 hover:text-slate-900 mb-6 transition-colors"
-        >
-          <div className="p-2 rounded-full bg-slate-100 group-hover:bg-slate-200 transition-colors">
-            <ArrowLeft size={16} />
-          </div>
-          <span className="font-medium text-sm">Back to History</span>
-        </button>
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="flex items-center gap-4 mb-3">
-              <h1 className="text-4xl font-bold text-slate-900 tracking-tight">
-                {simulationName}
-              </h1>
-              {selectedClient !== "all" && (
-                <span className="px-3 py-1 bg-blue-50 text-blue-600 border border-blue-100 text-xs font-semibold rounded-full uppercase tracking-wide">
-                  Individual View
-                </span>
-              )}
-              {selectedClient === "all" && (
-                <span className="px-3 py-1 bg-purple-50 text-purple-600 border border-purple-100 text-xs font-semibold rounded-full uppercase tracking-wide">
-                  Multi-Client View
-                </span>
-              )}
-            </div>
-            <p className="text-slate-500 text-lg">
-              Simulation ID:{" "}
-              <span className="font-mono text-slate-700 bg-slate-100 px-1 py-0.5 rounded text-base">
-                {simulationId}
-              </span>{" "}
-              •{" "}
-              <span className="font-medium text-slate-700">
-                {clients.length}
-              </span>{" "}
-              Clients •{" "}
-              <span
-                className={`font-medium ${simulation?.status === "completed" ? "text-green-600" : "text-slate-700"}`}
-              >
-                {simulation?.status
-                  ? simulation.status.charAt(0).toUpperCase() +
-                    simulation.status.slice(1)
-                  : "Unknown"}
-              </span>
-            </p>
-          </div>
+      <div className="mb-8 flex items-start justify-between">
+        <div>
+          <p className="text-slate-500 text-sm">
+            Simulation ID:{" "}
+            <span className="font-mono text-slate-700 bg-slate-100 px-1 py-0.5 rounded">
+              {simulationId}
+            </span>{" "}
+            •{" "}
+            <span className="font-medium text-slate-700">{clients.length}</span>{" "}
+            Clients •{" "}
+            <span
+              className={`font-medium ${simulation?.status === "completed" ? "text-green-600" : "text-slate-700"}`}
+            >
+              {simulation?.status
+                ? simulation.status.charAt(0).toUpperCase() +
+                  simulation.status.slice(1)
+                : "Unknown"}
+            </span>
+          </p>
+        </div>
 
-          {/* Client Selector */}
-          <div className="flex items-center gap-3">
-            <Users size={18} className="text-muted-foreground" />
-            <Select value={selectedClient} onValueChange={setSelectedClient}>
-              <SelectTrigger className="w-[280px] h-10 font-medium">
-                <SelectValue placeholder="Select client" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="font-medium">
+        {/* Client Selector */}
+        <div className="flex items-center gap-3">
+          <Users size={18} className="text-muted-foreground" />
+          <Select value={selectedClient} onValueChange={setSelectedClient}>
+            <SelectTrigger className="w-[280px] h-10 font-medium">
+              <SelectValue placeholder="Select client" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all" className="font-medium">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-500"></div>
+                  <span>All Clients (Multi-Line View)</span>
+                </div>
+              </SelectItem>
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Individual Clients
+              </div>
+              {clients.map((client, idx) => (
+                <SelectItem
+                  key={client.id}
+                  value={client.id.toString()}
+                  className="pl-6"
+                >
                   <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-500"></div>
-                    <span>All Clients (Multi-Line View)</span>
+                    <div
+                      className="w-2 h-2 rounded-full"
+                      style={{
+                        backgroundColor:
+                          CLIENT_COLORS[idx % CLIENT_COLORS.length],
+                      }}
+                    ></div>
+                    <span>
+                      {client.client_name}{" "}
+                      <span className="text-xs text-muted-foreground">
+                        ({client.model_type})
+                      </span>
+                    </span>
                   </div>
                 </SelectItem>
-                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Individual Clients
-                </div>
-                {clients.map((client, idx) => (
-                  <SelectItem
-                    key={client.id}
-                    value={client.id.toString()}
-                    className="pl-6"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-2 h-2 rounded-full"
-                        style={{
-                          backgroundColor:
-                            CLIENT_COLORS[idx % CLIENT_COLORS.length],
-                        }}
-                      ></div>
-                      <span>
-                        {client.client_name}{" "}
-                        <span className="text-xs text-muted-foreground">
-                          ({client.model_type})
-                        </span>
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

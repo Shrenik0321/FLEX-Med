@@ -4,12 +4,14 @@ import { Search, MoreVertical, Eye, Trash2 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { API_BASE_PATH } from "@/utils";
+import { Button } from "@/components/ui/button";
 import {
   FLSimulation,
   parseMetrics,
   formatDuration,
   formatDateTime,
 } from "@/types/fl-simulation";
+import { Loading } from "../ui/loading";
 
 interface FLHistoryPageProps {
   onStartClick: () => void;
@@ -23,11 +25,7 @@ interface ActionDropdownProps {
   onDelete: (simulation: FLSimulation) => void;
 }
 
-function ActionDropdown({
-  simulation,
-  onView,
-  onDelete,
-}: ActionDropdownProps) {
+function ActionDropdown({ simulation, onView, onDelete }: ActionDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -52,16 +50,18 @@ function ActionDropdown({
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <button
+      <Button
+        variant="ghost"
+        size="icon"
         onClick={(e) => {
           e.stopPropagation();
           setIsOpen(!isOpen);
         }}
-        className="p-1 hover:bg-gray-100 rounded transition-colors"
+        className="h-8 w-8 hover:bg-muted"
         title="Actions"
       >
-        <MoreVertical size={18} className="text-gray-600" />
-      </button>
+        <MoreVertical className="h-4 w-4 text-muted-foreground" />
+      </Button>
 
       {isOpen && (
         <div className="absolute right-0 mt-2 w-48 bg-card rounded-lg shadow-lg border border-border py-1 z-50">
@@ -99,13 +99,13 @@ export default function FLHistoryPage({
 }: FLHistoryPageProps) {
   const [simulations, setSimulations] = useState<FLSimulation[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   // Fetch simulations from API
   useEffect(() => {
     const fetchSimulations = async () => {
       try {
-        setIsLoading(true);
+        setLoading(true);
         const response = await fetch(`${API_BASE_PATH}/fl_simulations`);
 
         if (!response.ok) {
@@ -118,7 +118,7 @@ export default function FLHistoryPage({
         console.error("Error fetching simulations:", error);
         toast.error("Failed to load simulation history");
       } finally {
-        setIsLoading(false);
+        setLoading(false);
       }
     };
 
@@ -146,28 +146,14 @@ export default function FLHistoryPage({
     );
   });
 
+  if (loading) {
+    return <Loading fullScreen text="Synchronizing client database..." />;
+  }
+
   return (
     <div className="p-8">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-semibold text-foreground">
-            FL Simulation History
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            View and manage all federated learning simulation runs
-          </p>
-        </div>
-        <button
-          onClick={onStartClick}
-          className="px-4 py-2 bg-card border border-primary text-primary rounded-lg font-medium hover:bg-primary/10 transition-colors"
-        >
-          Start New Simulation
-        </button>
-      </div>
-
       {/* Search */}
-      <div className="mb-6">
+      <div className="mb-6 max-w-md">
         <div className="relative">
           <Search
             className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground"
@@ -185,19 +171,16 @@ export default function FLHistoryPage({
 
       {/* Simulations Table */}
       <div className="bg-card rounded-lg shadow-sm border border-border">
-        {isLoading ? (
-          <div className="p-8 text-center text-muted-foreground">
-            Loading simulations...
-          </div>
-        ) : filteredSimulations.length === 0 ? (
+        {filteredSimulations.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">
             No simulations found.{" "}
-            <button
+            <Button
+              variant="link"
               onClick={onStartClick}
-              className="text-primary hover:underline"
+              className="p-0 h-auto font-medium"
             >
               Start your first simulation
-            </button>
+            </Button>
           </div>
         ) : (
           <table className="w-full">
@@ -231,10 +214,10 @@ export default function FLHistoryPage({
             </thead>
             <tbody>
               {filteredSimulations.map((simulation) => {
-                const metrics = parseMetrics(simulation.metrics);
+                const metrics = parseMetrics(simulation.aggregate_metrics);
                 const avgAccuracy = metrics?.aggregate?.post_fl?.avg_accuracy;
                 const numRounds = simulation.configs.num_server_rounds;
-                const numClients = simulation.client_ids.length;
+                const numClients = metrics?.total_clients || 0;
 
                 return (
                   <tr
@@ -251,10 +234,10 @@ export default function FLHistoryPage({
                           simulation.status === "completed"
                             ? "border-green-500 text-green-700 bg-green-50"
                             : simulation.status === "running"
-                            ? "border-blue-500 text-blue-700 bg-blue-50"
-                            : simulation.status === "pending"
-                            ? "border-yellow-500 text-yellow-700 bg-yellow-50"
-                            : "border-red-500 text-red-700 bg-red-50"
+                              ? "border-blue-500 text-blue-700 bg-blue-50"
+                              : simulation.status === "pending"
+                                ? "border-yellow-500 text-yellow-700 bg-yellow-50"
+                                : "border-red-500 text-red-700 bg-red-50"
                         }`}
                       >
                         {simulation.status.charAt(0).toUpperCase() +
@@ -276,8 +259,8 @@ export default function FLHistoryPage({
                       {simulation.duration
                         ? formatDuration(simulation.duration)
                         : simulation.started_at
-                        ? "In progress..."
-                        : "N/A"}
+                          ? "In progress..."
+                          : "N/A"}
                     </td>
                     <td className="px-6 py-4 text-sm text-foreground">
                       {simulation.started_at

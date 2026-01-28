@@ -17,14 +17,22 @@ from app.schemas.fl_simulations import (
 )
 import logging
 
+# Initialize logger
+logger = logging.getLogger(__name__)
+
+# Import toml for pyproject.toml updates
+try:
+    import toml
+    TOML_AVAILABLE = True
+except ImportError:
+    TOML_AVAILABLE = False
+    logger.warning("toml package not available, pyproject.toml updates will be skipped")
+
 
 # Add federated_learning to Python path for importing FL logic
 FL_PATH = Path(__file__).parent.parent.parent / "federated_learning"
 if str(FL_PATH) not in sys.path:
     sys.path.insert(0, str(FL_PATH))
-
-# Initialize logger
-logger = logging.getLogger(__name__)
 
 # Import FL simulation logic from flex_med package
 try:
@@ -39,49 +47,11 @@ except ImportError as e:
 
 router = APIRouter()
 
-# Load orchestrator URL from settings
-# Ngrok URL for local training orchestrator (update when Colab session changes)
-FEDERATED_TRAINING_ORCHESTRATOR_URL = "https://08261171662e.ngrok-free.app"
-
-# Global FL pipeline status tracker
-fl_status = {
-    "is_running": False,
-    "current_stage": None,
-    "progress": 0,
-    "total_rounds": 0,
-    "current_round": 0,
-    "clients": 0,
-    "started_at": None,
-    "completed_at": None,
-    "error": None,
-    "logs": []
-}
-
-def update_fl_status(stage: str = None, progress: int = None, current_round: int = None, log: str = None, error: str = None, completed: bool = False):
-    """Update global FL status for monitoring"""
-    global fl_status
-
-    if stage:
-        fl_status["current_stage"] = stage
-    if progress is not None:
-        fl_status["progress"] = progress
-    if current_round is not None:
-        fl_status["current_round"] = current_round
-    if log:
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        fl_status["logs"].append(f"[{timestamp}] {log}")
-        # Keep only last 50 logs
-        if len(fl_status["logs"]) > 50:
-            fl_status["logs"] = fl_status["logs"][-50:]
-    if error:
-        fl_status["error"] = error
-    if completed:
-        fl_status["is_running"] = False
-        fl_status["completed_at"] = datetime.now().isoformat()
-        fl_status["progress"] = 100
-
 @router.post("/start_fl")
-async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
+async def start_fl(
+    supabase: SupabaseClient = Depends(get_supabase_client),
+    settings: Settings = Depends(get_settings)
+):
     """
     Start a new federated learning simulation.
 
@@ -108,10 +78,10 @@ async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
 
     # Define FL configuration (from pyproject.toml defaults)
     configs = {
-        "num_server_rounds": 10,
+        "num_server_rounds": 2,
         "fraction_train": 1.0,
         "fraction_evaluate": 1.0,
-        "local_epochs": 8,
+        "local_epochs": 2,
         "lr": 0.0001,
         "lr_decay": 0.98,
         "distill_lr": 0.001,
@@ -120,12 +90,10 @@ async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
         "batch_size": 32
     }
 
-    # Create simulation record
+    # Create simulation record (without client_ids - new schema)
     sim_data = {
-        "client_ids": client_ids,
         "configs": configs,
-        "status": SimulationStatus.PENDING,
-        "metrics": "{}"
+        "status": SimulationStatus.PENDING.value,
     }
 
     try:
@@ -139,6 +107,24 @@ async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
     except Exception as e:
         logger.error(f"Error creating simulation record: {e}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+    # Create client_simulation_metrics records for participating clients (new schema)
+    try:
+        for client in clients_data:
+            client_metrics_data = {
+                "simulation_id": simulation_id,
+                "client_id": client["id"],
+                "status": "pending",
+                "metrics": {}  # Empty JSONB, will be populated during FL
+            }
+            supabase.from_("client_simulation_metrics").insert(client_metrics_data).execute()
+
+        logger.info(f"Created {len(clients_data)} client_simulation_metrics records for simulation {simulation_id}")
+
+    except Exception as e:
+        logger.error(f"Error creating client_simulation_metrics records: {e}")
+        # Not fatal - continue with simulation (metrics will be missing though)
+        logger.warning("Simulation will continue but metrics may not be saved properly")
 
     # Clean up metrics field to prevent double-encoding
     for client in clients_data:
@@ -170,17 +156,26 @@ async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
     try:
         # Update simulation status to RUNNING
         supabase.from_("fl_simulations").update({
-            "status": SimulationStatus.RUNNING,
+            "status": SimulationStatus.RUNNING.value,
             "started_at": datetime.now().isoformat()
         }).eq("id", simulation_id).execute()
 
-        logger.info(f"Starting FL simulation {simulation_id} via orchestrator")
+        logger.info(f"Starting FL simulation {simulation_id} via orchestrator at {settings.federated_training_orchestrator_url}")
+
+        # Prepare request payload with simulation_id and client data
+        orchestrator_payload = {
+            "simulation_id": simulation_id,
+            "clients": clients_data,
+            "supabase_url": settings.supabase_url,
+            "supabase_key": settings.supabase_key
+        }
 
         # Forward to FL orchestrator
         response = requests.post(
-            f"{FEDERATED_TRAINING_ORCHESTRATOR_URL}/start_fl",
-            json=clients_data,
-            headers={"Content-Type": "application/json"}
+            f"{settings.federated_training_orchestrator_url}/start_fl",
+            json=orchestrator_payload,
+            headers={"Content-Type": "application/json"},
+            timeout=30
         )
         response.raise_for_status()
 
@@ -200,7 +195,7 @@ async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
             error_message = f"Orchestrator API Error: {e.response.text}"
 
         supabase.from_("fl_simulations").update({
-            "status": SimulationStatus.FAILED,
+            "status": SimulationStatus.FAILED.value,
             "error_message": error_message
         }).eq("id", simulation_id).execute()
 
@@ -218,7 +213,7 @@ async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
         error_message = f"Unexpected error: {str(e)}"
 
         supabase.from_("fl_simulations").update({
-            "status": SimulationStatus.FAILED,
+            "status": SimulationStatus.FAILED.value,
             "error_message": error_message
         }).eq("id", simulation_id).execute()
 
@@ -226,7 +221,10 @@ async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
         raise HTTPException(status_code=500, detail=error_message)
 
 @router.post("/resume_fl")
-async def resume_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
+async def resume_fl(
+    supabase: SupabaseClient = Depends(get_supabase_client),
+    settings: Settings = Depends(get_settings)
+):
     """
     Resume FL simulation from last checkpoint.
 
@@ -284,11 +282,13 @@ async def resume_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
         client['metrics'] = metrics_value
 
     try:
-        # Forward to Colab orchestrator's /resume_fl endpoint
+        # Forward to FL orchestrator's /resume_fl endpoint
+        logger.info(f"Resuming FL via orchestrator at {settings.federated_training_orchestrator_url}")
         response = requests.post(
-            f"{FEDERATED_TRAINING_ORCHESTRATOR_URL}/resume_fl",
+            f"{settings.federated_training_orchestrator_url}/resume_fl",
             json=clients_data,
-            headers={"Content-Type": "application/json"}
+            headers={"Content-Type": "application/json"},
+            timeout=30
         )
         response.raise_for_status()
         return response.json()
@@ -315,12 +315,12 @@ async def create_simulation(
 
     This endpoint is typically called before starting an FL run to track
     the simulation configuration and status.
+
+    Note: This is a standalone CRUD endpoint. For running FL, use /start_fl or /start_fl_simulation.
     """
     data = {
-        "client_ids": simulation_data.client_ids,
         "configs": simulation_data.configs,
-        "status": SimulationStatus.PENDING,
-        "metrics": "{}"
+        "status": SimulationStatus.PENDING.value,
     }
 
     try:
@@ -439,17 +439,25 @@ async def complete_simulation(
             raise HTTPException(status_code=404, detail=f"Simulation {simulation_id} not found")
 
         simulation = sim_response.data[0]
-        client_ids = simulation['client_ids']
 
-        # Fetch all client metrics
-        clients_response = supabase.from_("clients").select("*").in_("id", client_ids).execute()
-        clients_data = clients_response.data if clients_response.data else []
+        # Fetch all client metrics from client_simulation_metrics table (new schema)
+        metrics_response = supabase.from_("client_simulation_metrics").select("*").eq("simulation_id", simulation_id).execute()
+        metrics_data = metrics_response.data if metrics_response.data else []
 
-        if not clients_data:
+        if not metrics_data:
             raise HTTPException(
                 status_code=400,
-                detail=f"No clients found for simulation {simulation_id}"
+                detail=f"No client metrics found for simulation {simulation_id}"
             )
+
+        # Convert metrics from client_simulation_metrics format to clients format
+        # (compute_aggregate_metrics expects 'metrics' field as string)
+        clients_data = []
+        for metric_record in metrics_data:
+            clients_data.append({
+                'id': metric_record['client_id'],
+                'metrics': json.dumps(metric_record['metrics']) if isinstance(metric_record['metrics'], dict) else metric_record['metrics']
+            })
 
         # Compute aggregate metrics
         aggregate_metrics = compute_aggregate_metrics(clients_data)
@@ -470,8 +478,8 @@ async def complete_simulation(
 
         # Update simulation
         update_data = {
-            "status": SimulationStatus.COMPLETED,
-            "metrics": metrics_str,
+            "status": SimulationStatus.COMPLETED.value,
+            "aggregate_metrics": aggregate_metrics,  # Store as JSONB dict (not string)
             "completed_at": completed_at.isoformat(),
             "duration": duration
         }
@@ -490,6 +498,88 @@ async def complete_simulation(
         logger.error(f"Error completing simulation {simulation_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error completing simulation: {str(e)}")
 
+
+# ==========================================
+# Helper Functions
+# ==========================================
+
+def update_pyproject_toml(configs: dict, num_clients: int, fl_path: Path) -> bool:
+    """
+    Update pyproject.toml with FL simulation parameters.
+
+    Args:
+        configs: FL hyperparameters dict
+        num_clients: Number of participating clients
+        fl_path: Path to federated_learning directory
+
+    Returns:
+        True if update succeeded, False otherwise
+    """
+    if not TOML_AVAILABLE:
+        logger.warning("toml package not available, skipping pyproject.toml update")
+        return False
+
+    pyproject_path = fl_path / "pyproject.toml"
+
+    if not pyproject_path.exists():
+        logger.warning(f"pyproject.toml not found at {pyproject_path}")
+        return False
+
+    try:
+        # Read current pyproject.toml
+        with open(pyproject_path, 'r') as f:
+            pyproject_data = toml.load(f)
+
+        # Ensure nested structure exists
+        if 'tool' not in pyproject_data:
+            pyproject_data['tool'] = {}
+        if 'flwr' not in pyproject_data['tool']:
+            pyproject_data['tool']['flwr'] = {}
+        if 'app' not in pyproject_data['tool']['flwr']:
+            pyproject_data['tool']['flwr']['app'] = {}
+        if 'config' not in pyproject_data['tool']['flwr']['app']:
+            pyproject_data['tool']['flwr']['app']['config'] = {}
+
+        # Update configuration
+        app_config = pyproject_data['tool']['flwr']['app']['config']
+        app_config['num-server-rounds'] = configs['num_server_rounds']
+        app_config['local-epochs'] = configs['local_epochs']
+        app_config['lr'] = configs['lr']
+        app_config['lr-decay'] = configs.get('lr_decay', 0.98)
+        app_config['distill-lr'] = configs.get('distill_lr', 0.001)
+        app_config['distill-epochs'] = configs.get('distill_epochs', 2)
+        app_config['temperature'] = configs.get('temperature', 3.0)
+        app_config['batch-size'] = configs.get('batch_size', 32)
+
+        # Reduce parallelism to prevent OOM errors
+        # fraction_train controls how many clients run simultaneously during training
+        # For 2 clients: 0.5 means 1 client at a time (50% of 2 = 1)
+        # For 3 clients: 0.67 means 2 clients at a time (67% of 3 = 2)
+        app_config['fraction-train'] = configs.get('fraction_train', 0.5)
+        app_config['fraction-evaluate'] = configs.get('fraction_evaluate', 0.5)
+
+        # Update simulation config
+        if 'federations' not in pyproject_data['tool']['flwr']['app']:
+            pyproject_data['tool']['flwr']['app']['federations'] = {}
+        if 'default' not in pyproject_data['tool']['flwr']['app']['federations']:
+            pyproject_data['tool']['flwr']['app']['federations']['default'] = {}
+
+        pyproject_data['tool']['flwr']['app']['federations']['default']['options'] = {
+            'num-supernodes': num_clients
+        }
+
+        # Write back
+        with open(pyproject_path, 'w') as f:
+            toml.dump(pyproject_data, f)
+
+        logger.info(f"Updated pyproject.toml with {num_clients} clients and FL config")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to update pyproject.toml: {e}")
+        return False
+
+
 @router.post("/start_fl_simulation")
 async def run_fl_simulation(
     background_tasks: BackgroundTasks,
@@ -500,15 +590,18 @@ async def run_fl_simulation(
 
     This endpoint:
     1. Fetches all clients from database
-    2. Saves client config to federated_learning/cnmc_data.json
-    3. Creates simulation record to track the FL run
-    4. Runs FL simulation locally using Flower CLI as background task
-    5. Updates simulation status upon completion
+    2. Creates simulation record to track the FL run
+    3. Creates client_simulation_metrics records for participating clients
+    4. Prepares client configs and passes via environment variable
+    5. Updates pyproject.toml with FL configuration
+    6. Runs FL simulation locally using Flower CLI as background task
+    7. Updates simulation status upon completion
 
     Returns:
         - message: Success message
         - simulation_id: ID of the created simulation record
         - mode: "integrated" to indicate local execution
+        - num_clients: Number of participating clients
     """
 
     if not FL_AVAILABLE:
@@ -547,10 +640,8 @@ async def run_fl_simulation(
     }
 
     sim_data = {
-        "client_ids": client_ids,
         "configs": configs,
         "status": SimulationStatus.PENDING.value,
-        "metrics": "{}",
     }
 
     # --------------------------------------------------------------
@@ -570,19 +661,45 @@ async def run_fl_simulation(
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
     # --------------------------------------------------------------
-    # Save client config JSON
+    # Create client_simulation_metrics records for participating clients
     # --------------------------------------------------------------
 
     try:
-        data_json_path = FL_PATH / "cnmc_data.json"
-        with open(data_json_path, "w") as f:
-            json.dump(clients_data, f, indent=2)
+        for client in clients_data:
+            client_metrics_data = {
+                "simulation_id": simulation_id,
+                "client_id": client["id"],
+                "status": "pending",
+                "metrics": {}  # Empty JSONB, will be populated during FL
+            }
+            supabase.from_("client_simulation_metrics").insert(client_metrics_data).execute()
 
-        logger.info(f"Saved {len(clients_data)} clients to {data_json_path}")
+        logger.info(f"Created {len(clients_data)} client_simulation_metrics records for simulation {simulation_id}")
 
     except Exception as e:
-        logger.exception("Error saving client config")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error creating client_simulation_metrics records: {e}")
+        # Not fatal - continue with simulation (metrics will be missing though)
+        logger.warning("Simulation will continue but metrics may not be saved properly")
+
+    # --------------------------------------------------------------
+    # Prepare client config for FL system (pass via environment variable)
+    # --------------------------------------------------------------
+
+    # Wrap client data and include simulation metadata
+    simulation_config = {
+        "simulation_id": simulation_id,
+        "clients": clients_data
+    }
+
+    # Serialize to JSON string for passing via environment variable
+    client_config_json = json.dumps(simulation_config)
+    logger.info(f"Prepared configuration for {len(clients_data)} clients")
+
+    # --------------------------------------------------------------
+    # Update pyproject.toml with FL configuration
+    # --------------------------------------------------------------
+
+    update_pyproject_toml(configs, len(clients_data), FL_PATH)
 
     # --------------------------------------------------------------
     # Background Task (MUST be sync)
@@ -605,7 +722,24 @@ async def run_fl_simulation(
             exec_path = FL_PATH
             env_override = os.environ.copy()
             run_cmd = ["flwr", "run", "."]
-            
+
+            # Add Supabase credentials, simulation_id, and client configs for FL system
+            from app.config import get_settings
+            settings = get_settings()
+            env_override["SUPABASE_URL"] = settings.supabase_url
+            env_override["SUPABASE_KEY"] = settings.supabase_key
+            env_override["FLEX_MED_SIMULATION_ID"] = str(simulation_id)
+            env_override["FLEX_MED_CLIENT_CONFIGS"] = client_config_json
+
+            # Configure Ray to allow higher memory usage before killing workers
+            # Default is 0.95 (95%), increase to 0.98 (98%) to prevent OOM kills
+            env_override["RAY_memory_usage_threshold"] = "0.98"
+
+            # Alternatively, disable Ray's memory monitor (use with caution)
+            # env_override["RAY_memory_monitor_refresh_ms"] = "0"
+
+            logger.info(f"Passing simulation_id={simulation_id} and client configs to FL system")
+
             if " " in str(FL_PATH):
                 logger.info("Spaces detected in FL_PATH, using space-free symlink workaround")
                 # Create a space-free symlink in /tmp for the WHOLE backend root
@@ -674,12 +808,26 @@ async def run_fl_simulation(
                 log_file.write(f"[API] Exit code: {result.returncode}\n")
 
             if result.returncode == 0:
-                supabase.from_("fl_simulations").update({
-                    "status": SimulationStatus.COMPLETED.value,
-                    "completed_at": datetime.utcnow().isoformat(),
-                }).eq("id", simulation_id).execute()
+                # Calculate duration
+                sim_response = supabase.from_("fl_simulations").select("started_at").eq("id", simulation_id).execute()
+                duration = None
+                if sim_response.data and sim_response.data[0].get("started_at"):
+                    from datetime import datetime as dt
+                    started_at = dt.fromisoformat(sim_response.data[0]["started_at"].replace("Z", "+00:00"))
+                    completed_at = dt.utcnow()
+                    duration = int((completed_at - started_at).total_seconds())
 
-                logger.info(f"FL simulation {simulation_id} completed")
+                # Update simulation status
+                # Note: FL system (task.py) already updated aggregate_metrics and status to 'completed'
+                # We just add duration here
+                update_data = {}
+                if duration is not None:
+                    update_data["duration"] = duration
+
+                if update_data:
+                    supabase.from_("fl_simulations").update(update_data).eq("id", simulation_id).execute()
+
+                logger.info(f"✅ FL simulation {simulation_id} completed (duration: {duration}s)")
 
             else:
                 error_msg = (result.stderr or "Unknown error")[-500:]

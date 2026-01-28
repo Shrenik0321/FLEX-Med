@@ -17,12 +17,14 @@ FED_LEARNING_PATH = BACKEND_ROOT / "federated_learning"
 if FED_LEARNING_PATH.exists():
     sys.path.append(str(FED_LEARNING_PATH))
 
+from typing import Dict, Optional, Tuple
+
 from flex_med.task import (  # type: ignore  # added to sys.path above
     COMMON_TRANSFORM,
     get_model_by_type,
 )
 
-MODEL_CACHE: Optional["ModelBundle"] = None
+MODEL_CACHE: Dict[str, "ModelBundle"] = {}
 
 # Model type to canonical name mapping
 MODEL_TYPE_NAMES = {
@@ -104,18 +106,23 @@ def select_model(model_path: Path) -> Tuple[torch.nn.Module, str]:
 
     return model, model_name
 
-def load_model(settings: Settings) -> ModelBundle:
-    """Load and cache the model."""
+def load_model(settings: Settings, model_path: Optional[Path] = None) -> ModelBundle:
+    """Load and cache the model by its path."""
     global MODEL_CACHE
-    if MODEL_CACHE:
-        return MODEL_CACHE
+    
+    # Use provided model_path or fallback to settings
+    target_path = model_path
+    path_str = str(target_path)
+
+    if path_str in MODEL_CACHE:
+        return MODEL_CACHE[path_str]
 
     device_str = settings.device
     if device_str == "cuda" and not torch.cuda.is_available():
         device_str = "cpu"
     device = torch.device(device_str)
 
-    checkpoint = torch.load(settings.model_path, map_location=device)
+    checkpoint = torch.load(model_path, map_location=device)
 
     # Handle checkpoint format (with metadata) vs legacy format (direct state_dict)
     if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
@@ -129,70 +136,19 @@ def load_model(settings: Settings) -> ModelBundle:
             # Use canonical name from mapping, fallback to title case if not in mapping
             model_name = MODEL_TYPE_NAMES.get(model_type, model_type.replace("_", " ").title())
         else:
-            model, model_name = select_model(settings.model_path)
+            model, model_name = select_model(model_path)
     else:
         # Legacy format: checkpoint IS the state_dict
         state_dict = checkpoint
-        model, model_name = select_model(settings.model_path)
+        model, model_name = select_model(model_path)
 
     model.load_state_dict(state_dict)
     model.eval()
     model.to(device)
 
-    MODEL_CACHE = ModelBundle(model=model, device=device, class_names=settings.class_names, model_name=model_name)
-    return MODEL_CACHE
-
-def predict_image(image: Image.Image, settings: Optional[Settings] = None) -> dict:
-    """Run prediction on a PIL image."""
-    settings = settings or get_settings()
-    bundle = load_model(settings)
-    label, confidence, class_idx, all_probs = bundle.predict(image.convert("RGB"))
-    return {
-        "prediction": label,
-        "label": label,  # Keep for backward compatibility
-        "confidence": confidence,
-        "class": class_idx,
-        "model": bundle.model_name,
-        "model_path": str(settings.model_path),
-        "device": str(bundle.device),
-        "all_probabilities": all_probs,
-    }
-
-def predict_random(settings: Optional[Settings] = None) -> dict:
-    """Pick a random image from the configured folder and predict."""
-    settings = settings or get_settings()
-    if not settings.public_data_path:
-        raise ValueError("public_data_path is not configured.")
-
-    data_path = settings.public_data_path
-    ds = datasets.ImageFolder(root=data_path, transform=COMMON_TRANSFORM)
-    if len(ds) == 0:
-        raise ValueError(f"No images found under {data_path}")
-
-    idx = random.randint(0, len(ds) - 1)
-    img_tensor, label_idx = ds[idx]
-    img = Image.fromarray(np.uint8(img_tensor.mul(255).permute(1, 2, 0).numpy()))
-
-    bundle = load_model(settings)
-    with torch.no_grad():
-        outputs = bundle.model(img_tensor.unsqueeze(0).to(bundle.device))
-        probs = torch.nn.functional.softmax(outputs, dim=1)[0]
-        pred_idx = int(torch.argmax(probs).item())
-        confidence = float(probs[pred_idx].item())
-        all_probs = {bundle.class_names[i]: float(probs[i].item()) for i in range(len(bundle.class_names))}
-
-    return {
-        "prediction": bundle.class_names[pred_idx],
-        "label": bundle.class_names[pred_idx],  # Keep for backward compatibility
-        "confidence": confidence,
-        "class": pred_idx,
-        "model": bundle.model_name,
-        "model_path": str(settings.model_path),
-        "device": str(bundle.device),
-        "all_probabilities": all_probs,
-        "true_label": bundle.class_names[label_idx] if label_idx < len(bundle.class_names) else label_idx,
-        "sample_index": idx,
-    }
+    bundle = ModelBundle(model=model, device=device, class_names=settings.class_names, model_name=model_name)
+    MODEL_CACHE[path_str] = bundle
+    return bundle
 
 def get_gradcam_target_layers(model: torch.nn.Module, model_name: str):
     """

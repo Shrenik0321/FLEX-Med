@@ -45,62 +45,135 @@ class Settings(BaseSettings):
     # Application configuration
     app_name: str = "FLEX-Med API"
     debug: bool = os.getenv("DEBUG", "false").lower() == "true"
-    
+
+    # ========================================================================
     # Path Configuration
-    # Base path is the backend directory
-    base_path: Path = Path(__file__).parent.parent
-    
-    # Federated Learning Paths
-    fl_dir: Path = base_path / "federated_learning"
-    project_dir: Path = fl_dir / "flex-med" # Virtual project dir structure if needed, or just fl_dir
-    
+    # ========================================================================
+    # All paths can be overridden via environment variables for flexibility
+
+    # Base paths
+    # backend_root: The backend/ directory (where this config.py is located)
+    backend_root: Path = Path(__file__).parent.parent
+
+    # base_path: Root for datasets, models, checkpoints
+    # Default: backend/ directory (or parent if backend/datasets doesn't exist)
+    # Override with BASE_PATH environment variable
+    @property
+    def _default_base_path(self) -> Path:
+        """Calculate default base path based on directory structure."""
+        if (self.backend_root / "datasets").exists():
+            return self.backend_root
+        else:
+            # If datasets not in backend/, use project root (backend's parent)
+            return self.backend_root.parent
+
+    base_path: Path = Path(os.getenv("BASE_PATH", ""))
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Set base_path to default if not provided via env
+        if not self.base_path or str(self.base_path) == ".":
+            self.base_path = self._default_base_path
+
+    # ------------------------------------------------------------------------
+    # Federated Learning Directory Structure
+    # ------------------------------------------------------------------------
+    fl_dir: Path = backend_root / "federated_learning"
+    project_dir: Path = fl_dir
+
     # Logs
-    log_file_path: Path = fl_dir / "flex_med" / "utils" / "server_debug.log"
     simulation_log_path: Path = fl_dir / "flex_med" / "utils" / "simulation_run.log"
-    
+
     # Data & Config Files
-    client_info_file_path: Path = fl_dir / "flex_med" / "utils" / "data.json"
-    data_json_path: Path = fl_dir / "cnmc_data.json"
+    client_info_file_path: Path = fl_dir / "flex_med" / "utils" / "client_data.json"
     pyproject_path: Path = fl_dir / "pyproject.toml"
-    
-    # Datasets (Assume at same level as backend or configured via env)
-    # Check for 'datasets' folder in backend directory first, then fallback to project root
-    dataset_base_path: Path = Path(os.getenv("BASE_PATH", 
-        str(Path(__file__).parent.parent if (Path(__file__).parent.parent / "datasets").exists() 
-            else Path(__file__).parent.parent.parent)
-    ))
-    dataset_file_path: Path = dataset_base_path / "datasets" / "cnmc"
-    public_anchor_dataset_path: Path = dataset_file_path / "cnmc_public_anchor"
-    public_test_dataset_path: Path = dataset_file_path / "cnmc_public_test"
-    
-    # Model Checkpoints
-    model_checkpoint_file_path: Path = dataset_base_path / "checkpoints"
-    
-    # Metrics & output
-    round_metrics_file_path: Path = dataset_base_path / "round_metrics.json"
-    graphs_output_dir: Path = dataset_base_path / "graphical_visualisation"
-    
+
     # Simulation Runner
     run_simulation_shell_file_path: Path = fl_dir / "flex_med" / "utils" / "run_simulation.sh"
-    simulation_status_json_file_path: Path = fl_dir / "flex_med" / "utils" / "simulation_status.json"
 
-    # Orchestrator URLs
+    # ------------------------------------------------------------------------
+    # Datasets (with environment variable overrides)
+    # ------------------------------------------------------------------------
+    @property
+    def datasets_path(self) -> Path:
+        """Root datasets directory - can be overridden via DATASETS_PATH env var."""
+        return Path(os.getenv("DATASETS_PATH", str(self.base_path / "datasets")))
+
+    @property
+    def dataset_file_path(self) -> Path:
+        """CNMC dataset directory."""
+        return self.datasets_path / "cnmc"
+
+    @property
+    def public_anchor_dataset_path(self) -> Path:
+        """Public anchor dataset for FedMD distillation."""
+        env_path = os.getenv("PUBLIC_ANCHOR_DATASET_PATH")
+        if env_path:
+            return Path(env_path)
+        return self.dataset_file_path / "cnmc_public_anchor"
+
+    @property
+    def public_test_dataset_path(self) -> Path:
+        """Public test dataset for evaluation."""
+        env_path = os.getenv("PUBLIC_TEST_DATASET_PATH")
+        if env_path:
+            return Path(env_path)
+        return self.dataset_file_path / "cnmc_public_test"
+
+    # ------------------------------------------------------------------------
+    # Models and Checkpoints (with environment variable overrides)
+    # ------------------------------------------------------------------------
+    @property
+    def models_path(self) -> Path:
+        """Root models directory - can be overridden via MODELS_PATH env var."""
+        return Path(os.getenv("MODELS_PATH", str(self.base_path / "models")))
+
+    @property
+    def model_checkpoint_file_path(self) -> Path:
+        """Checkpoints directory for FL intermediate checkpoints."""
+        return Path(os.getenv("CHECKPOINTS_PATH", str(self.base_path / "checkpoints")))
+
+    @property
+    def default_model_dir(self) -> Path:
+        """Default directory for new client models."""
+        return Path(os.getenv("DEFAULT_MODEL_DIR", str(self.models_path)))
+
+    # ------------------------------------------------------------------------
+    # Metrics & Output
+    # ------------------------------------------------------------------------
+    @property
+    def graphs_output_dir(self) -> Path:
+        """Directory for graphical visualizations."""
+        env_path = os.getenv("GRAPHS_OUTPUT_DIR")
+        if env_path:
+            return Path(env_path)
+        return self.base_path / "graphical_visualisation"
+
+    # ------------------------------------------------------------------------
+    # Orchestrator URLs (no hardcoded defaults - must be set via env or will use localhost)
+    # ------------------------------------------------------------------------
     local_train_orchestrator_url: str = os.getenv(
         "LOCAL_TRAIN_ORCHESTRATOR_URL",
-        "https://intraspinal-agape-deidra.ngrok-free.dev"
+        "http://localhost:8002"
     )
     federated_training_orchestrator_url: str = os.getenv(
         "FEDERATED_TRAINING_ORCHESTRATOR_URL",
-        "https://40ff4102b2e7.ngrok-free.app"
+        "https://eb474f08357f.ngrok-free.app"
     )
 
-    # Model inference configuration
-    model_path: Path = Path(os.getenv(
-        "MODEL_PATH",
-        str(base_path / "models" / "Durdans-mobilenet-cnmc.pt")
-    ))
+    # ------------------------------------------------------------------------
+    # Model Inference Configuration
+    # ------------------------------------------------------------------------
+    @property
+    def model_path(self) -> Path:
+        """Path to the model used for prediction endpoints."""
+        env_path = os.getenv("MODEL_PATH")
+        if env_path:
+            return Path(env_path)
+        return self.models_path / "Durdans-mobilenet-cnmc.pt"
+
     device: str = os.getenv("DEVICE", "cpu")
-    class_names: List[str] = ["Healthy", "ALL (Leukemia)"]
+    class_names: List[str] = ["ALL (Leukemia)", "Healthy"]
     public_data_path: str = os.getenv("PUBLIC_DATA_PATH", "")
     
     # FL Model Parameters

@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import clients, federated, inference
+from app.routes import clients, fl_simulation, inference, client_simulation_metrics
 from app.config import get_settings
 
 settings = get_settings()
@@ -16,7 +16,7 @@ app = FastAPI(
 )
 
 # Configure CORS
-app.add_middleware(
+app.add_middleware( 
     CORSMiddleware,
     allow_origins=["*"],  # Configure appropriately for production
     allow_credentials=True,
@@ -26,10 +26,10 @@ app.add_middleware(
 
 # Include routers
 app.include_router(clients.router, prefix="/api", tags=["Clients"])
-app.include_router(federated.router, prefix="/api", tags=["Federated Learning"])
+app.include_router(fl_simulation.router, prefix="/api", tags=["FL Simulation"])
 app.include_router(inference.router, prefix="/api", tags=["Inference"])
-
-
+app.include_router(client_simulation_metrics.router)  # Has its own prefix
+    
 @app.get("/")
 async def root():
     """Root endpoint returning API information."""

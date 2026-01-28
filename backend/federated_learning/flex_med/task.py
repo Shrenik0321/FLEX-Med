@@ -23,23 +23,90 @@ from flwr.common import (
 from flwr.server import Grid
 from flwr.serverapp.strategy import Strategy
 from flex_med.utils.config import (
-    BASE_PATH, 
-    CLIENT_INFO_FILE_PATH, 
-    DATASET_FILE_PATH, 
-    PUBLIC_ANCHOR_DATASET_PATH, 
-    PUBLIC_TEST_DATASET_PATH, 
-    MODEL_CHECKPOINT_FILE_PATH, 
-    ROUND_METRICS_FILE_PATH, 
-    GRAPHS_OUTPUT_DIR, 
-    NUM_CLASSES, 
-    IMG_SIZE, 
-    DATA_JSON_PATH, 
-    MODEL_SUITABILITY_SCORES, 
-    TRAIN_LOSS_WEIGHT, 
-    DISTILL_LOSS_WEIGHT, 
+    BASE_PATH,
+    CLIENT_INFO_FILE_PATH,
+    DATASET_FILE_PATH,
+    PUBLIC_ANCHOR_DATASET_PATH,
+    PUBLIC_TEST_DATASET_PATH,
+    MODEL_CHECKPOINT_FILE_PATH,
+    GRAPHS_OUTPUT_DIR,
+    NUM_CLASSES,
+    IMG_SIZE,
+    CLIENT_INFO_FILE_PATH,
+    MODEL_SUITABILITY_SCORES,
+    TRAIN_LOSS_WEIGHT,
+    DISTILL_LOSS_WEIGHT,
     CONSENSUS_MOMENTUM
 )
 from datetime import datetime
+
+# ============================================
+# SUPABASE DATABASE CLIENT (for metrics storage)
+# ============================================
+try:
+    from supabase import create_client, Client
+    SUPABASE_AVAILABLE = True
+except ImportError:
+    print("[Database] Warning: supabase-py not installed. Run: pip install supabase")
+    SUPABASE_AVAILABLE = False
+
+
+def get_supabase_client() -> Optional[Client]:
+    """
+    Initialize Supabase client from environment variables.
+
+    Returns:
+        Supabase client or None if credentials not available
+    """
+    if not SUPABASE_AVAILABLE:
+        return None
+
+    supabase_url = os.getenv('SUPABASE_URL')
+    supabase_key = os.getenv('SUPABASE_KEY')
+
+    if not supabase_url or not supabase_key:
+        print("[Database] Warning: SUPABASE_URL or SUPABASE_KEY not set")
+        print("[Database] Metrics will not be saved to database")
+        return None
+
+    try:
+        client = create_client(supabase_url, supabase_key)
+        print(f"[Database] ✓ Connected to Supabase")
+        return client
+    except Exception as e:
+        print(f"[Database] Error connecting to Supabase: {e}")
+        return None
+
+
+# Initialize global Supabase client (reused across calls)
+SUPABASE_CLIENT = get_supabase_client()
+
+# Get simulation ID from environment (passed from backend API)
+SIMULATION_ID = None
+env_sim_id = os.getenv('FLEX_MED_SIMULATION_ID')
+if env_sim_id:
+    try:
+        SIMULATION_ID = int(env_sim_id)
+    except ValueError:
+        pass
+
+# Fallback: Try to read from config file if environment variable is missing
+if SIMULATION_ID is None:
+    try:
+        env_config_path = os.getenv('FLEX_MED_CONFIG_FILE')
+        if env_config_path and os.path.exists(env_config_path):
+            with open(env_config_path, 'r') as f:
+                config_data = json.load(f)
+                if isinstance(config_data, dict) and "simulation_id" in config_data:
+                    SIMULATION_ID = config_data["simulation_id"]
+                    print(f"[Database] Simulation ID loaded from config file: {SIMULATION_ID}")
+    except Exception as e:
+        print(f"[Database] Error reading simulation_id from config: {e}")
+
+if SIMULATION_ID is not None:
+    print(f"[Database] Final Simulation ID: {SIMULATION_ID}")
+else:
+    print("[Database] Warning: No FLEX_MED_SIMULATION_ID set")
 
 # <------------------------------------------ DATA TRANSFORMS ------------------------------------------>
 
@@ -66,19 +133,145 @@ PRIVATE_TRAIN_TRANSFORM = Compose([
 # Args: config_path - Path to client configuration JSON file
 # Returns: List of client configuration dictionaries
 def load_client_config(config_path: str = CLIENT_INFO_FILE_PATH) -> List[Dict]:
-    # Check for runtime config from environment variable (production mode)
+    """
+    Load client configuration with priority:
+    1. FLEX_MED_CLIENT_CONFIGS environment variable (JSON string) - Preferred
+    2. Database fetch using SUPABASE_CLIENT and SIMULATION_ID - Fallback 1
+    3. FLEX_MED_CONFIG_FILE environment variable (file path) - Fallback 2 (deprecated)
+    4. Default config_path parameter - Fallback 3 (deprecated)
+    """
+
+    # Priority 1: Check for in-memory config from environment variable (JSON string)
+    env_config_json = os.getenv('FLEX_MED_CLIENT_CONFIGS')
+    if env_config_json:
+        try:
+            print("[Config] Using in-memory config from FLEX_MED_CLIENT_CONFIGS environment variable")
+            config_data = json.loads(env_config_json)
+
+            # Handle both original (List) and new (Dict with 'clients' key) formats
+            if isinstance(config_data, dict) and "clients" in config_data:
+                clients = config_data["clients"]
+            else:
+                clients = config_data
+
+            # Sanitize paths for current environment
+            clients = sanitize_client_paths(clients)
+
+            print(f"[Config] ✓ Loaded {len(clients)} clients from environment variable")
+            return clients
+        except json.JSONDecodeError as e:
+            print(f"[Config] Error parsing FLEX_MED_CLIENT_CONFIGS: {e}")
+            print("[Config] Falling back to database or file-based config")
+
+    # Priority 2: Fallback to database fetch if SUPABASE is available
+    if SUPABASE_CLIENT is not None and SIMULATION_ID is not None:
+        try:
+            print(f"[Config] Attempting to load clients from database for simulation {SIMULATION_ID}")
+
+            # Fetch client_simulation_metrics joined with clients table
+            response = SUPABASE_CLIENT.from_('client_simulation_metrics') \
+                .select('client_id, clients(*)') \
+                .eq('simulation_id', SIMULATION_ID) \
+                .execute()
+
+            if response.data and len(response.data) > 0:
+                # Extract client data from joined response
+                clients = []
+                for record in response.data:
+                    client_data = record.get('clients')
+                    if client_data:
+                        clients.append(client_data)
+
+                if clients:
+                    # Sanitize paths for current environment
+                    clients = sanitize_client_paths(clients)
+                    print(f"[Config] ✓ Loaded {len(clients)} clients from database")
+                    return clients
+
+            print("[Config] No clients found in database, falling back to file-based config")
+
+        except Exception as e:
+            print(f"[Config] Error fetching clients from database: {e}")
+            print("[Config] Falling back to file-based config")
+
+    # Priority 3: Check for file path from environment variable (deprecated)
     env_config_path = os.getenv('FLEX_MED_CONFIG_FILE')
     if env_config_path:
         config_path = env_config_path
-        print(f"[Config] Using runtime config from: {config_path}")
+        print(f"[Config] Using file-based config from: {config_path} (DEPRECATED)")
 
+    # Priority 4: Use default config_path parameter (deprecated)
     if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Configuration file not found at {config_path}")
+        raise FileNotFoundError(
+            f"Configuration file not found at {config_path}. "
+            f"Please set FLEX_MED_CLIENT_CONFIGS environment variable or ensure database is configured."
+        )
 
+    print(f"[Config] Loading from file: {config_path} (DEPRECATED - use FLEX_MED_CLIENT_CONFIGS instead)")
     with open(config_path, 'r') as f:
-        clients = json.load(f)
+        config_data = json.load(f)
+
+    # Handle both original (List) and new (Dict with 'clients' key) formats
+    if isinstance(config_data, dict) and "clients" in config_data:
+        clients = config_data["clients"]
+    else:
+        clients = config_data
+
+    # Sanitize paths for current environment
+    clients = sanitize_client_paths(clients)
+
+    print(f"[Config] ✓ Loaded {len(clients)} clients from file")
+    return clients
+
+
+def sanitize_client_paths(clients: List[Dict]) -> List[Dict]:
+    """
+    Sanitize dataset and model paths to work in current environment.
+    Converts environment-specific paths (e.g., Colab, WSL) to local paths.
+
+    Args:
+        clients: List of client configuration dictionaries
+
+    Returns:
+        List of client configurations with sanitized paths
+    """
+    from pathlib import Path
+
+    # Get backend root (parent of federated_learning directory)
+    backend_root = Path(__file__).parent.parent.parent
+
+    for client in clients:
+        # Sanitize dataset_path
+        if 'dataset_path' in client and client['dataset_path']:
+            orig_path = client['dataset_path']
+
+            # Look for common dataset directory markers
+            if 'cnmc_datasets' in orig_path or 'datasets' in orig_path:
+                marker = 'cnmc_datasets' if 'cnmc_datasets' in orig_path else 'datasets'
+                relative_part = orig_path.split(marker)[-1].lstrip('/')
+
+                # Ensure 'cnmc' parent dir is included for local consistency
+                if not relative_part.startswith('cnmc/'):
+                    relative_part = os.path.join('cnmc', relative_part)
+
+                sanitized_path = str(backend_root / "datasets" / relative_part)
+                if sanitized_path != orig_path:
+                    print(f"[Config] Sanitized dataset_path for client {client.get('client_name', client.get('id'))}: {sanitized_path}")
+                client['dataset_path'] = sanitized_path
+
+        # Sanitize model_path
+        if 'model_path' in client and client['model_path']:
+            orig_path = client['model_path']
+
+            if 'models' in orig_path:
+                relative_part = orig_path.split('models')[-1].lstrip('/')
+                sanitized_path = str(backend_root / "models" / relative_part)
+                if sanitized_path != orig_path:
+                    print(f"[Config] Sanitized model_path for client {client.get('client_name', client.get('id'))}: {sanitized_path}")
+                client['model_path'] = sanitized_path
 
     return clients
+
 
 # Retrieves individual client config for FL round execution
 # Args: partition_id - Index of the client in configuration list
@@ -193,7 +386,6 @@ def freeze_backbone(model, model_type: str):
 
     return model
 
-
 def unfreeze_backbone(model, model_type: str):
     """
     Unfreeze all layers for full fine-tuning.
@@ -212,15 +404,12 @@ def unfreeze_backbone(model, model_type: str):
     print(f"[Transfer Learning] Backbone unfrozen, full model fine-tuning enabled")
     return model
 
-
 def get_trainable_params(model):
     """Count trainable vs frozen parameters"""
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total = sum(p.numel() for p in model.parameters())
     frozen = total - trainable
     return trainable, frozen, total
-
-
 
 # Computes a WeightedRandomSampler to handle class imbalance
 # Args: targets - List or array of class labels for the dataset
@@ -383,51 +572,6 @@ def evaluate_client_on_public_test(client_id: int, model_path: str, model_type: 
     metrics["evaluated_at"] = datetime.now().isoformat()
 
     return metrics
-
-# Saves round metrics to JSON file for visualization
-# Args: round_num - Current FL round number
-#       stage - Either "pre_fl" or "post_fl"
-#       client_metrics - Dictionary mapping client_id to metrics
-#       metrics_path - Path to save JSON file
-# Returns: None (saves to disk)
-def save_round_metrics(round_num: int, stage: str, client_metrics: Dict, metrics_path: str = ROUND_METRICS_FILE_PATH):
-    # Load existing metrics or create new structure
-    if os.path.exists(metrics_path):
-        with open(metrics_path, 'r') as f:
-            all_metrics = json.load(f)
-    else:
-        all_metrics = {}
-
-    round_key = f"round_{round_num}"
-
-    # Initialize round entry if not exists
-    if round_key not in all_metrics:
-        all_metrics[round_key] = {
-            "pre_fl": {"clients": {}},
-            "post_fl": {"clients": {}},
-            "improvement": {}
-        }
-
-    # Update stage metrics
-    all_metrics[round_key][stage]["clients"] = client_metrics
-
-    # Calculate improvement if both pre and post exist
-    if (all_metrics[round_key]["pre_fl"]["clients"] and
-        all_metrics[round_key]["post_fl"]["clients"]):
-        improvement = {}
-        for client_id in all_metrics[round_key]["post_fl"]["clients"]:
-            if client_id in all_metrics[round_key]["pre_fl"]["clients"]:
-                pre_acc = all_metrics[round_key]["pre_fl"]["clients"][client_id].get("accuracy", 0)
-                post_acc = all_metrics[round_key]["post_fl"]["clients"][client_id].get("accuracy", 0)
-                improvement[client_id] = post_acc - pre_acc
-        all_metrics[round_key]["improvement"] = improvement
-
-    # Save to file
-    os.makedirs(os.path.dirname(metrics_path), exist_ok=True) if os.path.dirname(metrics_path) else None
-    with open(metrics_path, 'w') as f:
-        json.dump(all_metrics, f, indent=2)
-
-    print(f"[Metrics] Saved {stage} metrics for round {round_num}")
 
 # Evaluates all clients on the public test dataset
 # Args: client_configs - List of client configuration dictionaries
@@ -605,8 +749,8 @@ def evaluate_all_clients_on_validation(client_configs: List[Dict], device: torch
             )
 
             # Calculate class-specific accuracies
-            leukemia_mask = (all_labels == 1)
-            healthy_mask = (all_labels == 0)
+            leukemia_mask = (all_labels == 0)
+            healthy_mask = (all_labels == 1)
 
             leukemia_acc = (all_preds[leukemia_mask] == all_labels[leukemia_mask]).mean() if leukemia_mask.any() else 0
             healthy_acc = (all_preds[healthy_mask] == all_labels[healthy_mask]).mean() if healthy_mask.any() else 0
@@ -637,133 +781,6 @@ def evaluate_all_clients_on_validation(client_configs: List[Dict], device: torch
 
     return client_metrics
 
-
-# Updates cnmc_data.json with comprehensive per-round metrics for visualization
-# Args: round_num - Current FL round number
-#       pre_fl_metrics - Dictionary mapping client_id to pre-FL evaluation metrics
-#       post_fl_metrics - Dictionary mapping client_id to post-FL evaluation metrics
-#       training_metrics - Dictionary mapping client_id to training metrics (distill_loss, train_loss, etc.)
-#       client_configs - List of client configuration dictionaries
-#       data_json_path - Path to cnmc_data.json file
-# Returns: None (saves to disk)
-def update_client_data_json_metrics(
-    round_num: int,
-    pre_fl_metrics: Dict,
-    post_fl_metrics: Dict,
-    training_metrics: Dict,
-    client_configs: List[Dict],
-    data_json_path: str = DATA_JSON_PATH
-):
-    """Update cnmc_data.json with comprehensive per-round metrics for graphical visualization.
-
-    New Schema:
-    metrics: {
-        "current": {
-            "pre_fl": { latest pre_fl metrics },
-            "post_fl": { latest post_fl metrics },
-            "improvement": { calculated improvement },
-            "last_round": N
-        },
-        "rounds": [
-            {
-                "round": 1,
-                "pre_fl": { comprehensive metrics with confusion_matrix, roc_auc, etc. },
-                "training": { distill_loss, train_loss, num_examples, consensus_weight },
-                "post_fl": { comprehensive metrics },
-                "improvement": { per-metric deltas }
-            }
-        ]
-    }
-    """
-    # Load current cnmc_data.json
-    if not os.path.exists(data_json_path):
-        print(f"[Metrics] Warning: {data_json_path} not found, skipping update")
-        return
-
-    try:
-        with open(data_json_path, 'r') as f:
-            clients_data = json.load(f)
-    except json.JSONDecodeError as e:
-        print(f"[Metrics] Error reading {data_json_path}: {e}")
-        return
-
-    # Update each client's metrics
-    for i, client in enumerate(clients_data):
-        client_id = str(i)
-
-        # Get metrics for this client
-        pre_fl = pre_fl_metrics.get(client_id, {})
-        post_fl = post_fl_metrics.get(client_id, {})
-        training = training_metrics.get(client_id, {})
-
-        # Skip clients with failed evaluation
-        if post_fl.get("accuracy") is None:
-            print(f"[Metrics] Skipping client {i} - no post_fl metrics")
-            continue
-
-        # Initialize metrics structure if needed
-        if not isinstance(client.get("metrics"), dict) or "rounds" not in client.get("metrics", {}):
-            client["metrics"] = {
-                "current": {},
-                "rounds": []
-            }
-
-        # Calculate improvement (post_fl - pre_fl)
-        improvement = {}
-        metrics_to_compare = ["accuracy", "precision", "recall", "f1_score", "specificity", "roc_auc",
-                              "leukemia_accuracy", "healthy_accuracy"]
-
-        for metric in metrics_to_compare:
-            pre_val = pre_fl.get(metric, 0.0) or 0.0
-            post_val = post_fl.get(metric, 0.0) or 0.0
-            improvement[metric] = round(post_val - pre_val, 6)
-
-        # Create round entry
-        round_entry = {
-            "round": round_num,
-            "pre_fl": pre_fl if pre_fl else None,
-            "training": {
-                "distill_loss": training.get("distill_loss"),
-                "train_loss": training.get("train_loss"),
-                "num_examples": training.get("num-examples"),
-                "training_time_sec": training.get("training_time"),
-                "consensus_weight": training.get("consensus_weight")
-            } if training else None,
-            "post_fl": post_fl if post_fl else None,
-            "improvement": improvement
-        }
-
-        # Check if this round already exists, update if so
-        round_exists = False
-        for j, entry in enumerate(client["metrics"]["rounds"]):
-            if entry.get("round") == round_num:
-                client["metrics"]["rounds"][j] = round_entry
-                round_exists = True
-                break
-
-        if not round_exists:
-            client["metrics"]["rounds"].append(round_entry)
-
-        # Sort rounds by round number
-        client["metrics"]["rounds"].sort(key=lambda x: x.get("round", 0))
-
-        # Update current (latest) metrics
-        client["metrics"]["current"] = {
-            "pre_fl": pre_fl if pre_fl else None,
-            "post_fl": post_fl if post_fl else None,
-            "improvement": improvement,
-            "last_round": round_num
-        }
-
-    # Save updated cnmc_data.json
-    try:
-        with open(data_json_path, 'w') as f:
-            json.dump(clients_data, f, indent=2)
-        print(f"[Metrics] Updated {data_json_path} with round {round_num} comprehensive metrics")
-    except Exception as e:
-        print(f"[Metrics] Error saving {data_json_path}: {e}")
-
-
 # Helper function to extract training metrics from aggregate results (for persistence)
 def extract_training_metrics_for_persistence(
     client_metrics_list: List[Dict],
@@ -771,7 +788,7 @@ def extract_training_metrics_for_persistence(
     client_configs: List[Dict]
 ) -> Dict:
     """
-    Extract training metrics from aggregate_train results for cnmc_data.json persistence.
+    Extract training metrics from aggregate_train results for client_data.json persistence.
 
     Args:
         client_metrics_list: List of metrics dicts from each client's training
@@ -806,125 +823,413 @@ def extract_training_metrics_for_persistence(
 
 # Helper functions for the new hybrid evaluation strategy
 
-def save_global_pre_fl_metrics(metrics: Dict, client_configs: List[Dict], data_json_path: str = DATA_JSON_PATH):
-    """Save global Pre-FL metrics to cnmc_data.json."""
-    if not os.path.exists(data_json_path):
-        print(f"[Global Metrics] Warning: {data_json_path} not found, skipping save")
+def save_global_pre_fl_metrics(metrics: Dict, client_configs: List[Dict]):
+    """
+    Save global Pre-FL metrics to client_simulation_metrics table.
+
+    Updates each client's metrics field in the database with pre_fl evaluation.
+
+    Args:
+        metrics: Dict mapping client_id (str) to metrics dict
+        client_configs: List of client configuration dicts with 'id' and 'client_name' fields
+    """
+    if SUPABASE_CLIENT is None or SIMULATION_ID is None:
+        print("[Pre-FL] Database not available, skipping save")
         return
 
     try:
-        with open(data_json_path, 'r') as f:
-            clients_data = json.load(f)
+        print(f"[Pre-FL] Saving metrics for {len(metrics)} clients to database...")
 
-        for i, client in enumerate(clients_data):
-            client_id = str(i)
+        for client_id_str, client_metrics in metrics.items():
+            # Find client's database ID from config
+            client_idx = int(client_id_str)
+            if client_idx >= len(client_configs):
+                print(f"[Pre-FL] Warning: Invalid client index {client_idx}")
+                continue
 
-            if client_id in metrics:
-                if 'metrics' not in client or not isinstance(client['metrics'], dict):
-                    client['metrics'] = {}
+            client_config = client_configs[client_idx]
+            db_client_id = client_config.get('id')
 
-                if 'global' not in client['metrics']:
-                    client['metrics']['global'] = {}
+            if db_client_id is None:
+                print(f"[Pre-FL] Warning: Client {client_idx} missing database ID")
+                continue
 
-                client['metrics']['global']['pre_fl'] = metrics[client_id]
+            # Fetch current metrics from client_simulation_metrics
+            response = SUPABASE_CLIENT.from_('client_simulation_metrics') \
+                .select('metrics') \
+                .eq('simulation_id', SIMULATION_ID) \
+                .eq('client_id', db_client_id) \
+                .execute()
 
-        with open(data_json_path, 'w') as f:
-            json.dump(clients_data, f, indent=2)
+            if not response.data:
+                print(f"[Pre-FL] Warning: No metrics record found for client {db_client_id}")
+                continue
 
-        print(f"[Global Metrics] Saved Pre-FL metrics to {data_json_path}")
+            # Update metrics
+            existing_metrics = response.data[0].get('metrics', {})
+
+            if 'global' not in existing_metrics:
+                existing_metrics['global'] = {}
+
+            existing_metrics['global']['pre_fl'] = client_metrics
+
+            # Save back to database
+            SUPABASE_CLIENT.from_('client_simulation_metrics').update({
+                'metrics': existing_metrics,
+                'status': 'training'
+            }).eq('simulation_id', SIMULATION_ID) \
+              .eq('client_id', db_client_id) \
+              .execute()
+
+            print(f"[Pre-FL] ✓ Client {db_client_id} ({client_config.get('client_name')})")
+
+        print("[Pre-FL] Successfully saved all pre_fl metrics to database")
 
     except Exception as e:
-        print(f"[Global Metrics] Error saving Pre-FL metrics: {e}")
+        print(f"[Pre-FL] Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 
-def save_global_post_fl_metrics(metrics: Dict, client_configs: List[Dict], data_json_path: str = DATA_JSON_PATH):
-    """Save global Post-FL metrics and calculate improvements."""
-    if not os.path.exists(data_json_path):
-        print(f"[Global Metrics] Warning: {data_json_path} not found, skipping save")
+def save_global_post_fl_metrics(
+    metrics: Dict,
+    client_configs: List[Dict]
+):
+    """
+    Save Post-FL metrics to client_simulation_metrics table.
+    Also computes and saves aggregate metrics to fl_simulations.
+
+    Args:
+        metrics: Dict mapping client_id (str) to metrics dict
+        client_configs: List of client configuration dicts with 'id' and 'client_name' fields
+    """
+    if SUPABASE_CLIENT is None or SIMULATION_ID is None:
+        print("[Post-FL] Database not available, skipping save")
         return
 
     try:
-        with open(data_json_path, 'r') as f:
-            clients_data = json.load(f)
+        print(f"[Post-FL] Saving metrics for {len(metrics)} clients to database...")
 
-        for i, client in enumerate(clients_data):
-            client_id = str(i)
+        # Update individual client metrics
+        for client_id_str, client_metrics in metrics.items():
+            client_idx = int(client_id_str)
+            if client_idx >= len(client_configs):
+                continue
 
-            if client_id in metrics:
-                if 'metrics' not in client:
-                    client['metrics'] = {}
-                if 'global' not in client['metrics']:
-                    client['metrics']['global'] = {}
+            client_config = client_configs[client_idx]
+            db_client_id = client_config.get('id')
 
-                # Save Post-FL metrics
-                client['metrics']['global']['post_fl'] = metrics[client_id]
+            if db_client_id is None:
+                continue
 
-                # Calculate improvement
-                pre_fl = client['metrics']['global'].get('pre_fl', {})
-                post_fl = metrics[client_id]
+            # Fetch current metrics
+            response = SUPABASE_CLIENT.from_('client_simulation_metrics') \
+                .select('metrics') \
+                .eq('simulation_id', SIMULATION_ID) \
+                .eq('client_id', db_client_id) \
+                .execute()
 
-                improvement = {}
-                for metric in ['accuracy', 'loss', 'precision', 'recall', 'f1_score', 'class_gap',
-                               'leukemia_accuracy', 'healthy_accuracy']:
-                    if metric in pre_fl and metric in post_fl:
-                        pre_val = pre_fl[metric]
-                        post_val = post_fl[metric]
-                        improvement[metric] = round(post_val - pre_val, 6)
+            if not response.data:
+                print(f"[Post-FL] Warning: No metrics record for client {db_client_id}")
+                continue
 
-                client['metrics']['global']['improvement'] = improvement
+            existing_metrics = response.data[0].get('metrics', {})
 
-        with open(data_json_path, 'w') as f:
-            json.dump(clients_data, f, indent=2)
+            if 'global' not in existing_metrics:
+                existing_metrics['global'] = {}
 
-        print(f"[Global Metrics] Saved Post-FL metrics and improvements to {data_json_path}")
+            # Save post_fl metrics
+            existing_metrics['global']['post_fl'] = client_metrics
+
+            # Calculate improvement
+            pre_fl = existing_metrics['global'].get('pre_fl', {})
+            post_fl = client_metrics
+
+            improvement = {}
+            for metric in ['accuracy', 'loss', 'precision', 'recall', 'f1_score',
+                           'class_gap', 'leukemia_accuracy', 'healthy_accuracy',
+                           'specificity', 'roc_auc']:
+                if metric in pre_fl and metric in post_fl:
+                    improvement[metric] = round(post_fl[metric] - pre_fl[metric], 6)
+
+            existing_metrics['global']['improvement'] = improvement
+
+            # Save back to database
+            SUPABASE_CLIENT.from_('client_simulation_metrics').update({
+                'metrics': existing_metrics,
+                'status': 'completed',
+                'completed_at': datetime.now().isoformat()
+            }).eq('simulation_id', SIMULATION_ID) \
+              .eq('client_id', db_client_id) \
+              .execute()
+
+            print(f"[Post-FL] ✓ Client {db_client_id} ({client_config.get('client_name')})")
+
+        # Compute aggregate metrics
+        print(f"[Post-FL] Computing aggregate metrics for simulation {SIMULATION_ID}...")
+
+        # Fetch all client metrics for this simulation
+        response = SUPABASE_CLIENT.from_('client_simulation_metrics') \
+            .select('metrics') \
+            .eq('simulation_id', SIMULATION_ID) \
+            .execute()
+
+        if response.data:
+            all_metrics = [row['metrics'] for row in response.data]
+            aggregate_metrics = compute_aggregate_metrics_local(all_metrics)
+
+            # Fetch simulation start time for duration calculation
+            sim_response = SUPABASE_CLIENT.from_('fl_simulations') \
+                .select('started_at') \
+                .eq('id', SIMULATION_ID) \
+                .execute()
+
+            # Calculate duration if started_at is available
+            duration = None
+            if sim_response.data and sim_response.data[0].get('started_at'):
+                from datetime import timezone
+                started_at_str = sim_response.data[0]['started_at']
+                # Parse ISO string with timezone
+                started_at = datetime.fromisoformat(started_at_str.replace('Z', '+00:00'))
+                completed_at = datetime.now(timezone.utc)
+                duration = int((completed_at - started_at).total_seconds())
+                print(f"[Post-FL] Calculated duration: {duration} seconds")
+
+            # Update fl_simulations with aggregate metrics, status, and duration
+            update_data = {
+                'aggregate_metrics': aggregate_metrics,
+                'status': 'completed',
+                'completed_at': datetime.now(timezone.utc).isoformat()
+            }
+            if duration is not None:
+                update_data['duration'] = duration
+
+            SUPABASE_CLIENT.from_('fl_simulations').update(update_data).eq('id', SIMULATION_ID).execute()
+
+            print(f"[Post-FL] ✓ Saved aggregate metrics for simulation {SIMULATION_ID}")
+            print(f"  - Total rounds: {aggregate_metrics.get('total_rounds_completed', 0)}")
+            best_acc = aggregate_metrics.get('best_round', {}).get('avg_accuracy', 0)
+            if best_acc > 0:
+                print(f"  - Best accuracy: {best_acc:.2%}")
+
+        print("[Post-FL] Successfully saved all metrics to database")
 
     except Exception as e:
-        print(f"[Global Metrics] Error saving Post-FL metrics: {e}")
+        print(f"[Post-FL] Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 
-def save_round_validation_metrics(round_num: int, metrics: Dict, client_configs: List[Dict], data_json_path: str = DATA_JSON_PATH):
-    """Save per-round validation metrics to cnmc_data.json."""
-    if not os.path.exists(data_json_path):
-        print(f"[Round Metrics] Warning: {data_json_path} not found, skipping save")
+def compute_aggregate_metrics_local(all_metrics: List[dict]) -> dict:
+    """
+    Compute aggregate metrics from list of client metrics.
+
+    This is a local copy of compute_aggregate_metrics from backend schema
+    to avoid import dependencies.
+
+    Args:
+        all_metrics: List of metrics dicts from all clients
+
+    Returns:
+        Aggregated metrics with averages, std dev, best round, etc.
+    """
+    if not all_metrics:
+        return {}
+
+    # Calculate aggregates for pre_fl and post_fl
+    def calc_avg(metric_name: str, stage: str) -> float:
+        """Calculate average of a metric across all clients"""
+        values = []
+        for m in all_metrics:
+            if stage in m.get('global', {}):
+                val = m['global'][stage].get(metric_name)
+                if val is not None:
+                    values.append(val)
+        return sum(values) / len(values) if values else 0.0
+
+    def calc_std(metric_name: str, stage: str) -> float:
+        """Calculate standard deviation of a metric across all clients"""
+        values = []
+        for m in all_metrics:
+            if stage in m.get('global', {}):
+                val = m['global'][stage].get(metric_name)
+                if val is not None:
+                    values.append(val)
+        if len(values) < 2:
+            return 0.0
+        mean = sum(values) / len(values)
+        variance = sum((x - mean) ** 2 for x in values) / len(values)
+        return variance ** 0.5
+
+    # Aggregate round-by-round metrics
+    rounds_aggregate = []
+    num_rounds = max(len(m.get('rounds', [])) for m in all_metrics) if all_metrics else 0
+
+    for round_num in range(1, num_rounds + 1):
+        round_metrics = {
+            'round': round_num,
+            'avg_accuracy': 0.0,
+            'avg_loss': 0.0,
+            'avg_f1': 0.0,
+            'avg_precision': 0.0,
+            'avg_recall': 0.0,
+            'num_clients_trained': 0,
+            'timestamp': None
+        }
+
+        values_acc = []
+        values_loss = []
+        values_f1 = []
+        values_precision = []
+        values_recall = []
+
+        for m in all_metrics:
+            rounds = m.get('rounds', [])
+            for r in rounds:
+                if r.get('round') == round_num:
+                    if 'validation' in r:
+                        val = r['validation']
+                        values_acc.append(val.get('accuracy', 0))
+                        values_loss.append(val.get('loss', 0))
+                        values_f1.append(val.get('f1_score', 0))
+                        values_precision.append(val.get('precision', 0))
+                        values_recall.append(val.get('recall', 0))
+                        if not round_metrics['timestamp']:
+                            round_metrics['timestamp'] = val.get('evaluated_at')
+
+        if values_acc:
+            round_metrics['avg_accuracy'] = sum(values_acc) / len(values_acc)
+            round_metrics['avg_loss'] = sum(values_loss) / len(values_loss)
+            round_metrics['avg_f1'] = sum(values_f1) / len(values_f1)
+            round_metrics['avg_precision'] = sum(values_precision) / len(values_precision)
+            round_metrics['avg_recall'] = sum(values_recall) / len(values_recall)
+            round_metrics['num_clients_trained'] = len(values_acc)
+            rounds_aggregate.append(round_metrics)
+
+    # Find best round
+    best_round = max(rounds_aggregate, key=lambda r: r['avg_accuracy']) if rounds_aggregate else {}
+
+    return {
+        "aggregate": {
+            "pre_fl": {
+                "avg_accuracy": calc_avg('accuracy', 'pre_fl'),
+                "avg_loss": calc_avg('loss', 'pre_fl'),
+                "avg_precision": calc_avg('precision', 'pre_fl'),
+                "avg_recall": calc_avg('recall', 'pre_fl'),
+                "avg_f1": calc_avg('f1_score', 'pre_fl'),
+                "std_accuracy": calc_std('accuracy', 'pre_fl'),
+                "num_clients": len(all_metrics)
+            },
+            "post_fl": {
+                "avg_accuracy": calc_avg('accuracy', 'post_fl'),
+                "avg_loss": calc_avg('loss', 'post_fl'),
+                "avg_precision": calc_avg('precision', 'post_fl'),
+                "avg_recall": calc_avg('recall', 'post_fl'),
+                "avg_f1": calc_avg('f1_score', 'post_fl'),
+                "std_accuracy": calc_std('accuracy', 'post_fl'),
+                "num_clients": len(all_metrics)
+            },
+            "improvement": {
+                "avg_accuracy": calc_avg('accuracy', 'post_fl') - calc_avg('accuracy', 'pre_fl'),
+                "avg_loss": calc_avg('loss', 'post_fl') - calc_avg('loss', 'pre_fl'),
+                "avg_precision": calc_avg('precision', 'post_fl') - calc_avg('precision', 'pre_fl'),
+                "avg_recall": calc_avg('recall', 'post_fl') - calc_avg('recall', 'pre_fl'),
+                "avg_f1": calc_avg('f1_score', 'post_fl') - calc_avg('f1_score', 'pre_fl')
+            }
+        },
+        "rounds": rounds_aggregate,
+        "best_round": {
+            "round": best_round.get('round'),
+            "avg_accuracy": best_round.get('avg_accuracy')
+        } if best_round else {},
+        "total_rounds_completed": len(rounds_aggregate),
+        "total_clients": len(all_metrics)
+    }
+
+
+def save_round_validation_metrics(
+    round_num: int,
+    metrics: Dict,
+    client_configs: List[Dict]
+):
+    """
+    Save per-round validation metrics to client_simulation_metrics table.
+
+    Appends validation metrics for the current round to each client's rounds array.
+
+    Args:
+        round_num: Current round number
+        metrics: Dict mapping client_id (str) to metrics dict
+        client_configs: List of client configuration dicts with 'id' field
+    """
+    if SUPABASE_CLIENT is None or SIMULATION_ID is None:
+        print(f"[Round {round_num}] Database not available, skipping save")
         return
 
     try:
-        with open(data_json_path, 'r') as f:
-            clients_data = json.load(f)
+        print(f"[Round {round_num}] Saving metrics for {len(metrics)} clients to database...")
 
-        for i, client in enumerate(clients_data):
-            client_id = str(i)
+        for client_id_str, client_metrics in metrics.items():
+            client_idx = int(client_id_str)
+            if client_idx >= len(client_configs):
+                continue
 
-            if client_id in metrics:
-                if 'metrics' not in client:
-                    client['metrics'] = {}
-                if 'rounds' not in client['metrics']:
-                    client['metrics']['rounds'] = []
+            client_config = client_configs[client_idx]
+            db_client_id = client_config.get('id')
 
-                # Find or create round entry
-                round_entry = None
-                for r in client['metrics']['rounds']:
-                    if r.get('round') == round_num:
-                        round_entry = r
-                        break
+            if db_client_id is None:
+                continue
 
-                if round_entry is None:
-                    round_entry = {'round': round_num}
-                    client['metrics']['rounds'].append(round_entry)
+            # Fetch current metrics from client_simulation_metrics
+            response = SUPABASE_CLIENT.from_('client_simulation_metrics') \
+                .select('metrics') \
+                .eq('simulation_id', SIMULATION_ID) \
+                .eq('client_id', db_client_id) \
+                .execute()
 
-                # Add validation metrics
-                round_entry['validation'] = metrics[client_id]
+            if not response.data:
+                print(f"[Round {round_num}] Warning: No metrics record for client {db_client_id}")
+                continue
 
-        with open(data_json_path, 'w') as f:
-            json.dump(clients_data, f, indent=2)
+            # Update metrics
+            existing_metrics = response.data[0].get('metrics', {})
 
-        print(f"[Round Metrics] Saved validation metrics for round {round_num} to {data_json_path}")
+            # Initialize rounds array if needed
+            if 'rounds' not in existing_metrics:
+                existing_metrics['rounds'] = []
+
+            # Find or create round entry
+            round_entry = None
+            for r in existing_metrics['rounds']:
+                if r.get('round') == round_num:
+                    round_entry = r
+                    break
+
+            if round_entry is None:
+                round_entry = {'round': round_num}
+                existing_metrics['rounds'].append(round_entry)
+
+            # Add validation metrics
+            round_entry['validation'] = client_metrics
+
+            # Save back to database
+            SUPABASE_CLIENT.from_('client_simulation_metrics').update({
+                'metrics': existing_metrics
+            }).eq('simulation_id', SIMULATION_ID) \
+              .eq('client_id', db_client_id) \
+              .execute()
+
+            print(f"[Round {round_num}] ✓ Client {db_client_id}")
+
+        print(f"[Round {round_num}] Successfully saved all validation metrics to database")
 
     except Exception as e:
-        print(f"[Round Metrics] Error saving validation metrics: {e}")
+        print(f"[Round {round_num}] Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 
-def load_global_pre_fl_for_client(client_id: str, client_configs: List[Dict], data_json_path: str = DATA_JSON_PATH) -> Dict:
+def load_global_pre_fl_for_client(client_id: str, client_configs: List[Dict], data_json_path: str = CLIENT_INFO_FILE_PATH) -> Dict:
     """Load global Pre-FL metrics for a specific client."""
     if not os.path.exists(data_json_path):
         return {}
@@ -1045,17 +1350,12 @@ def load_checkpoint(checkpoint_dir: str) -> Optional[Dict]:
     print(f"[CHECKPOINT] Looking for: {latest_path}")
     print(f"[CHECKPOINT] Exists: {os.path.exists(latest_path)}")
     print(f"[CHECKPOINT] BASE_PATH env: {os.getenv('BASE_PATH', 'NOT SET')}")
+    print(f"[CHECKPOINT] CHECKPOINTS_PATH env: {os.getenv('CHECKPOINTS_PATH', 'NOT SET')}")
 
     if not os.path.exists(latest_path):
-        # Try fallback path for Colab
-        fallback_path = "/content/drive/MyDrive/College/FLEX-Med/checkpoints/latest_checkpoint.pt"
-        print(f"[CHECKPOINT] Trying fallback: {fallback_path}")
-        if os.path.exists(fallback_path):
-            latest_path = fallback_path
-            print(f"[CHECKPOINT] Found at fallback path!")
-        else:
-            print(f"[CHECKPOINT] Not found at fallback either")
-            return None
+        print(f"[CHECKPOINT] Checkpoint not found at: {latest_path}")
+        print(f"[CHECKPOINT] Please ensure BASE_PATH or CHECKPOINTS_PATH is set correctly")
+        return None
 
     try:
         checkpoint = torch.load(latest_path, map_location='cpu', weights_only=False)
@@ -1908,7 +2208,7 @@ class FLEXMedStrategy(Strategy):
                     self.client_configs, device
                 )
 
-                # Save global metrics to cnmc_data.json
+                # Save global metrics to client_data.json
                 save_global_pre_fl_metrics(global_pre_fl_metrics, self.client_configs)
 
                 log(INFO, f"[GLOBAL] Pre-FL Evaluation Complete")
@@ -1953,7 +2253,7 @@ class FLEXMedStrategy(Strategy):
                     self.client_configs, device, len(self.client_configs)
                 )
 
-                # Save validation metrics to cnmc_data.json
+                # Save validation metrics to client_data.json
                 save_round_validation_metrics(current_round, round_val_metrics, self.client_configs)
                 self.round_metrics_history[f"round_{current_round}_validation"] = round_val_metrics
 
@@ -2055,11 +2355,6 @@ class FLEXMedStrategy(Strategy):
         log(INFO, f"Strategy execution finished in {time.time() - t_start:.2f}s")
         log(INFO, f"{'='*70}")
 
-        # Log final summary
-        log(INFO, "")
-        log(INFO, "[SUMMARY] Per-Round Metrics saved to: " + ROUND_METRICS_FILE_PATH)
-        log(INFO, "[SUMMARY] Generate visualizations with: python generate_graphs.py")
-
         return result
 
     # Send evaluation requests to all clients
@@ -2116,7 +2411,13 @@ class FLEXMedStrategy(Strategy):
         total_acc = 0.0
         total_examples = 0
 
-        for msg in results_list:
+        for i, msg in enumerate(results_list):
+            # Check if message has content before accessing
+            if not msg.has_content():
+                client_name = self.client_configs[i]['client_name'] if i < len(self.client_configs) else f"Client {i}"
+                print(f"[SERVER] ✗ {client_name} returned empty message during evaluation")
+                continue
+
             metrics = msg.content.get("metrics", {})
             eval_loss = metrics.get("eval_loss", 0.0)
             eval_acc = metrics.get("eval_acc", 0.0)
@@ -2203,8 +2504,14 @@ class FLEXMedStrategy(Strategy):
         client_names = []
 
         for i, msg in enumerate(results_list):
-            client_arrays = msg.content["arrays"]
+            # Check if message has content before accessing
+            if not msg.has_content():
+                client_name = self.client_configs[i]['client_name'] if i < len(self.client_configs) else f"Client {i}"
+                print(f"[SERVER] ✗ {client_name} returned empty message (likely crashed during training)")
+                continue
+
             try:
+                client_arrays = msg.content["arrays"]
                 client_logits = client_arrays["0"].numpy()
                 logits_list.append(client_logits)
 
@@ -2217,7 +2524,8 @@ class FLEXMedStrategy(Strategy):
                     client_names.append(self.client_configs[i]['client_name'])
 
             except (KeyError, IndexError) as e:
-                print(f"[SERVER] Warning: Failed to extract data from client {i}: {e}")
+                client_name = self.client_configs[i]['client_name'] if i < len(self.client_configs) else f"Client {i}"
+                print(f"[SERVER] ✗ {client_name} failed to extract data: {e}")
                 pass
 
         # Compute consensus using sophisticated weight aggregation
@@ -2265,7 +2573,7 @@ class FLEXMedStrategy(Strategy):
             "aggregation_details": aggregation_metadata  # Full details for tracking
         }
 
-        # Extract training metrics for cnmc_data.json persistence
+        # Extract training metrics for client_data.json persistence
         training_metrics_for_persistence = extract_training_metrics_for_persistence(
             client_metrics_list=client_metrics_list,
             aggregation_metadata=aggregation_metadata,

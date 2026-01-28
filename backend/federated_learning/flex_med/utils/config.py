@@ -28,12 +28,10 @@ BASE_PATH = str(_settings.base_path)
 PROJECT_DIR = str(_settings.project_dir)
 
 # Logs
-LOG_FILE_PATH = str(_settings.log_file_path)
 SIMULATION_LOG_PATH = str(_settings.simulation_log_path)
 
 # Client Information
 CLIENT_INFO_FILE_PATH = str(_settings.client_info_file_path)
-DATA_JSON_PATH = str(_settings.data_json_path)
 
 # Pyproject.toml
 PYPROJECT_PATH = str(_settings.pyproject_path)
@@ -47,7 +45,6 @@ PUBLIC_TEST_DATASET_PATH = str(_settings.public_test_dataset_path)
 MODEL_CHECKPOINT_FILE_PATH = str(_settings.model_checkpoint_file_path)
 
 # Metrics & graphs
-ROUND_METRICS_FILE_PATH = str(_settings.round_metrics_file_path)
 GRAPHS_OUTPUT_DIR = str(_settings.graphs_output_dir)
 
 # Model constraints
@@ -56,7 +53,6 @@ IMG_SIZE = _settings.img_size
 
 # Shell runner
 RUN_SIMULATION_SHELL_FILE_PATH = str(_settings.run_simulation_shell_file_path)
-SIMULATION_STATUS_JSON_FILE_PATH = str(_settings.simulation_status_json_file_path)
 
 # Model suitability scores
 MODEL_SUITABILITY_SCORES = _settings.model_suitability_scores

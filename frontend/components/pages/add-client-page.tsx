@@ -1,8 +1,9 @@
 "use client";
 
 import { API_BASE_PATH } from "@/utils";
-import { ArrowLeft, Upload, Check, X, FileJson } from "lucide-react";
+import { ArrowLeft, Upload, Check, X, FileJson, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 
 interface AddClientPageProps {
   onBack: () => void;
@@ -56,22 +57,6 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
 
   return (
     <div className="p-8">
-      {/* Header */}
-      <button
-        onClick={onBack}
-        className="flex items-center gap-2 text-primary hover:text-red-700 mb-6 font-medium"
-      >
-        <ArrowLeft size={18} />
-        Back to Clients
-      </button>
-
-      <h1 className="text-3xl font-semibold text-foreground mb-2">
-        Add New Client
-      </h1>
-      <p className="text-muted-foreground mb-8">
-        Register and configure a new healthcare client for federated learning
-      </p>
-
       {/* Form */}
       <div className="max-w-2xl">
         <div className="bg-card rounded-lg p-8 shadow-sm border border-border space-y-6">
@@ -272,19 +257,19 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
 
           {/* Actions */}
           <div className="flex gap-3 pt-4">
-            <button
-              onClick={onBack}
-              className="px-6 py-2 border border-border text-foreground rounded-lg font-medium hover:bg-gray-50 transition-colors"
-            >
+            <Button variant="ghost" onClick={onBack} disabled={loading}>
               Cancel
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="px-6 py-2 bg-card border border-primary text-primary rounded-lg font-medium hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? "Registering..." : "Register Client"}
-            </button>
+            </Button>
+            <Button onClick={handleSubmit} disabled={loading} className="px-8">
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Registering...
+                </>
+              ) : (
+                "Register Client"
+              )}
+            </Button>
           </div>
         </div>
       </div>

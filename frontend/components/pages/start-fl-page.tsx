@@ -1,10 +1,19 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Brain, Play, Settings, Users, Database, X } from "lucide-react";
+import {
+  Brain,
+  Play,
+  Settings,
+  Users,
+  Database,
+  X,
+  Loader2,
+} from "lucide-react";
 import { API_BASE_PATH } from "@/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { StartFLResponse } from "@/types/fl-simulation";
 import {
   Select,
@@ -101,7 +110,7 @@ export default function StartFLPage() {
       });
 
       // Call the API to start FL simulation
-      const response = await fetch(`${API_BASE_PATH}/start_fl_simulation`, {
+      const response = await fetch(`${API_BASE_PATH}/start_fl`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // In future, send the configuration in the body
@@ -141,18 +150,6 @@ export default function StartFLPage() {
 
   return (
     <div className="p-8 space-y-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-semibold text-foreground flex items-center gap-3">
-          <Brain className="text-primary" />
-          Start FL Simulation
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Configure and launch a new federated learning simulation across
-          selected clients
-        </p>
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Configuration Form */}
         <div className="lg:col-span-2 space-y-6">
@@ -424,16 +421,24 @@ export default function StartFLPage() {
             </div>
           </div>
 
-          {/* Start Button */}
           <div className="bg-card rounded-lg shadow-sm border border-border p-6">
-            <button
+            <Button
               onClick={handleStart}
               disabled={isStarting}
-              className="w-full px-5 py-3 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full text-base py-6"
             >
-              <Play size={18} />
-              {isStarting ? "Starting Simulation..." : "Start FL Simulation"}
-            </button>
+              {isStarting ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Starting Simulation...
+                </>
+              ) : (
+                <>
+                  <Play className="mr-2 h-5 w-5 fill-current" />
+                  Start FL Simulation
+                </>
+              )}
+            </Button>
             <p className="text-xs text-muted-foreground mt-3 text-center">
               This will initiate federated learning with the selected
               configuration

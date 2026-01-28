@@ -7,7 +7,7 @@ IMPROVEMENTS:
 - ✨ Per-metric optimization for accuracy, loss, and other metrics
 
 This module provides comprehensive graphical visualization of FL training metrics
-stored in cnmc_data.json. It generates:
+stored in flex_med/utils/client_data.json. It generates:
 - Per-client metric trends (accuracy, f1, precision, recall, loss) across rounds
 - Pre-FL vs Post-FL comparison charts showing improvement/decline
 - Aggregate performance across all clients
@@ -32,13 +32,49 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-# Try to import config, fallback to defaults
+# Try to import config, fallback to environment variables or relative paths
+import sys
+from pathlib import Path
+
+def setup_environment():
+    """Ensure backend root is in sys.path for app.config imports"""
+    current_file = Path(__file__).resolve()
+    # utils -> flex_med -> federated_learning -> backend
+    backend_root = current_file.parent.parent.parent.parent
+    if str(backend_root) not in sys.path:
+        sys.path.insert(0, str(backend_root))
+    return backend_root
+
+setup_environment()
+
 try:
-    from flex_med.utils.config import DATA_JSON_PATH, BASE_PATH, GRAPHS_OUTPUT_DIR
+    from app.config import get_settings, get_supabase_client
+    _settings = get_settings()
+    CLIENT_INFO_FILE_PATH = str(_settings.client_info_file_path)
+    BASE_PATH = str(_settings.base_path)
+    GRAPHS_OUTPUT_DIR = str(_settings.graphs_output_dir)
+    SUPABASE_AVAILABLE = True
 except ImportError:
-    BASE_PATH = "/content/drive/MyDrive/College/FLEX-Med"
-    DATA_JSON_PATH = os.path.join(BASE_PATH, "flex-med/cnmc_data.json")
-    GRAPHS_OUTPUT_DIR = os.path.join(BASE_PATH, "graphical_visualisation")
+    import warnings
+    warnings.warn(
+        "Could not import config from app.config. "
+        "Using environment variables or relative paths as fallback. "
+        "Set BASE_PATH, FLEX_MED_CONFIG_FILE, or GRAPHS_OUTPUT_DIR env vars to configure."
+    )
+    # Get current file location and derive base path
+    current_file = os.path.dirname(os.path.abspath(__file__))
+    # Go up from utils -> flex_med -> federated_learning -> backend
+    backend_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file))))
+    BASE_PATH = os.getenv("BASE_PATH", backend_root)
+    CLIENT_INFO_FILE_PATH = os.getenv(
+        "FLEX_MED_CONFIG_FILE",
+        os.path.join(BASE_PATH, "federated_learning", "flex_med", "utils", "client_data.json")
+    )
+    GRAPHS_OUTPUT_DIR = os.getenv(
+        "GRAPHS_OUTPUT_DIR",
+        os.path.join(BASE_PATH, "graphical_visualisation")
+    )
+    SUPABASE_AVAILABLE = False
 
 # Color palette for clients
 CLIENT_COLORS = [
@@ -181,13 +217,70 @@ def collect_all_values(clients: List[Dict], metric: str, stage: str = 'validatio
     return all_values
 
 
-def load_cnmc_data(data_path: str = DATA_JSON_PATH) -> List[Dict]:
-    """Load client data from cnmc_data.json"""
+def load_cnmc_data(data_path: str = CLIENT_INFO_FILE_PATH) -> List[Dict]:
+    """Load client data from client_data.json"""
     if not os.path.exists(data_path):
         raise FileNotFoundError(f"Data file not found: {data_path}")
 
     with open(data_path, 'r') as f:
         return json.load(f)
+
+
+def load_data_from_db(simulation_id: int) -> List[Dict]:
+    """
+    Fetch simulation results directly from Supabase.
+    
+    Reconstructs the client_data.json structure from client_simulation_metrics
+    and clients tables.
+    """
+    if not SUPABASE_AVAILABLE:
+        raise ImportError("Supabase client not available. Check your configuration.")
+
+    try:
+        supabase = get_supabase_client()
+        print(f"🔄 Fetching data from Supabase for simulation {simulation_id}...")
+
+        # 1. Fetch metrics records for this simulation
+        metrics_response = supabase.table('client_simulation_metrics') \
+            .select('client_id, metrics, status, clients(*)') \
+            .eq('simulation_id', simulation_id) \
+            .execute()
+
+        if not metrics_response.data:
+            print(f"⚠️ No metrics found for simulation {simulation_id}")
+            return []
+
+        # 2. Reconstruct the client data structure
+        clients_data = []
+        for record in metrics_response.data:
+            # Base client info from the joined 'clients' table
+            client_info = record.get('clients', {})
+            if not client_info:
+                print(f"⚠️ Warning: Missing client metadata for client {record.get('client_id')}")
+                continue
+
+            # Merge in the specific metrics from this simulation
+            # Note: The visualization code expects client['metrics'] to be a dict
+            client_metrics = record.get('metrics', {})
+            
+            # Handle string vs dict (JSONB usually returns dict)
+            if isinstance(client_metrics, str):
+                try:
+                   client_metrics = json.loads(client_metrics)
+                except:
+                   client_metrics = {}
+
+            # Create the combined structure expected by visualization functions
+            reconstructed_client = client_info.copy()
+            reconstructed_client['metrics'] = client_metrics
+            clients_data.append(reconstructed_client)
+
+        print(f"✅ Successfully loaded {len(clients_data)} clients from database")
+        return clients_data
+
+    except Exception as e:
+        print(f"❌ Error fetching from database: {e}")
+        return []
 
 
 def extract_metric_series(client: Dict, metric: str, stage: str = 'post_fl') -> Tuple[List[int], List[float]]:
@@ -748,8 +841,8 @@ def plot_confusion_matrix_comparison(
             cm = stage_data.get('confusion_matrix', {})
             if cm:
                 matrix = np.array([
-                    [cm.get('TP', 0), cm.get('FP', 0)],
-                    [cm.get('FN', 0), cm.get('TN', 0)]
+                    [cm.get('TP', 0), cm.get('FN', 0)],
+                    [cm.get('FP', 0), cm.get('TN', 0)]
                 ])
 
                 im = ax.imshow(matrix, cmap='Blues', aspect='auto')
@@ -1390,15 +1483,16 @@ def plot_hybrid_evaluation_comparison(
 
 
 def generate_all_visualizations(
-    data_path: str = DATA_JSON_PATH,
+    data_path: str = CLIENT_INFO_FILE_PATH,
     output_dir: str = GRAPHS_OUTPUT_DIR,
-    show_plots: bool = True
+    show_plots: bool = True,
+    simulation_id: Optional[int] = None
 ) -> Dict[str, str]:
     """
-    Generate all visualizations from cnmc_data.json with smart auto-scaling.
+    Generate all visualizations from client_data.json with smart auto-scaling.
 
     Args:
-        data_path: Path to cnmc_data.json
+        data_path: Path to client_data.json
         output_dir: Directory to save visualizations
         show_plots: Whether to display plots inline
 
@@ -1415,9 +1509,12 @@ def generate_all_visualizations(
 
     # Load data
     try:
-        clients = load_cnmc_data(data_path)
-        print(f"Loaded {len(clients)} clients from data file")
-    except FileNotFoundError as e:
+        if simulation_id is not None:
+            clients = load_data_from_db(simulation_id)
+        else:
+            clients = load_cnmc_data(data_path)
+            print(f"Loaded {len(clients)} clients from data file")
+    except Exception as e:
         print(f"Error: {e}")
         return {}
 
@@ -1510,64 +1607,34 @@ def generate_all_visualizations(
     return saved_files
 
 
-def print_metrics_summary(data_path: str = DATA_JSON_PATH):
-    """Print a text summary of the metrics."""
-    clients = load_cnmc_data(data_path)
-
     print("\n" + "=" * 70)
-    print("FLEX-Med FL Training Summary")
-    print("=" * 70)
 
-    for i, client in enumerate(clients):
-        name = client.get('client_name', f'Client {i}')
-        model = client.get('model_type', 'unknown')
 
-        metrics = client.get('metrics', {})
-        current = metrics.get('current', {})
-        rounds = metrics.get('rounds', [])
+def print_metrics_summary(
+    data_source: str = CLIENT_INFO_FILE_PATH,
+    simulation_id: Optional[int] = None
+):
+    """
+    Print a textual summary of FL metrics.
+    
+    Args:
+        data_source: Path to JSON file
+        simulation_id: Optional ID to fetch from DB
+    """
+    if simulation_id is not None:
+        clients = load_data_from_db(simulation_id)
+    else:
+        try:
+            clients = load_cnmc_data(data_source)
+        except FileNotFoundError:
+            print(f"❌ File not found: {data_source}")
+            return
+            
+    if not clients:
+        print("❌ No client data found.")
+        return
 
-        print(f"\n[{i}] {name} ({model})")
-        print("-" * 50)
-
-        # Check for global metrics (hybrid strategy)
-        global_metrics = metrics.get('global', {})
-        if global_metrics and 'pre_fl' in global_metrics and 'post_fl' in global_metrics:
-            print(f"  Evaluation Strategy: HYBRID")
-            print(f"  Rounds completed: {len(rounds)}")
-            print()
-            print(f"  GLOBAL METRICS (Public Test Dataset):")
-            pre = global_metrics['pre_fl']
-            post = global_metrics['post_fl']
-            imp = global_metrics.get('improvement', {})
-
-            print(f"    Pre-FL  (Centralized): Acc={pre.get('accuracy', 0):.2%}, Loss={pre.get('loss', 0):.3f}")
-            print(f"    Post-FL (Federated):   Acc={post.get('accuracy', 0):.2%}, Loss={post.get('loss', 0):.3f}")
-            print(f"    FL Benefit:            Acc={imp.get('accuracy', 0):+.2%}, Loss={imp.get('loss', 0):+.3f}")
-            print()
-            print(f"  FINAL METRICS:")
-            print(f"    Accuracy:   {post.get('accuracy', 0):.2%}")
-            print(f"    F1 Score:   {post.get('f1_score', 0):.3f}")
-            print(f"    Precision:  {post.get('precision', 0):.3f}")
-            print(f"    Recall:     {post.get('recall', 0):.3f}")
-            print(f"    Class Gap:  {post.get('class_gap', 0):.2%}")
-
-        elif current:
-            # Legacy format (old evaluation strategy)
-            print(f"  Evaluation Strategy: LEGACY")
-            pre = current.get('pre_fl', {})
-            post = current.get('post_fl', {})
-            imp = current.get('improvement', {})
-
-            print(f"  Rounds completed: {current.get('last_round', 'N/A')}")
-            print(f"  Pre-FL Accuracy:  {pre.get('accuracy', 0):.2%}")
-            print(f"  Post-FL Accuracy: {post.get('accuracy', 0):.2%}")
-            print(f"  Improvement:      {imp.get('accuracy', 0):+.2%}")
-            print(f"  Post-FL F1:       {post.get('f1_score', 0):.3f}")
-            print(f"  Post-FL ROC-AUC:  {post.get('roc_auc', 0):.3f}")
-        else:
-            print("  No metrics available")
-
-    print("\n" + "=" * 70)
+    generate_text_summary(clients)
 
 
 # Main entry point
@@ -1575,18 +1642,20 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description='Generate FL evaluation visualizations with smart auto-scaling')
-    parser.add_argument('--data', type=str, default=DATA_JSON_PATH,
-                       help='Path to cnmc_data.json')
+    parser.add_argument('--data', type=str, default=CLIENT_INFO_FILE_PATH,
+                       help='Path to client_data.json')
     parser.add_argument('--output', type=str, default=GRAPHS_OUTPUT_DIR,
                        help='Output directory for graphs')
     parser.add_argument('--no-show', action='store_true',
                        help='Do not display plots (just save)')
     parser.add_argument('--summary', action='store_true',
                        help='Print text summary only')
+    parser.add_argument('--simulation-id', '-s', type=int, default=None,
+                       help='Fetch metrics from database for this simulation ID')
 
     args = parser.parse_args()
 
     if args.summary:
-        print_metrics_summary(args.data)
+        print_metrics_summary(args.data, args.simulation_id)
     else:
-        generate_all_visualizations(args.data, args.output, not args.no_show)
+        generate_all_visualizations(args.data, args.output, not args.no_show, args.simulation_id)

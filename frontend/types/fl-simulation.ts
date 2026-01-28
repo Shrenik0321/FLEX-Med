@@ -59,9 +59,8 @@ export interface FLSimulationMetrics {
 
 export interface FLSimulation {
   id: number;
-  client_ids: number[];
   configs: FLConfig;
-  metrics: string; // JSON string (parse with parseMetrics helper)
+  aggregate_metrics: FLSimulationMetrics; // JSONB stored as object (not string)
   status: SimulationStatus;
   error_message?: string | null;
   created_at: string;
@@ -70,17 +69,27 @@ export interface FLSimulation {
   duration?: number | null; // Duration in seconds
 }
 
-// Helper to parse metrics JSON string
-export function parseMetrics(metricsStr: string): FLSimulationMetrics | null {
-  if (!metricsStr || metricsStr.trim() === "" || metricsStr === "{}") {
-    return null;
+// Helper to parse metrics (handles both object and JSON string for backwards compatibility)
+export function parseMetrics(metrics: FLSimulationMetrics | string | any): FLSimulationMetrics | null {
+  // If already an object with expected structure
+  if (metrics && typeof metrics === 'object' && !Array.isArray(metrics)) {
+    return metrics as FLSimulationMetrics;
   }
-  try {
-    return JSON.parse(metricsStr) as FLSimulationMetrics;
-  } catch (error) {
-    console.error("Failed to parse metrics:", error);
-    return null;
+
+  // If it's a JSON string (backwards compatibility)
+  if (typeof metrics === 'string') {
+    if (!metrics || metrics.trim() === "" || metrics === "{}") {
+      return null;
+    }
+    try {
+      return JSON.parse(metrics) as FLSimulationMetrics;
+    } catch (error) {
+      console.error("Failed to parse metrics:", error);
+      return null;
+    }
   }
+
+  return null;
 }
 
 // Helper to format duration

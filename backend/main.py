@@ -19,9 +19,7 @@ if __name__ == "__main__":
     
     # We'll set FLEX_MED_PROJECT_DIR to the internal FL dir
     os.environ["FLEX_MED_PROJECT_DIR"] = str(backend_root / "federated_learning")
-    
-    print(config.PUBLIC_ANCHOR_DATASET_PATH)    
-    
+
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",

@@ -12,37 +12,53 @@ class SimulationStatus(str, Enum):
 
 class FLSimulationBase(BaseModel):
     """Base schema for FL Simulation"""
-    client_ids: List[int]
-    configs: dict  # Will be stored as JSONB
-    metrics: str = "{}"  # JSON string (consistent with clients table)
+    configs: dict  # JSONB - FL hyperparameters
+    aggregate_metrics: dict = {}  # JSONB - Aggregated metrics from all clients
     status: SimulationStatus = SimulationStatus.PENDING
     error_message: Optional[str] = None
 
-    @field_validator('metrics', mode='before')
+    @field_validator('configs', mode='before')
     @classmethod
-    def ensure_metrics_is_string(cls, v):
-        """Ensure metrics is JSON string"""
+    def ensure_configs_is_dict(cls, v):
+        """Ensure configs is a dict (not None or empty string)"""
         if v is None or v == "":
-            return "{}"
+            return {}
         if isinstance(v, dict):
-            return json.dumps(v)
+            return v
         if isinstance(v, str):
             try:
-                json.loads(v)  # Validate
-                return v
+                return json.loads(v)
             except json.JSONDecodeError:
-                return "{}"
-        return "{}"
+                return {}
+        return {}
+
+    @field_validator('aggregate_metrics', mode='before')
+    @classmethod
+    def ensure_aggregate_metrics_is_dict(cls, v):
+        """Ensure aggregate_metrics is a dict (not string-encoded JSON)"""
+        if v is None or v == "":
+            return {}
+        if isinstance(v, dict):
+            return v
+        if isinstance(v, str):
+            # In case Supabase returns string (shouldn't happen with JSONB)
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return {}
+        return {}
 
 class FLSimulationCreate(BaseModel):
     """Schema for creating new simulation"""
-    client_ids: List[int]
     configs: dict
+
+    # Note: client_ids can be computed from client_simulation_metrics table
+    # but we keep it here for convenience/caching
 
 class FLSimulationUpdate(BaseModel):
     """Schema for updating simulation"""
     status: Optional[SimulationStatus] = None
-    metrics: Optional[str] = None
+    aggregate_metrics: Optional[dict] = None
     error_message: Optional[str] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None

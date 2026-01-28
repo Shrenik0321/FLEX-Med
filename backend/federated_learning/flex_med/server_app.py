@@ -5,7 +5,7 @@ from flwr.app import ArrayRecord, ConfigRecord, Context
 from flwr.serverapp import ServerApp
 from flwr.server import Grid
 from flex_med.utils.config import CLIENT_INFO_FILE_PATH, MODEL_CHECKPOINT_FILE_PATH
-from flex_med.task import FLEXMedStrategy, load_public_dataset, NUM_CLASSES, load_checkpoint
+from flex_med.task import FLEXMedStrategy, load_public_dataset, NUM_CLASSES, load_checkpoint, load_client_config
 
 app = ServerApp()
 
@@ -42,19 +42,23 @@ def main(grid: Grid, context: Context) -> None:
 
     # <------------------------------------------ CLIENT CONFIGURATION LOADING ------------------------------------------>
 
-    # Load client metadata from data.json containing model types, dataset paths, etc.
-    # Used to display client overview and verify configuration before training starts
-    if os.path.exists(CLIENT_INFO_FILE_PATH):
-        with open(CLIENT_INFO_FILE_PATH, 'r') as f:
-            client_configs = json.load(f)
-
+    # Load client metadata containing model types, dataset paths, etc.
+    # Uses load_client_config() which prioritizes:
+    # 1. FLEX_MED_CLIENT_CONFIGS environment variable (in-memory JSON)
+    # 2. Database fetch using SUPABASE_CLIENT
+    # 3. File-based config (deprecated fallback)
+    try:
+        client_configs = load_client_config()
         num_clients = len(client_configs)
         print(f"[SERVER] Loaded {num_clients} clients:")
         for i, client in enumerate(client_configs):
-            data_status = "✓" if client['has_local_data'] else "✗"
-            print(f"  [{i}] {client['client_name']:15} | {client['model_type']:15} | {data_status}")
-    else:
-        print(f"[SERVER] ⚠ Configuration file not found: {CLIENT_INFO_FILE_PATH}")
+            data_status = "✓" if client.get('has_local_data', False) else "✗"
+            client_name = client.get('client_name', f'Client_{i}')
+            model_type = client.get('model_type', 'unknown')
+            print(f"  [{i}] {client_name:15} | {model_type:15} | {data_status}")
+    except Exception as e:
+        print(f"[SERVER] ⚠ Error loading client configuration: {e}")
+        raise
 
     # <------------------------------------------ CONSENSUS MATRIX INITIALIZATION ------------------------------------------>
 
@@ -107,11 +111,6 @@ def main(grid: Grid, context: Context) -> None:
     print(f"[SERVER] Federated Learning Complete")
     print(f"{'='*70}\n")
 
-    print(f"[SERVER] Saving results...")
-
-    # Save final consensus logits (aggregated soft predictions on public dataset)
-    # Used for: model interpretation, future rounds, checkpoint resumption
-    consensus_save_path = "final_consensus.npy"
     final_logits = None
     try:
         final_logits = result.arrays["0"].numpy()
@@ -119,10 +118,7 @@ def main(grid: Grid, context: Context) -> None:
         print(f"  ✓ Consensus saved: {consensus_save_path}")
     except Exception as e:
         print(f"  ✗ Error saving consensus: {e}")
-
-    # Save training summary with configuration and client details
-    # Includes: hyperparameters, client list, model types, data availability
-    metrics_save_path = "training_summary.json"
+        
     try:
         summary = {
             "num_rounds": num_rounds,
