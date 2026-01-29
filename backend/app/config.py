@@ -120,6 +120,17 @@ class Settings(BaseSettings):
             return Path(env_path)
         return self.dataset_file_path / "cnmc_public_test"
 
+    @property
+    def local_train_dataset_path(self) -> Path:
+        """
+        Shared local training dataset (70% of data) for runtime Dirichlet partitioning.
+        This dataset is partitioned in-memory across clients during FL initialization.
+        """
+        env_path = os.getenv("LOCAL_TRAIN_DATASET_PATH")
+        if env_path:
+            return Path(env_path)
+        return self.dataset_file_path / "cnmc_local_train"
+
     # ------------------------------------------------------------------------
     # Models and Checkpoints (with environment variable overrides)
     # ------------------------------------------------------------------------
@@ -182,6 +193,30 @@ class Settings(BaseSettings):
     consensus_momentum: float = 0.5
     train_loss_weight: float = 0.7
     distill_loss_weight: float = 0.3
+
+    # ------------------------------------------------------------------------
+    # Dirichlet Partitioning Configuration (Runtime Data Heterogeneity)
+    # ------------------------------------------------------------------------
+    dirichlet_alpha: float = float(os.getenv("FLEX_MED_DIRICHLET_ALPHA", "0.5"))
+    dirichlet_seed: int = int(os.getenv("FLEX_MED_DIRICHLET_SEED", "42"))
+    dirichlet_min_partition_size: int = int(os.getenv("FLEX_MED_DIRICHLET_MIN_PARTITION_SIZE", "100"))
+
+    # ------------------------------------------------------------------------
+    # xAI Configuration
+    # ------------------------------------------------------------------------
+    xai_lime_num_samples: int = int(os.getenv("XAI_LIME_NUM_SAMPLES", "1000"))
+    xai_lime_num_features: int = int(os.getenv("XAI_LIME_NUM_FEATURES", "5"))
+    xai_lime_random_seed: int = int(os.getenv("XAI_LIME_RANDOM_SEED", "42"))
+    xai_gradcam_eigen_smooth: bool = os.getenv("XAI_GRADCAM_EIGEN_SMOOTH", "true").lower() == "true"
+    xai_min_confidence: float = float(os.getenv("XAI_MIN_CONFIDENCE", "0.70"))
+
+    # Normalization statistics (must match training in task.py)
+    img_norm_mean: List[float] = [
+        float(x) for x in os.getenv("IMG_NORM_MEAN", "0.485,0.456,0.406").split(",")
+    ]
+    img_norm_std: List[float] = [
+        float(x) for x in os.getenv("IMG_NORM_STD", "0.229,0.224,0.225").split(",")
+    ]
     
     # Model Suitability Scores
     model_suitability_scores: Dict[str, float] = {

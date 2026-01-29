@@ -23,11 +23,7 @@ def fix_client_data(client: dict) -> dict:
     if client.get("status") not in ["Active", "Inactive"]:
         client["status"] = "Inactive"
 
-    # 2. Fix has_local_data: Default to False if None
-    if client.get("has_local_data") is None:
-        client["has_local_data"] = False
-
-    # 3. Fix model_path: Construct default if missing using centralized config
+    # 2. Fix model_path: Construct default if missing using centralized config
     if not client.get("model_path"):
         name = client.get("client_name", "unknown")
         client["model_path"] = str(settings.default_model_dir / f"{name}.pt")
@@ -64,10 +60,6 @@ def create_client(client: ClientCreate, supabase: SupabaseClient = Depends(get_s
     """
     settings = get_settings()
     client_data = jsonable_encoder(client)
-
-    # Ensure consistency: if no local data, dataset_path must be null
-    if not client.has_local_data:
-        client_data["dataset_path"] = None
 
     # Set default model path using centralized config
     if not client_data.get("model_path"):
@@ -126,12 +118,6 @@ async def start_local_train(
     client = response.data[0]
 
     # Validate client has required data
-    if not client.get('dataset_path'):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Client '{client.get('client_name')}' does not have a dataset path configured"
-        )
-
     if not client.get('model_path'):
         raise HTTPException(
             status_code=400,
@@ -141,7 +127,6 @@ async def start_local_train(
     # Prepare request for orchestrator
     train_payload = {
         "client_name": client['client_name'],
-        "dataset_path": client['dataset_path'],
         "model_path": client['model_path'],
         "epochs": epochs,
         "batch_size": batch_size,

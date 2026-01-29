@@ -6,9 +6,7 @@
       "created_at": "2026-01-27T17:04:05.693597+00:00",
       "client_name": "Asiri",
       "model_type": "resnet18",
-      "dataset_path": "/content/drive/MyDrive/College/FLEX-Med/cnmc_datasets/cnmc_client_0",
       "status": "Inactive",
-      "has_local_data": true,
       "model_path": "/content/drive/MyDrive/College/FLEX-Med/models/Asiri.pt",
       "metrics": "{}"
     },
@@ -17,9 +15,7 @@
       "created_at": "2026-01-27T17:04:18.259889+00:00",
       "client_name": "Durdans",
       "model_type": "mobilenet_v2",
-      "dataset_path": "/content/drive/MyDrive/College/FLEX-Med/cnmc_datasets/cnmc_client_1",
       "status": "Inactive",
-      "has_local_data": true,
       "model_path": "/content/drive/MyDrive/College/FLEX-Med/models/Durdans.pt",
       "metrics": "{}"
     }

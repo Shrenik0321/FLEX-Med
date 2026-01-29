@@ -1,9 +1,10 @@
 "use client";
 
 import { API_BASE_PATH } from "@/utils";
-import { ArrowLeft, Upload, Check, X, FileJson, Loader2 } from "lucide-react";
+import { Upload, Check, X, FileJson, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Loading } from "@/components/ui/loading";
 
 interface AddClientPageProps {
   onBack: () => void;
@@ -12,9 +13,8 @@ interface AddClientPageProps {
 export default function AddClientPage({ onBack }: AddClientPageProps) {
   const [clientName, setClientName] = useState("");
   const [modelType, setModelType] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasDataset, setHasDataset] = useState(false);
 
   const handleSubmit = async () => {
     if (!clientName || !modelType) {
@@ -22,7 +22,7 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
       return;
     }
 
-    setLoading(true);
+    setIsLoading(true);
     setError(null);
 
     try {
@@ -34,8 +34,6 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
         body: JSON.stringify({
           client_name: clientName,
           model_type: modelType,
-          has_local_data: hasDataset,
-          dataset_path: hasDataset ? undefined : null,
         }),
       });
 
@@ -51,9 +49,13 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
+
+  if (isLoading) {
+    return <Loading fullScreen text="Synchronizing client database..." />;
+  }
 
   return (
     <div className="p-8">
@@ -198,56 +200,6 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
             </div>
           </div>
 
-          {/* Data Upload */}
-          <div>
-            <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-              <span className="flex-red-dot" />
-              Initial Dataset
-            </h2>
-            {hasDataset ? (
-              <div className="relative border-2 border-solid border-primary bg-primary/5 rounded-lg p-8 text-center transition-all">
-                <button
-                  onClick={() => setHasDataset(false)}
-                  className="absolute top-4 right-4 p-1 text-primary hover:bg-red-100 rounded-full transition-colors"
-                  title="Remove dataset"
-                >
-                  <X size={20} />
-                </button>
-                <div className="w-16 h-16 bg-card rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm border border-red-100">
-                  <FileJson className="text-primary" size={32} />
-                </div>
-                <h3 className="font-semibold text-foreground mb-1">
-                  Dataset Configured
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  client_allidb (Default Local Dataset)
-                </p>
-                <div className="flex items-center justify-center gap-2 mt-4 text-sm text-primary font-medium">
-                  <Check size={16} />
-                  Ready for training
-                </div>
-              </div>
-            ) : (
-              <div
-                onClick={() => setHasDataset(true)}
-                className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary hover:bg-primary/5 transition-all cursor-pointer group"
-              >
-                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-card group-hover:shadow-sm transition-all">
-                  <Upload
-                    className="text-muted-foreground group-hover:text-primary transition-colors"
-                    size={32}
-                  />
-                </div>
-                <p className="font-medium text-foreground group-hover:text-primary transition-colors">
-                  Click to configure local dataset
-                </p>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Uses default path: /content/drive/MyDrive/...
-                </p>
-              </div>
-            )}
-          </div>
-
           {/* Error Message */}
           {error && (
             <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -257,11 +209,15 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
 
           {/* Actions */}
           <div className="flex gap-3 pt-4">
-            <Button variant="ghost" onClick={onBack} disabled={loading}>
+            <Button variant="ghost" onClick={onBack} disabled={isLoading}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit} disabled={loading} className="px-8">
-              {loading ? (
+            <Button
+              onClick={handleSubmit}
+              disabled={isLoading}
+              className="px-8"
+            >
+              {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Registering...

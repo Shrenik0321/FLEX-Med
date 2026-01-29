@@ -101,7 +101,6 @@ def train(msg: Message, context: Context):
 
     # Phase 1: Adaptive Knowledge Distillation from Server Consensus
     distill_loss = 0.0
-    has_local_data = client_config['has_local_data']
 
     if "arrays" in msg.content and msg.content["arrays"]:
         try:
@@ -109,9 +108,9 @@ def train(msg: Message, context: Context):
 
             # Skip distillation in Round 1 (no consensus yet)
             if np.any(consensus_logits != 0):
-                # Free riders need more distillation epochs
-                distill_epochs = 2 if has_local_data else 8
-                distill_lr = 0.001 if has_local_data else 0.002
+                # All clients use standardized distillation parameters
+                distill_epochs = 2
+                distill_lr = 0.001
                 temperature = 3.0
 
                 print(f"[Client {partition_id}] Phase 1: Adaptive Knowledge Distillation ({distill_epochs} epochs)")
@@ -156,44 +155,26 @@ def train(msg: Message, context: Context):
 
     trainloader, _ = load_private_dataset(partition_id, num_partitions, batch_size=32)
 
-    if trainloader is not None:
-        dataset_len = len(trainloader.dataset)
-
-        start_time = time.time()
-        train_loss = train_fn(
-            model=model,
-            trainloader=trainloader,
-            epochs=context.run_config["local-epochs"],
-            lr=decayed_lr,
-            device=device,
-            model_type=model_type
+    if trainloader is None:
+        raise ValueError(
+            f"[Client {partition_id}] No training data available. "
+            f"All clients must have a data partition from LOCAL_TRAIN_DATASET_PATH"
         )
-        training_time = time.time() - start_time
 
-        print(f"[Client {partition_id}] ✓ Training Loss: {train_loss:.4f} ({dataset_len} samples, {training_time:.1f}s)")
-    else:
-        # Free riders: Public dataset training
-        print(f"[Client {partition_id}] Phase 2b: Public Dataset Training (Free Rider)")
+    dataset_len = len(trainloader.dataset)
 
-        public_supervised_loader = load_public_dataset(
-            batch_size=32,
-            round_num=server_round, 
-            total_rounds=total_rounds
-        )
-        dataset_len = len(public_supervised_loader.dataset)
+    start_time = time.time()
+    train_loss = train_fn(
+        model=model,
+        trainloader=trainloader,
+        epochs=context.run_config["local-epochs"],
+        lr=decayed_lr,
+        device=device,
+        model_type=model_type
+    )
+    training_time = time.time() - start_time
 
-        start_time = time.time()
-        train_loss = train_fn(
-            model=model,
-            trainloader=public_supervised_loader,
-            epochs=3,
-            lr=0.0005,
-            device=device,
-            model_type=model_type
-        )
-        training_time = time.time() - start_time
-
-        print(f"[Client {partition_id}] ✓ Public Training Loss: {train_loss:.4f}")
+    print(f"[Client {partition_id}] ✓ Training Loss: {train_loss:.4f} ({dataset_len} samples, {training_time:.1f}s)")
 
     # Save updated model checkpoint
     try:
@@ -226,8 +207,7 @@ def train(msg: Message, context: Context):
         "distill_loss": distill_loss,
         "num-examples": dataset_len,
         "training_time": training_time,
-        "client_id": partition_id,
-        "has_local_data": int(client_config['has_local_data'])
+        "client_id": partition_id
     }
 
     return Message(
@@ -242,8 +222,7 @@ def train(msg: Message, context: Context):
 
 @app.evaluate()
 def evaluate(msg: Message, context: Context):
-    # Evaluates model performance on client's test data or public dataset
-    # Free riders (no local data) evaluate on public dataset as generalization proxy
+    # Evaluates model performance on client's validation data
     partition_id = context.node_config["partition-id"]
     num_partitions = context.node_config["num-partitions"]
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -268,12 +247,14 @@ def evaluate(msg: Message, context: Context):
 
     model.to(device)
 
-    # Load test dataset (private if available, otherwise public)
+    # Load test dataset
     _, valloader = load_private_dataset(partition_id, num_partitions, batch_size=32)
 
     if valloader is None:
-        print(f"[Client {partition_id}] Using public dataset for evaluation")
-        valloader = load_public_dataset(batch_size=32,round_num=server_round, total_rounds=total_rounds)
+        raise ValueError(
+            f"[Client {partition_id}] No validation data available. "
+            f"All clients must have a data partition."
+        )
 
     # Run evaluation
     eval_loss, eval_acc = test_fn(model, valloader, device)
@@ -284,8 +265,7 @@ def evaluate(msg: Message, context: Context):
         "eval_loss": eval_loss,
         "eval_acc": eval_acc,
         "num-examples": len(valloader.dataset),
-        "client_id": partition_id,
-        "has_local_data": int(client_config['has_local_data'])
+        "client_id": partition_id
     }
 
     return Message(

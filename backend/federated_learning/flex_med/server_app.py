@@ -52,10 +52,9 @@ def main(grid: Grid, context: Context) -> None:
         num_clients = len(client_configs)
         print(f"[SERVER] Loaded {num_clients} clients:")
         for i, client in enumerate(client_configs):
-            data_status = "✓" if client.get('has_local_data', False) else "✗"
             client_name = client.get('client_name', f'Client_{i}')
             model_type = client.get('model_type', 'unknown')
-            print(f"  [{i}] {client_name:15} | {model_type:15} | {data_status}")
+            print(f"  [{i}] {client_name:15} | {model_type:15}")
     except Exception as e:
         print(f"[SERVER] ⚠ Error loading client configuration: {e}")
         raise
@@ -132,7 +131,6 @@ def main(grid: Grid, context: Context) -> None:
                     "id": i,
                     "name": client['client_name'],
                     "model_type": client['model_type'],
-                    "has_local_data": client['has_local_data'],
                     "model_path": client['model_path']
                 }
                 for i, client in enumerate(client_configs)

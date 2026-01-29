@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import EvalCard from "@/components/ui/eval-card";
+import { Loading } from "../ui/loading";
 
 // Register Chart.js components
 ChartJS.register(
@@ -70,6 +71,13 @@ interface ClientMetrics {
   }>;
 }
 
+interface ConfusionMatrix {
+  TP: number;
+  FN: number;
+  FP: number;
+  TN: number;
+}
+
 // Color palette for different clients
 const CLIENT_COLORS = [
   "#B80028", // Primary red
@@ -81,6 +89,155 @@ const CLIENT_COLORS = [
   "#14b8a6", // Teal
   "#f97316", // Orange-red
 ];
+
+/**
+ * CONFUSION MATRIX COMPONENT
+ * ==========================
+ *
+ * Renders a 2x2 confusion matrix with TP, FN, FP, TN values.
+ * Similar to the Python implementation in fl_evaluation.py.
+ */
+interface ConfusionMatrixCardProps {
+  title: string;
+  confusionMatrix?: ConfusionMatrix;
+  accuracy?: number;
+}
+
+function ConfusionMatrixCard({
+  title,
+  confusionMatrix,
+  accuracy,
+}: ConfusionMatrixCardProps) {
+  if (!confusionMatrix) {
+    return (
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <h3 className="text-lg font-semibold text-slate-900 mb-4">{title}</h3>
+        <div className="flex items-center justify-center h-48 text-slate-400">
+          No confusion matrix data available
+        </div>
+      </div>
+    );
+  }
+
+  const { TP = 0, FN = 0, FP = 0, TN = 0 } = confusionMatrix;
+  const maxVal = Math.max(TP, FN, FP, TN);
+
+  // Calculate color intensity based on value
+  const getColorIntensity = (value: number) => {
+    if (maxVal === 0) return 0;
+    return (value / maxVal) * 0.8 + 0.2; // 0.2 to 1.0 range
+  };
+
+  const getCellColor = (value: number) => {
+    const intensity = getColorIntensity(value);
+    const lightness = 100 - intensity * 50; // 50% to 100% lightness
+    return `hsl(347, 91%, ${lightness}%)`;
+  };
+
+  const getTextColor = (value: number) => {
+    const intensity = getColorIntensity(value);
+    return intensity > 0.6 ? "text-white" : "text-slate-900";
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+      <h3 className="text-lg font-semibold text-slate-900 mb-4">{title}</h3>
+
+      {/* Confusion Matrix Grid */}
+      <div className="relative">
+        {/* Column Labels */}
+        <div className="grid grid-cols-2 gap-2 mb-2 ml-32">
+          <div className="text-center text-sm font-medium text-slate-600">
+            Predicted
+            <br />
+            Leukemia
+          </div>
+          <div className="text-center text-sm font-medium text-slate-600">
+            Predicted
+            <br />
+            Healthy
+          </div>
+        </div>
+
+        {/* Matrix with Row Labels */}
+        <div className="flex gap-2">
+          {/* Row Labels */}
+          <div className="flex flex-col gap-2 justify-center w-28">
+            <div className="h-24 flex items-center justify-end pr-3 text-sm font-medium text-slate-600 text-right">
+              Actual
+              <br />
+              Leukemia
+            </div>
+            <div className="h-24 flex items-center justify-end pr-3 text-sm font-medium text-slate-600 text-right">
+              Actual
+              <br />
+              Healthy
+            </div>
+          </div>
+
+          {/* Matrix Cells */}
+          <div className="grid grid-cols-2 gap-2 flex-1">
+            {/* TP */}
+            <div
+              className={`h-24 flex flex-col items-center justify-center rounded-lg border border-slate-300 ${getTextColor(TP)}`}
+              style={{ backgroundColor: getCellColor(TP) }}
+            >
+              <div className="text-3xl font-bold">{TP}</div>
+              <div className="text-xs font-medium opacity-80">
+                True Positive
+              </div>
+            </div>
+
+            {/* FN */}
+            <div
+              className={`h-24 flex flex-col items-center justify-center rounded-lg border border-slate-300 ${getTextColor(FN)}`}
+              style={{ backgroundColor: getCellColor(FN) }}
+            >
+              <div className="text-3xl font-bold">{FN}</div>
+              <div className="text-xs font-medium opacity-80">
+                False Negative
+              </div>
+            </div>
+
+            {/* FP */}
+            <div
+              className={`h-24 flex flex-col items-center justify-center rounded-lg border border-slate-300 ${getTextColor(FP)}`}
+              style={{ backgroundColor: getCellColor(FP) }}
+            >
+              <div className="text-3xl font-bold">{FP}</div>
+              <div className="text-xs font-medium opacity-80">
+                False Positive
+              </div>
+            </div>
+
+            {/* TN */}
+            <div
+              className={`h-24 flex flex-col items-center justify-center rounded-lg border border-slate-300 ${getTextColor(TN)}`}
+              style={{ backgroundColor: getCellColor(TN) }}
+            >
+              <div className="text-3xl font-bold">{TN}</div>
+              <div className="text-xs font-medium opacity-80">
+                True Negative
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Accuracy Display */}
+        {accuracy !== undefined && (
+          <div className="mt-4 text-center">
+            <span className="text-sm font-medium text-slate-600">
+              Accuracy:{" "}
+              <span className="text-slate-900 font-bold">
+                {(accuracy * 100).toFixed(1)}%
+              </span>
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /**
  * SMART Y-AXIS SCALING IMPLEMENTATION
@@ -503,6 +660,108 @@ export default function FLSimulationDetailsPage({
   const f1Limits = smartYLimit(allF1Values, "bounded");
   const lossLimits = smartYLimit(allLossValues, "unbounded");
 
+  // Calculate improvement values for smart scaling
+  const allImprovementValues: number[] = [];
+  if (selectedClient === "all" && multiClientData) {
+    clients.forEach((client) => {
+      const metrics = clientMetricsMap.get(client.id);
+      const preFlAccuracy = metrics?.global?.pre_fl?.accuracy || 0;
+
+      multiClientData.forEach((d: any) => {
+        const val = d[`accuracy_${client.id}`];
+        if (typeof val === "number") {
+          allImprovementValues.push(val - preFlAccuracy);
+        }
+      });
+    });
+  } else if (selectedClient !== "all") {
+    // For single client, calculate improvement values
+    const clientId = parseInt(selectedClient);
+    const metrics = clientMetricsMap.get(clientId);
+    const preFlAccuracy = metrics?.global?.pre_fl?.accuracy || 0;
+
+    chartData?.forEach((d: any) => {
+      const val = d.accuracy;
+      if (typeof val === "number") {
+        allImprovementValues.push(val - preFlAccuracy);
+      }
+    });
+  }
+  const improvementLimits = smartYLimit(allImprovementValues, "unbounded", 0.1);
+
+  // Calculate round-to-round delta values for smart scaling
+  const allRoundDeltaValues: number[] = [];
+  if (selectedClient === "all" && multiClientData) {
+    const roundsData = multiClientData.slice(1); // Skip Round 0
+    clients.forEach((client) => {
+      const metrics = clientMetricsMap.get(client.id);
+      const preFlAccuracy = metrics?.global?.pre_fl?.accuracy || 0;
+
+      roundsData.forEach((d: any, index: number) => {
+        const currentAcc = d[`accuracy_${client.id}`];
+        if (typeof currentAcc !== "number") return;
+
+        if (index === 0) {
+          // Round 1 vs Pre-FL
+          allRoundDeltaValues.push(currentAcc - preFlAccuracy);
+        } else {
+          // Round N vs Round N-1
+          const prevAcc = roundsData[index - 1][`accuracy_${client.id}`];
+          if (typeof prevAcc === "number") {
+            allRoundDeltaValues.push(currentAcc - prevAcc);
+          }
+        }
+      });
+    });
+  } else if (selectedClient !== "all" && chartData) {
+    const roundsData = chartData.slice(1); // Skip Round 0
+    const clientId = parseInt(selectedClient);
+    const metrics = clientMetricsMap.get(clientId);
+    const preFlAccuracy = metrics?.global?.pre_fl?.accuracy || 0;
+
+    roundsData.forEach((d: any, index: number) => {
+      const currentAcc = d.accuracy;
+      if (typeof currentAcc !== "number") return;
+
+      if (index === 0) {
+        // Round 1 vs Pre-FL
+        allRoundDeltaValues.push(currentAcc - preFlAccuracy);
+      } else {
+        // Round N vs Round N-1
+        const prevAcc = roundsData[index - 1].accuracy;
+        if (typeof prevAcc === "number") {
+          allRoundDeltaValues.push(currentAcc - prevAcc);
+        }
+      }
+    });
+  }
+
+  // Calculate limits allowing negative values (for deltas)
+  const roundDeltaLimits = (() => {
+    if (allRoundDeltaValues.length === 0) {
+      return { min: -0.1, max: 0.1 };
+    }
+
+    const minVal = Math.min(...allRoundDeltaValues);
+    const maxVal = Math.max(...allRoundDeltaValues);
+    const valueRange = maxVal - minVal;
+
+    if (valueRange < 0.01) {
+      const center = (maxVal + minVal) / 2;
+      return {
+        min: center - 0.05,
+        max: center + 0.05,
+      };
+    }
+
+    const padding = 0.1;
+    const padAmount = valueRange * padding;
+    return {
+      min: minVal - padAmount, // Allow negative values
+      max: maxVal + padAmount,
+    };
+  })();
+
   // Charts configuration (with smart scaling dependencies)
   const accuracyChartConfig = useMemo(
     () => ({
@@ -692,6 +951,142 @@ export default function FLSimulationDetailsPage({
     [comparisonData],
   );
 
+  const perClientImprovementChartConfig = useMemo(
+    () => ({
+      labels: (multiClientData || []).map((d: any) => `Round ${d.round}`),
+      datasets: clients.map((client, idx) => {
+        const metrics = clientMetricsMap.get(client.id);
+        const preFlAccuracy = metrics?.global?.pre_fl?.accuracy || 0;
+        return {
+          label: client.client_name,
+          data:
+            multiClientData?.map((d: any) => {
+              const val = d[`accuracy_${client.id}`];
+              return typeof val === "number" ? val - preFlAccuracy : null;
+            }) || [],
+          borderColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
+          backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
+          tension: 0.3,
+          pointRadius: 3,
+          borderWidth: 2,
+        };
+      }),
+    }),
+    [multiClientData, clients, clientMetricsMap],
+  );
+
+  const singleClientImprovementChartConfig = useMemo(() => {
+    if (selectedClient === "all") return null;
+
+    const clientId = parseInt(selectedClient);
+    const metrics = clientMetricsMap.get(clientId);
+    const preFlAccuracy = metrics?.global?.pre_fl?.accuracy || 0;
+
+    return {
+      labels: (chartData || []).map((d: any) => `Round ${d.round}`),
+      datasets: [
+        {
+          label: "Accuracy Improvement",
+          data: (chartData || []).map((d: any) => {
+            const val = d.accuracy;
+            return typeof val === "number" ? val - preFlAccuracy : null;
+          }),
+          borderColor: "#10b981", // Green for improvement
+          backgroundColor: "rgba(16, 185, 129, 0.1)",
+          tension: 0.3,
+          fill: true,
+          pointRadius: 4,
+          borderWidth: 2,
+        },
+      ],
+    };
+  }, [chartData, selectedClient, clientMetricsMap]);
+
+  // Round-to-Round Improvement Chart (Delta from Previous Round)
+  const perClientRoundDeltaChartConfig = useMemo(() => {
+    if (selectedClient !== "all" || !multiClientData) return null;
+
+    // Skip Round 0 (Pre-FL) - start from Round 1
+    const roundsData = multiClientData.slice(1);
+
+    return {
+      labels: roundsData.map((d: any) => `Round ${d.round}`),
+      datasets: clients.map((client, idx) => {
+        const metrics = clientMetricsMap.get(client.id);
+        const preFlAccuracy = metrics?.global?.pre_fl?.accuracy || 0;
+
+        // Calculate round-to-round deltas (starting from Round 1)
+        const deltas = roundsData.map((d: any, index: number) => {
+          const currentAcc = d[`accuracy_${client.id}`];
+          if (typeof currentAcc !== "number") return null;
+
+          if (index === 0) {
+            // Round 1 - compare to Pre-FL
+            return currentAcc - preFlAccuracy;
+          } else {
+            // Round 2+ - compare to previous round
+            const prevAcc = roundsData[index - 1][`accuracy_${client.id}`];
+            if (typeof prevAcc !== "number") return null;
+            return currentAcc - prevAcc;
+          }
+        });
+
+        return {
+          label: client.client_name,
+          data: deltas,
+          borderColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
+          backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
+          tension: 0.3,
+          pointRadius: 3,
+          borderWidth: 2,
+        };
+      }),
+    };
+  }, [multiClientData, clients, clientMetricsMap, selectedClient]);
+
+  const singleClientRoundDeltaChartConfig = useMemo(() => {
+    if (selectedClient === "all" || !chartData) return null;
+
+    const clientId = parseInt(selectedClient);
+    const metrics = clientMetricsMap.get(clientId);
+    const preFlAccuracy = metrics?.global?.pre_fl?.accuracy || 0;
+
+    // Skip Round 0 (Pre-FL) - start from Round 1
+    const roundsData = chartData.slice(1);
+
+    // Calculate round-to-round deltas (starting from Round 1)
+    const deltas = roundsData.map((d: any, index: number) => {
+      const currentAcc = d.accuracy;
+      if (typeof currentAcc !== "number") return null;
+
+      if (index === 0) {
+        // Round 1 - compare to Pre-FL
+        return currentAcc - preFlAccuracy;
+      } else {
+        // Round 2+ - compare to previous round
+        const prevAcc = roundsData[index - 1].accuracy;
+        if (typeof prevAcc !== "number") return null;
+        return currentAcc - prevAcc;
+      }
+    });
+
+    return {
+      labels: roundsData.map((d: any) => `Round ${d.round}`),
+      datasets: [
+        {
+          label: "Round-to-Round Improvement",
+          data: deltas,
+          borderColor: "#3b82f6", // Blue for delta
+          backgroundColor: "rgba(59, 130, 246, 0.1)",
+          tension: 0.3,
+          fill: true,
+          pointRadius: 4,
+          borderWidth: 2,
+        },
+      ],
+    };
+  }, [chartData, selectedClient, clientMetricsMap]);
+
   // Get selected client metrics for individual view
   const selectedClientMetrics =
     selectedClient !== "all"
@@ -758,8 +1153,8 @@ export default function FLSimulationDetailsPage({
                   type: "line",
                   yMin: 0,
                   yMax: 0,
-                  borderColor: "rgba(148, 163, 184, 0.5)",
-                  borderWidth: 2,
+                  borderColor: "#1e293b",
+                  borderWidth: 2.5,
                   borderDash: [5, 5],
                   label: {
                     display: true,
@@ -778,7 +1173,12 @@ export default function FLSimulationDetailsPage({
         max: metricLimits.max,
         grid: {
           display: true,
-          color: "rgba(0,0,0,0.05)",
+          color: (context: any) =>
+            Math.abs(context.tick.value) < 0.0001
+              ? "rgba(30, 41, 59, 1)"
+              : "rgba(0,0,0,0.05)",
+          lineWidth: (context: any) =>
+            Math.abs(context.tick.value) < 0.0001 ? 2 : 1,
         },
         ticks: {
           font: { size: 11 },
@@ -803,17 +1203,12 @@ export default function FLSimulationDetailsPage({
           callback: isRoundBased
             ? function (this: any, val: any, index: any) {
                 const label = this.getLabelForValue(val) as string;
-                // Try to extract number from "Round X"
                 const roundNum = parseInt(label.replace("Round ", ""));
 
                 if (!isNaN(roundNum)) {
-                  // Show only even numbers: 0, 2, 4...
-                  if (roundNum % 2 === 0) {
-                    return roundNum; // Show just the number
-                  }
-                  return ""; // Hide odd ones
+                  return roundNum; // Show every round number
                 }
-                return label; // Fallback
+                return label; // Fallback for other labels
               }
             : undefined,
         },
@@ -828,6 +1223,74 @@ export default function FLSimulationDetailsPage({
   const f1ChartOptions = getChartOptions(f1Limits, true);
   const lossChartOptions = getChartOptions(lossLimits, false);
   const comparisonChartOptions = getChartOptions(accuracyLimits, true, false);
+
+  // Improvement chart options with baseline reference line
+  const improvementChartOptions = useMemo(() => {
+    const baseOptions = getChartOptions(improvementLimits, true, true);
+    return {
+      ...baseOptions,
+      plugins: {
+        ...baseOptions.plugins,
+        annotation: {
+          annotations: {
+            baselineLine: {
+              type: "line" as const,
+              yMin: 0,
+              yMax: 0,
+              borderColor: "#1e293b",
+              borderWidth: 2.5,
+              borderDash: [8, 4],
+              label: {
+                display: true,
+                content: "Pre-FL Baseline (0% improvement)",
+                position: "end" as const,
+                backgroundColor: "#1e293b",
+                color: "white",
+                font: {
+                  size: 10,
+                  weight: "bold" as const,
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+  }, [improvementLimits]);
+
+  // Round-to-Round Delta chart options with zero reference line
+  const roundDeltaChartOptions = useMemo(() => {
+    const baseOptions = getChartOptions(roundDeltaLimits, true, true);
+    return {
+      ...baseOptions,
+      plugins: {
+        ...baseOptions.plugins,
+        annotation: {
+          annotations: {
+            zeroLine: {
+              type: "line" as const,
+              yMin: 0,
+              yMax: 0,
+              borderColor: "#1e293b",
+              borderWidth: 2.5,
+              borderDash: [8, 4],
+              label: {
+                display: true,
+                content: "No Change (0% delta)",
+                position: "end" as const,
+                backgroundColor: "#1e293b",
+                color: "white",
+                font: {
+                  size: 10,
+                  weight: "bold" as const,
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+  }, [roundDeltaLimits]);
 
   // =====================================================================================
   // CONDITIONAL RENDERING (Moved here to ensure all Hooks run before early returns)
@@ -950,31 +1413,19 @@ export default function FLSimulationDetailsPage({
     );
   }
 
-  // if (isLoading) {
-  //   return (
-  //     <div className="p-8">
-  //       <div className="text-center text-muted-foreground">
-  //         Loading simulation data...
-  //       </div>
-  //     </div>
-  //   );
-  // }
+  if (isLoading) {
+    return <Loading fullScreen text="Synchronizing client database..." />;
+  }
 
-  // if (!simulation) {
-  //   return (
-  //     <div className="p-8">
-  //       <div className="text-center text-muted-foreground">
-  //         Simulation not found
-  //       </div>
-  //     </div>
-  //   );
-  // }
-
-  // Check if metrics are empty (not needed with static data)
-  // const hasMetrics =
-  //   simulationMetrics &&
-  //   simulationMetrics.rounds &&
-  //   simulationMetrics.rounds.length > 0;
+  if (!simulation) {
+    return (
+      <div className="p-8">
+        <div className="text-center text-muted-foreground">
+          Simulation not found
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8">
@@ -1090,33 +1541,6 @@ export default function FLSimulationDetailsPage({
               </div>
               <div className="text-sm text-green-600 mt-2 font-medium">
                 Final Accuracy
-              </div>
-            </div>
-
-            {/* Improvement */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Net Improvement
-              </div>
-              <div
-                className={`text-3xl font-bold ${
-                  (selectedClientMetrics.global?.improvement?.accuracy || 0) >=
-                  0
-                    ? "text-blue-600"
-                    : "text-red-500"
-                }`}
-              >
-                {(selectedClientMetrics.global?.improvement?.accuracy || 0) >= 0
-                  ? "+"
-                  : ""}
-                {(
-                  (selectedClientMetrics.global?.improvement?.accuracy || 0) *
-                  100
-                ).toFixed(1)}
-                <span className="text-lg text-slate-400 ml-1">%</span>
-              </div>
-              <div className="text-sm text-slate-400 mt-2 font-medium">
-                Accuracy Gain
               </div>
             </div>
 
@@ -1282,6 +1706,29 @@ export default function FLSimulationDetailsPage({
               </div>
             </div>
           </div>
+
+          {/* Confusion Matrix Analysis */}
+          <div className="mt-8 border-t border-slate-100 pt-8">
+            <h3 className="text-lg font-bold text-slate-900 mb-6">
+              Confusion Matrix Analysis
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <ConfusionMatrixCard
+                title="Pre-FL Baseline"
+                confusionMatrix={
+                  selectedClientMetrics.global?.pre_fl?.confusion_matrix
+                }
+                accuracy={selectedClientMetrics.global?.pre_fl?.accuracy}
+              />
+              <ConfusionMatrixCard
+                title="Post-FL Result"
+                confusionMatrix={
+                  selectedClientMetrics.global?.post_fl?.confusion_matrix
+                }
+                accuracy={selectedClientMetrics.global?.post_fl?.accuracy}
+              />
+            </div>
+          </div>
         </div>
       )}
 
@@ -1385,6 +1832,43 @@ export default function FLSimulationDetailsPage({
           }
           content={<Line data={f1ChartConfig} options={f1ChartOptions} />}
         />
+
+        {/* Round-to-Round Improvement Delta */}
+        {selectedClient === "all" ? (
+          <EvalCard
+            title="Round-to-Round Improvement"
+            description="Accuracy gain from previous round (shows diminishing returns and convergence)"
+            content={
+              perClientRoundDeltaChartConfig ? (
+                <Line
+                  data={perClientRoundDeltaChartConfig}
+                  options={roundDeltaChartOptions}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-48 text-slate-400">
+                  No delta data available
+                </div>
+              )
+            }
+          />
+        ) : (
+          <EvalCard
+            title="Round-to-Round Improvement"
+            description={`${selectedClientInfo?.client_name} accuracy gain from previous round`}
+            content={
+              singleClientRoundDeltaChartConfig ? (
+                <Line
+                  data={singleClientRoundDeltaChartConfig}
+                  options={roundDeltaChartOptions}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-48 text-slate-400">
+                  No delta data available
+                </div>
+              )
+            }
+          />
+        )}
 
         {/* Pre FL vs Post FL Comparison */}
         <EvalCard

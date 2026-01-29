@@ -28,7 +28,6 @@ interface Client {
   status: string;
   model_type: number;
   created_at: string;
-  dataset_path?: string;
 }
 
 // Confirmation Modal Component
@@ -168,7 +167,7 @@ export default function ClientsListPage({
   onSelectClient,
 }: ClientsListPageProps) {
   const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean;
@@ -191,7 +190,7 @@ export default function ClientsListPage({
       } catch (error) {
         console.error("Failed to fetch clients:", error);
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
 
@@ -270,7 +269,7 @@ export default function ClientsListPage({
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return <Loading fullScreen text="Synchronizing client database..." />;
   }
 
@@ -318,9 +317,6 @@ export default function ClientsListPage({
                 Models
               </th>
               <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                Dataset Available
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
                 Created At
               </th>
               <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
@@ -353,17 +349,6 @@ export default function ClientsListPage({
                 </td>
                 <td className="px-6 py-4 text-sm text-foreground">
                   {client.model_type}
-                </td>
-                <td className="px-6 py-4 text-sm">
-                  <span
-                    className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${
-                      client.dataset_path
-                        ? "border-green-500 text-green-700 bg-green-50"
-                        : "border-red-500 text-red-700 bg-red-50"
-                    }`}
-                  >
-                    {client.dataset_path ? "True" : "False"}
-                  </span>
                 </td>
                 <td className="px-6 py-4 text-sm text-foreground">
                   {formatDate(client.created_at)}

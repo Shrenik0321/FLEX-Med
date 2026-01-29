@@ -53,14 +53,19 @@ class ModelType(str, Enum):
 # ==========================================
 # SCHEMAS FOR API (FastAPI Compatible)
 # ==========================================
+#
+# NOTE: As of v3.0, all clients use runtime Dirichlet partitioning
+# with shared LOCAL_TRAIN_DATASET_PATH configured in backend/app/config.py.
+# Data heterogeneity is controlled by the DIRICHLET_ALPHA parameter.
+# See backend/federated_learning/flex_med/task.py for implementation.
+#
+# ==========================================
 
 class ClientBase(BaseModel):
     """Base schema for client (static configuration only)"""
     client_name: str
     status: Status
     model_type: ModelType
-    has_local_data: bool
-    dataset_path: Optional[str] = None
     model_path: str
 
     model_config = {
@@ -72,8 +77,6 @@ class ClientCreate(BaseModel):
     client_name: str
     model_type: ModelType
     status: Status = Status.Inactive
-    has_local_data: bool = False
-    dataset_path: Optional[str] = None  # Will be set by route handler using config
     model_path: Optional[str] = None  # Will be set by route handler using config
 
     model_config = {
@@ -116,14 +119,11 @@ if __name__ == "__main__":
         client_name="Hospital_A",
         model_type=ModelType.ResNet18,
         status=Status.Active,
-        has_local_data=True,
-        dataset_path="/path/to/data",
         model_path="/path/to/model.pt"
     )
 
     print(f"Client Name: {client_create.client_name}")
     print(f"Model Type: {client_create.model_type}")
-    print(f"Has Local Data: {client_create.has_local_data}")
 
     # Example 2: Complete client object
     print("\nExample 2: Complete Client Object")
@@ -134,8 +134,6 @@ if __name__ == "__main__":
         client_name="Hospital_A",
         status=Status.Active,
         model_type=ModelType.ResNet18,
-        has_local_data=True,
-        dataset_path="/path/to/data",
         model_path="/path/to/model.pt",
         created_at=datetime.now().isoformat()
     )

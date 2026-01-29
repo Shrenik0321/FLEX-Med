@@ -13,7 +13,11 @@ from app.services.model_service import (
     COMMON_TRANSFORM,
     get_gradcam_target_layers,
 )
-from app.services.xai_service import generate_gradcam_base64, generate_lime_base64
+from app.services.xai_service import (
+    generate_gradcam_base64,
+    generate_lime_base64,
+    validate_model_quality,
+)
 
 router = APIRouter(prefix="/inference", tags=["inference"])
 logger = logging.getLogger(__name__)
@@ -118,6 +122,22 @@ async def inference(
                 detail=f"Prediction failed: {str(e)}"
             ) from e
 
+        # 3.5. Validate model quality before generating xAI
+        quality_check = validate_model_quality(
+            model=bundle.model,
+            confidence=confidence,
+            min_confidence=settings.xai_min_confidence,
+        )
+
+        # Log warnings if model quality is questionable
+        if quality_check["warnings"]:
+            for warning in quality_check["warnings"]:
+                logger.warning(f"xAI Quality Warning: {warning}")
+        if quality_check["issues"]:
+            for issue in quality_check["issues"]:
+                logger.warning(f"xAI Quality Issue: {issue}")
+            logger.warning(f"Recommendation: {quality_check['recommendation']}")
+
         # 4. Prepare input tensor for xAI
         try:
             input_tensor = COMMON_TRANSFORM(image).unsqueeze(0).to(bundle.device)
@@ -136,6 +156,8 @@ async def inference(
                 input_tensor=input_tensor,
                 target_layers=target_layers,
                 class_idx=class_idx,
+                eigen_smooth=settings.xai_gradcam_eigen_smooth,
+                aug_smooth=True,
             )
             logger.info("Grad-CAM generated successfully")
         except Exception as e:
@@ -152,7 +174,9 @@ async def inference(
                 input_tensor=input_tensor,
                 class_idx=class_idx,
                 device=bundle.device,
-                num_samples=1000,  # Increase for more stable explanations
+                num_samples=settings.xai_lime_num_samples,
+                random_seed=settings.xai_lime_random_seed,
+                num_features=settings.xai_lime_num_features,
             )
             logger.info("LIME generated successfully")
         except Exception as e:

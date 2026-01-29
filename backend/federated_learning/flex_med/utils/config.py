@@ -40,6 +40,7 @@ PYPROJECT_PATH = str(_settings.pyproject_path)
 DATASET_FILE_PATH = str(_settings.dataset_file_path)
 PUBLIC_ANCHOR_DATASET_PATH = str(_settings.public_anchor_dataset_path)
 PUBLIC_TEST_DATASET_PATH = str(_settings.public_test_dataset_path)
+LOCAL_TRAIN_DATASET_PATH = str(_settings.local_train_dataset_path)
 
 # Model checkpoints
 MODEL_CHECKPOINT_FILE_PATH = str(_settings.model_checkpoint_file_path)
@@ -62,3 +63,8 @@ TRAIN_LOSS_WEIGHT = _settings.train_loss_weight
 DISTILL_LOSS_WEIGHT = _settings.distill_loss_weight
 
 CONSENSUS_MOMENTUM = _settings.consensus_momentum
+
+# Dirichlet partitioning (runtime data heterogeneity)
+DIRICHLET_ALPHA = _settings.dirichlet_alpha
+DIRICHLET_SEED = _settings.dirichlet_seed
+DIRICHLET_MIN_PARTITION_SIZE = _settings.dirichlet_min_partition_size

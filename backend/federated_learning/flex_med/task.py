@@ -22,12 +22,15 @@ from flwr.common import (
 )
 from flwr.server import Grid
 from flwr.serverapp.strategy import Strategy
+from flwr_datasets.partitioner import DirichletPartitioner
+from datasets import Dataset
 from flex_med.utils.config import (
     BASE_PATH,
     CLIENT_INFO_FILE_PATH,
     DATASET_FILE_PATH,
     PUBLIC_ANCHOR_DATASET_PATH,
     PUBLIC_TEST_DATASET_PATH,
+    LOCAL_TRAIN_DATASET_PATH,
     MODEL_CHECKPOINT_FILE_PATH,
     GRAPHS_OUTPUT_DIR,
     NUM_CLASSES,
@@ -36,7 +39,10 @@ from flex_med.utils.config import (
     MODEL_SUITABILITY_SCORES,
     TRAIN_LOSS_WEIGHT,
     DISTILL_LOSS_WEIGHT,
-    CONSENSUS_MOMENTUM
+    CONSENSUS_MOMENTUM,
+    DIRICHLET_ALPHA,
+    DIRICHLET_SEED,
+    DIRICHLET_MIN_PARTITION_SIZE,
 )
 from datetime import datetime
 
@@ -226,7 +232,7 @@ def load_client_config(config_path: str = CLIENT_INFO_FILE_PATH) -> List[Dict]:
 
 def sanitize_client_paths(clients: List[Dict]) -> List[Dict]:
     """
-    Sanitize dataset and model paths to work in current environment.
+    Sanitize model paths to work in current environment.
     Converts environment-specific paths (e.g., Colab, WSL) to local paths.
 
     Args:
@@ -241,24 +247,6 @@ def sanitize_client_paths(clients: List[Dict]) -> List[Dict]:
     backend_root = Path(__file__).parent.parent.parent
 
     for client in clients:
-        # Sanitize dataset_path
-        if 'dataset_path' in client and client['dataset_path']:
-            orig_path = client['dataset_path']
-
-            # Look for common dataset directory markers
-            if 'cnmc_datasets' in orig_path or 'datasets' in orig_path:
-                marker = 'cnmc_datasets' if 'cnmc_datasets' in orig_path else 'datasets'
-                relative_part = orig_path.split(marker)[-1].lstrip('/')
-
-                # Ensure 'cnmc' parent dir is included for local consistency
-                if not relative_part.startswith('cnmc/'):
-                    relative_part = os.path.join('cnmc', relative_part)
-
-                sanitized_path = str(backend_root / "datasets" / relative_part)
-                if sanitized_path != orig_path:
-                    print(f"[Config] Sanitized dataset_path for client {client.get('client_name', client.get('id'))}: {sanitized_path}")
-                client['dataset_path'] = sanitized_path
-
         # Sanitize model_path
         if 'model_path' in client and client['model_path']:
             orig_path = client['model_path']
@@ -435,6 +423,84 @@ def get_weighted_sampler(targets):
     
     return sampler
 
+# <------------------------------------------ DIRICHLET PARTITIONER FOR RUNTIME DATA HETEROGENEITY ------------------------------------------>
+
+# Cache for the partitioner (created once per configuration, reused across clients)
+_PARTITIONER_CACHE = {}
+
+def create_dirichlet_partitioner(
+    dataset_path: str,
+    num_partitions: int,
+    alpha: float = DIRICHLET_ALPHA,
+    seed: int = DIRICHLET_SEED,
+    min_partition_size: int = DIRICHLET_MIN_PARTITION_SIZE
+) -> Tuple[DirichletPartitioner, datasets.ImageFolder]:
+    """
+    Create a Dirichlet partitioner for the local training dataset.
+
+    This partitioner will be used to split the combined training data
+    across multiple clients with configurable heterogeneity (alpha).
+
+    The Dirichlet distribution is used to sample class proportions for each client,
+    resulting in heterogeneous data distributions. Lower alpha values create more
+    extreme heterogeneity, while higher values approach IID distributions.
+
+    Args:
+        dataset_path: Path to the combined local training dataset
+        num_partitions: Number of clients (partitions)
+        alpha: Dirichlet concentration parameter
+               - Lower values (0.1-0.5) = high heterogeneity
+               - Higher values (1.0-10.0) = low heterogeneity
+        seed: Random seed for reproducibility
+        min_partition_size: Minimum samples each client must receive
+
+    Returns:
+        Tuple of (DirichletPartitioner instance, full ImageFolder dataset)
+    """
+
+    # Load the full dataset to get image paths and labels
+    full_dataset = datasets.ImageFolder(
+        root=dataset_path,
+        transform=None  # No transforms needed for partitioning
+    )
+
+    # Extract image paths and labels
+    image_paths = [path for path, _ in full_dataset.samples]
+    labels = [label for _, label in full_dataset.samples]
+
+    print(f"[Partitioner] Loaded {len(image_paths)} samples from {dataset_path}")
+    print(f"[Partitioner] Class distribution: ALL={sum(l == 0 for l in labels)}, "
+          f"Healthy={sum(l == 1 for l in labels)}")
+
+    # Create HuggingFace Dataset for DirichletPartitioner
+    # DirichletPartitioner requires a Dataset object with a "label" column
+    hf_dataset = Dataset.from_dict({
+        "image_path": image_paths,
+        "label": labels
+    })
+
+    # Initialize Dirichlet Partitioner
+    partitioner = DirichletPartitioner(
+        num_partitions=num_partitions,
+        partition_by="label",  # Partition based on class labels
+        alpha=alpha,
+        min_partition_size=min_partition_size,
+        self_balancing=False,  # Allow natural heterogeneity
+        shuffle=True,
+        seed=seed
+    )
+
+    # Assign dataset to partitioner
+    partitioner.dataset = hf_dataset
+
+    print(f"[Partitioner] Created Dirichlet partitioner:")
+    print(f"  - Num partitions: {num_partitions}")
+    print(f"  - Alpha: {alpha}")
+    print(f"  - Min partition size: {min_partition_size}")
+    print(f"  - Seed: {seed}")
+
+    return partitioner, full_dataset
+
 # <------------------------------------------ DATA LOADER FUNCTION DEFINITIONS ------------------------------------------>
 
 # Provides shared dataset for generating consensus logits across clients
@@ -461,69 +527,133 @@ def load_public_dataset(batch_size=64, round_num=1, total_rounds=10):
     loader = DataLoader(subset, batch_size=batch_size, shuffle=False, num_workers=2)
     return loader
 
-# Handles heterogeneous client datasets with 80/20 train/test split
+# Handles heterogeneous client datasets using runtime Dirichlet partitioning
 # Args: partition_id - Client ID (0, 1, 2, ...)
-#       num_partitions - Total number of partitions (not used but kept for compatibility)
+#       num_partitions - Total number of clients participating in FL
 #       batch_size - Batch size for data loaders
 #       config_path - Path to the configuration file
 # Returns: Tuple of (trainloader, testloader) or (None, None) if client has no data
 def load_private_dataset(partition_id: int, num_partitions: int, batch_size=32, config_path: str = CLIENT_INFO_FILE_PATH):
-    # Get client configuration
-    client_config = get_client_by_partition_id(partition_id, config_path)
+    """
+    Load private dataset for a specific client using Dirichlet partitioning.
 
-    # Check if client has local data
-    if not client_config['has_local_data'] or client_config['dataset_path'] is None:
-        return None, None
+    This function loads the shared local training dataset and uses
+    DirichletPartitioner to extract the heterogeneous subset for this client.
+    The partitioning happens at runtime based on the alpha parameter.
 
-    data_path = client_config['dataset_path']
+    All clients are required to have data from the shared LOCAL_TRAIN_DATASET_PATH.
 
-    if not os.path.exists(data_path):
-        return None, None
+    Args:
+        partition_id: Client ID (0, 1, 2, ...)
+        num_partitions: Total number of clients
+        batch_size: Batch size for DataLoaders
+        config_path: Path to client configuration
 
-    # Load the Full Dataset from folder
-    full_dataset = datasets.ImageFolder(root=data_path, transform=PRIVATE_TRAIN_TRANSFORM)
+    Returns:
+        Tuple of (trainloader, testloader)
+    """
 
-    # Create a stratified Train/Validation split (85% Train, 15% Validation)
-    # This ensures both splits maintain the same class distribution
-    
+    # Check if shared training dataset exists
+    if not os.path.exists(LOCAL_TRAIN_DATASET_PATH):
+        raise FileNotFoundError(
+            f"Shared training dataset not found at {LOCAL_TRAIN_DATASET_PATH}"
+        )
+
+    # Create or retrieve cached partitioner
+    cache_key = (LOCAL_TRAIN_DATASET_PATH, num_partitions, DIRICHLET_ALPHA, DIRICHLET_SEED)
+
+    if cache_key not in _PARTITIONER_CACHE:
+        print(f"[Data] Initializing Dirichlet partitioner for {num_partitions} clients")
+        partitioner, full_dataset = create_dirichlet_partitioner(
+            dataset_path=LOCAL_TRAIN_DATASET_PATH,
+            num_partitions=num_partitions,
+            alpha=DIRICHLET_ALPHA,
+            seed=DIRICHLET_SEED
+        )
+        _PARTITIONER_CACHE[cache_key] = (partitioner, full_dataset)
+    else:
+        print(f"[Data] Using cached partitioner for {num_partitions} clients")
+        partitioner, full_dataset = _PARTITIONER_CACHE[cache_key]
+
+    # Load this client's partition
+    partition_dataset = partitioner.load_partition(partition_id)
+
+    # Extract image paths and labels for this partition
+    partition_paths = partition_dataset["image_path"]
+    partition_labels = partition_dataset["label"]
+
+    print(f"[Data] Client {partition_id} partition:")
+    print(f"  - Total samples: {len(partition_paths)}")
+    print(f"  - ALL: {sum(l == 0 for l in partition_labels)} "
+          f"({sum(l == 0 for l in partition_labels) / len(partition_labels) * 100:.1f}%)")
+    print(f"  - Healthy: {sum(l == 1 for l in partition_labels)} "
+          f"({sum(l == 1 for l in partition_labels) / len(partition_labels) * 100:.1f}%)")
+
+    # Create indices mapping for the client's subset
+    # We need to map partition_paths back to indices in full_dataset
+    path_to_idx = {path: idx for idx, (path, _) in enumerate(full_dataset.samples)}
+    client_indices = [path_to_idx[path] for path in partition_paths]
+
+    # Create subset for this client with transforms
+    client_dataset = torch.utils.data.Subset(
+        datasets.ImageFolder(
+            root=LOCAL_TRAIN_DATASET_PATH,
+            transform=PRIVATE_TRAIN_TRANSFORM
+        ),
+        client_indices
+    )
+
+    # Create stratified train/validation split (85/15) on the client's partition
     # Group indices by class
-    class_indices = {}
-    for idx, (_, label) in enumerate(full_dataset.samples):
-        if label not in class_indices:
-            class_indices[label] = []
-        class_indices[label].append(idx)
-    
-    # Split each class separately with 85/15 ratio
+    class_indices = {0: [], 1: []}
+    for subset_idx, global_idx in enumerate(client_indices):
+        label = full_dataset.targets[global_idx]
+        class_indices[label].append(subset_idx)
+
+    # Split each class separately
     train_indices = []
     val_indices = []
     generator = torch.Generator().manual_seed(42)
-    
+
     for label, indices in class_indices.items():
+        if len(indices) == 0:
+            continue
+
         # Shuffle indices for this class
         indices_tensor = torch.tensor(indices)
         perm = torch.randperm(len(indices), generator=generator)
         shuffled_indices = indices_tensor[perm].tolist()
-        
+
         # Split 85/15
         split_point = int(0.85 * len(shuffled_indices))
         train_indices.extend(shuffled_indices[:split_point])
         val_indices.extend(shuffled_indices[split_point:])
-    
-    # Create subsets
-    train_ds = torch.utils.data.Subset(full_dataset, train_indices)
-    test_ds = torch.utils.data.Subset(full_dataset, val_indices)
 
-    # <--- Weighted Random Sampler for Class Imbalance --->
-    # Extract targets for the training subset
-    # Note: subset.dataset returns the full dataset, so we need to index into it
-    train_targets = [full_dataset.targets[i] for i in train_indices]
-    
+    print(f"[Data] Client {partition_id} split: Train={len(train_indices)}, Val={len(val_indices)}")
+
+    # Create train/validation subsets
+    train_ds = torch.utils.data.Subset(client_dataset, train_indices)
+    test_ds = torch.utils.data.Subset(client_dataset, val_indices)
+
+    # Apply weighted sampler for class imbalance
+    train_targets = [full_dataset.targets[client_indices[i]] for i in train_indices]
     train_sampler = get_weighted_sampler(train_targets)
-    print(f"[Data] Client {partition_id}: Activated WeightedRandomSampler for class balance")
+    print(f"[Data] Client {partition_id}: Activated WeightedRandomSampler")
 
-    # Critical: shuffle must be False when using a sampler
-    trainloader = DataLoader(train_ds, batch_size=batch_size, sampler=train_sampler, shuffle=False, num_workers=2)
-    testloader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=2)
+    # Create DataLoaders
+    trainloader = DataLoader(
+        train_ds,
+        batch_size=batch_size,
+        sampler=train_sampler,
+        shuffle=False,  # Must be False with sampler
+        num_workers=2
+    )
+    testloader = DataLoader(
+        test_ds,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=2
+    )
 
     return trainloader, testloader
 
@@ -2091,53 +2221,6 @@ class FLEXMedStrategy(Strategy):
             self.eval_history = checkpoint['eval_history']
             self.last_consensus_logits = checkpoint['consensus_logits']
             print(f"[SERVER] Resuming from Round {self.start_round}")
-
-    # SOLUTION 3: Early stopping check method
-    def should_stop_training(self, current_round: int, post_fl_metrics: Dict) -> Tuple[bool, str]:
-        """
-        Check if training should stop based on degradation patterns.
-
-        Returns:
-            Tuple of (should_stop: bool, reason: str)
-        """
-        if current_round < 3:  # Need at least 2 rounds of history
-            return False, ""
-
-        # Track client metrics
-        for client_id, metrics in post_fl_metrics.items():
-            if client_id not in self.client_history:
-                self.client_history[client_id] = []
-
-            self.client_history[client_id].append({
-                'round': current_round,
-                'accuracy': metrics.get('accuracy', 0),
-                'loss': metrics.get('loss', 0)
-            })
-
-        # Check for consistent degradation (2 consecutive negative improvements)
-        degraded_clients = []
-        for client_id, history in self.client_history.items():
-            if len(history) >= 3:
-                # Check last 2 rounds for negative improvement
-                acc_trend = [h['accuracy'] for h in history[-3:]]
-                if acc_trend[-1] < acc_trend[-2] and acc_trend[-2] < acc_trend[-3]:
-                    degraded_clients.append(client_id)
-
-        # Stop if majority of clients are degrading
-        if len(degraded_clients) >= len(self.client_history) / 2:
-            return True, f"Majority of clients degrading: {degraded_clients}"
-
-        # Check for loss increase pattern (overfitting indicator)
-        loss_increasing_count = 0
-        for client_id, history in self.client_history.items():
-            if len(history) >= 2:
-                if history[-1]['loss'] > history[-2]['loss']:
-                    loss_increasing_count += 1
-
-        if loss_increasing_count >= len(self.client_history) * 0.7:  # 70% threshold
-            return True, f"70% of clients show increasing loss (overfitting)"
-
-        return False, ""
 
     # <------------------------------------------ FL EXECUTION WITH RESUME SUPPORT ------------------------------------------>
 
