@@ -44,9 +44,8 @@ def main(grid: Grid, context: Context) -> None:
 
     # Load client metadata containing model types, dataset paths, etc.
     # Uses load_client_config() which prioritizes:
-    # 1. FLEX_MED_CLIENT_CONFIGS environment variable (in-memory JSON)
-    # 2. Database fetch using SUPABASE_CLIENT
-    # 3. File-based config (deprecated fallback)
+    # 1. Database fetch using SUPABASE_CLIENT and SIMULATION_ID
+    # 2. File-based config (deprecated fallback)
     try:
         client_configs = load_client_config()
         num_clients = len(client_configs)

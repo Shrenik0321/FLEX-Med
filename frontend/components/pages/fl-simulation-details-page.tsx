@@ -11,12 +11,11 @@ import {
   LinearScale,
   PointElement,
   LineElement,
-  BarElement,
   Title,
   Tooltip as ChartTooltip,
   Legend as ChartLegend,
 } from "chart.js";
-import { Line, Bar } from "react-chartjs-2";
+import { Line } from "react-chartjs-2";
 import {
   Select,
   SelectContent,
@@ -33,7 +32,6 @@ ChartJS.register(
   LinearScale,
   PointElement,
   LineElement,
-  BarElement,
   Title,
   ChartTooltip,
   ChartLegend,
@@ -54,19 +52,27 @@ interface Client {
 
 interface ClientMetrics {
   global: {
-    pre_fl: any;
+    pre_fl?: any; // Made optional - no longer stored for new simulations
     post_fl: any;
-    improvement: any;
+    improvement?: any; // Made optional - now based on round progression
   };
   rounds: Array<{
     round: number;
-    validation: {
+    validation?: {
       loss: number;
       accuracy: number;
       precision: number;
       recall: number;
       f1_score: number;
       evaluated_at: string;
+    };
+    training?: {
+      // New: training metrics from local training
+      train_loss: number;
+      val_loss: number;
+      distill_loss?: number;
+      training_time?: number;
+      num_examples?: number;
     };
   }>;
 }
@@ -446,24 +452,24 @@ export default function FLSimulationDetailsPage({
 
   // Helper function to collect all values for a metric (for smart scaling)
   const collectAllValues = (
-    metricKey: keyof ClientMetrics["rounds"][0]["validation"],
+    metricKey: "loss" | "accuracy" | "precision" | "recall" | "f1_score",
   ): number[] => {
     const allValues: number[] = [];
+
+    // Include 0.50 baseline for bounded metrics (accuracy, precision, recall, f1)
+    // This ensures the chart y-axis shows from the baseline
+    if (metricKey !== "loss") {
+      allValues.push(0.5);
+    }
 
     if (selectedClient === "all") {
       // Collect from all clients
       clients.forEach((client) => {
         const metrics = clientMetricsMap.get(client.id);
         if (metrics) {
-          // Include pre-FL baseline
-          const preFl = metrics.global?.pre_fl?.[metricKey];
-          if (preFl != null) {
-            allValues.push(preFl as number);
-          }
-
           // Include validation rounds
           metrics.rounds?.forEach((round) => {
-            const value = round.validation[metricKey];
+            const value = round.validation?.[metricKey];
             if (value != null) {
               allValues.push(value as number);
             }
@@ -481,13 +487,9 @@ export default function FLSimulationDetailsPage({
       const clientId = parseInt(selectedClient);
       const metrics = clientMetricsMap.get(clientId);
       if (metrics) {
-        const preFl = metrics.global?.pre_fl?.[metricKey];
-        if (preFl != null) {
-          allValues.push(preFl as number);
-        }
-
+        // Include validation rounds
         metrics.rounds?.forEach((round) => {
-          const value = round.validation[metricKey];
+          const value = round.validation?.[metricKey];
           if (value != null) {
             allValues.push(value as number);
           }
@@ -503,7 +505,7 @@ export default function FLSimulationDetailsPage({
     return allValues;
   };
 
-  // Prepare data for charts (includes Pre-FL baseline as round 0)
+  // Prepare data for charts (includes Round 0 at 0.50 baseline - random chance for binary classification)
   const prepareChartData = () => {
     if (selectedClient === "all") {
       // Show aggregate data from simulation metrics
@@ -511,19 +513,19 @@ export default function FLSimulationDetailsPage({
 
       const data: any[] = [];
 
-      // Add Pre-FL baseline as round 0 (aggregate across all clients)
-      if (simulationMetrics.aggregate?.pre_fl) {
-        data.push({
-          round: 0,
-          accuracy: simulationMetrics.aggregate.pre_fl.avg_accuracy,
-          precision: simulationMetrics.aggregate.pre_fl.avg_precision,
-          recall: simulationMetrics.aggregate.pre_fl.avg_recall,
-          f1: simulationMetrics.aggregate.pre_fl.avg_f1,
-          loss: simulationMetrics.aggregate.pre_fl.avg_loss,
-        });
-      }
+      // Round 0: Baseline at 0.50 (50% random chance for binary classification)
+      data.push({
+        round: 0,
+        accuracy: 0.5,
+        precision: 0.5,
+        recall: 0.5,
+        f1: 0.5,
+        loss: null, // No loss at baseline
+        train_loss: null,
+        val_loss: null,
+      });
 
-      // Add validation rounds
+      // Add validation rounds (starting from Round 1)
       simulationMetrics.rounds.forEach((round) => {
         data.push({
           round: round.round,
@@ -532,6 +534,8 @@ export default function FLSimulationDetailsPage({
           recall: round.avg_recall,
           f1: round.avg_f1,
           loss: round.avg_loss,
+          train_loss: round.avg_train_loss, // Training loss from local training
+          val_loss: round.avg_val_loss, // Validation loss from local training
         });
       });
 
@@ -544,28 +548,40 @@ export default function FLSimulationDetailsPage({
 
       const data: any[] = [];
 
-      // Add Pre-FL baseline as round 0
-      if (clientMetrics.global?.pre_fl) {
-        data.push({
-          round: 0,
-          accuracy: clientMetrics.global.pre_fl.accuracy,
-          precision: clientMetrics.global.pre_fl.precision,
-          recall: clientMetrics.global.pre_fl.recall,
-          f1: clientMetrics.global.pre_fl.f1_score,
-          loss: clientMetrics.global.pre_fl.loss,
-        });
-      }
+      // Round 0: Baseline at 0.50 (50% random chance for binary classification)
+      data.push({
+        round: 0,
+        accuracy: 0.5,
+        precision: 0.5,
+        recall: 0.5,
+        f1: 0.5,
+        loss: null,
+        train_loss: null,
+        val_loss: null,
+      });
 
-      // Add validation rounds
+      // Add validation rounds (starting from Round 1)
       clientMetrics.rounds?.forEach((round) => {
-        data.push({
+        const entry: any = {
           round: round.round,
-          accuracy: round.validation.accuracy,
-          precision: round.validation.precision,
-          recall: round.validation.recall,
-          f1: round.validation.f1_score,
-          loss: round.validation.loss,
-        });
+        };
+
+        // Validation evaluation metrics
+        if (round.validation) {
+          entry.accuracy = round.validation.accuracy;
+          entry.precision = round.validation.precision;
+          entry.recall = round.validation.recall;
+          entry.f1 = round.validation.f1_score;
+          entry.loss = round.validation.loss;
+        }
+
+        // Training metrics (train_loss, val_loss from local training)
+        if (round.training) {
+          entry.train_loss = round.training.train_loss;
+          entry.val_loss = round.training.val_loss;
+        }
+
+        data.push(entry);
       });
 
       return data;
@@ -585,24 +601,23 @@ export default function FLSimulationDetailsPage({
       }
     });
 
-    // Build data with one entry per round (including round 0 for Pre-FL)
+    // Build data with one entry per round (including Round 0 at 0.50 baseline)
     const data: any[] = [];
 
-    // Round 0: Pre-FL baseline
+    // Round 0: Baseline at 0.50 (50% random chance for binary classification)
     const round0Data: any = { round: 0 };
     clients.forEach((client) => {
-      const metrics = clientMetricsMap.get(client.id);
-      if (metrics?.global?.pre_fl) {
-        round0Data[`accuracy_${client.id}`] = metrics.global.pre_fl.accuracy;
-        round0Data[`precision_${client.id}`] = metrics.global.pre_fl.precision;
-        round0Data[`recall_${client.id}`] = metrics.global.pre_fl.recall;
-        round0Data[`f1_${client.id}`] = metrics.global.pre_fl.f1_score;
-        round0Data[`loss_${client.id}`] = metrics.global.pre_fl.loss;
-      }
+      round0Data[`accuracy_${client.id}`] = 0.5;
+      round0Data[`precision_${client.id}`] = 0.5;
+      round0Data[`recall_${client.id}`] = 0.5;
+      round0Data[`f1_${client.id}`] = 0.5;
+      round0Data[`loss_${client.id}`] = null; // No loss at baseline
+      round0Data[`train_loss_${client.id}`] = null;
+      round0Data[`val_loss_${client.id}`] = null;
     });
     data.push(round0Data);
 
-    // Validation rounds
+    // Validation rounds (starting from Round 1)
     for (let roundNum = 1; roundNum <= maxRounds; roundNum++) {
       const roundData: any = { round: roundNum };
 
@@ -610,13 +625,20 @@ export default function FLSimulationDetailsPage({
         const metrics = clientMetricsMap.get(client.id);
         const roundMetrics = metrics?.rounds.find((r) => r.round === roundNum);
 
-        if (roundMetrics) {
+        if (roundMetrics?.validation) {
           roundData[`accuracy_${client.id}`] = roundMetrics.validation.accuracy;
           roundData[`precision_${client.id}`] =
             roundMetrics.validation.precision;
           roundData[`recall_${client.id}`] = roundMetrics.validation.recall;
           roundData[`f1_${client.id}`] = roundMetrics.validation.f1_score;
           roundData[`loss_${client.id}`] = roundMetrics.validation.loss;
+        }
+
+        // Include training metrics for train_loss/val_loss charts
+        if (roundMetrics?.training) {
+          roundData[`train_loss_${client.id}`] =
+            roundMetrics.training.train_loss;
+          roundData[`val_loss_${client.id}`] = roundMetrics.training.val_loss;
         }
       });
 
@@ -626,25 +648,8 @@ export default function FLSimulationDetailsPage({
     return data;
   };
 
-  // Prepare Pre FL vs Post FL comparison
-  const prepareComparisonData = () => {
-    return clients.map((client) => {
-      const metrics = clientMetricsMap.get(client.id);
-      return {
-        name: client.client_name,
-        preFl: metrics?.global?.pre_fl?.accuracy
-          ? metrics.global.pre_fl.accuracy
-          : 0,
-        postFl: metrics?.global?.post_fl?.accuracy
-          ? metrics.global.post_fl.accuracy
-          : 0,
-      };
-    });
-  };
-
   const chartData = prepareChartData();
   const multiClientData = prepareMultiClientData();
-  const comparisonData = prepareComparisonData();
 
   // Collect all values for smart scaling
   const allAccuracyValues = collectAllValues("accuracy");
@@ -660,30 +665,28 @@ export default function FLSimulationDetailsPage({
   const f1Limits = smartYLimit(allF1Values, "bounded");
   const lossLimits = smartYLimit(allLossValues, "unbounded");
 
-  // Calculate improvement values for smart scaling
+  // Calculate improvement values for smart scaling (now using Round 1 as baseline instead of pre_fl)
   const allImprovementValues: number[] = [];
   if (selectedClient === "all" && multiClientData) {
     clients.forEach((client) => {
-      const metrics = clientMetricsMap.get(client.id);
-      const preFlAccuracy = metrics?.global?.pre_fl?.accuracy || 0;
+      // Use Round 1 accuracy as baseline (first round in data)
+      const round1Accuracy = multiClientData[0]?.[`accuracy_${client.id}`] || 0;
 
-      multiClientData.forEach((d: any) => {
+      multiClientData.forEach((d: any, index: number) => {
         const val = d[`accuracy_${client.id}`];
         if (typeof val === "number") {
-          allImprovementValues.push(val - preFlAccuracy);
+          allImprovementValues.push(val - round1Accuracy);
         }
       });
     });
   } else if (selectedClient !== "all") {
     // For single client, calculate improvement values
-    const clientId = parseInt(selectedClient);
-    const metrics = clientMetricsMap.get(clientId);
-    const preFlAccuracy = metrics?.global?.pre_fl?.accuracy || 0;
+    const round1Accuracy = chartData?.[0]?.accuracy || 0;
 
     chartData?.forEach((d: any) => {
       const val = d.accuracy;
       if (typeof val === "number") {
-        allImprovementValues.push(val - preFlAccuracy);
+        allImprovementValues.push(val - round1Accuracy);
       }
     });
   }
@@ -692,21 +695,17 @@ export default function FLSimulationDetailsPage({
   // Calculate round-to-round delta values for smart scaling
   const allRoundDeltaValues: number[] = [];
   if (selectedClient === "all" && multiClientData) {
-    const roundsData = multiClientData.slice(1); // Skip Round 0
     clients.forEach((client) => {
-      const metrics = clientMetricsMap.get(client.id);
-      const preFlAccuracy = metrics?.global?.pre_fl?.accuracy || 0;
-
-      roundsData.forEach((d: any, index: number) => {
+      multiClientData.forEach((d: any, index: number) => {
         const currentAcc = d[`accuracy_${client.id}`];
         if (typeof currentAcc !== "number") return;
 
         if (index === 0) {
-          // Round 1 vs Pre-FL
-          allRoundDeltaValues.push(currentAcc - preFlAccuracy);
+          // Round 1: no previous round to compare, delta is 0
+          allRoundDeltaValues.push(0);
         } else {
           // Round N vs Round N-1
-          const prevAcc = roundsData[index - 1][`accuracy_${client.id}`];
+          const prevAcc = multiClientData[index - 1][`accuracy_${client.id}`];
           if (typeof prevAcc === "number") {
             allRoundDeltaValues.push(currentAcc - prevAcc);
           }
@@ -714,21 +713,16 @@ export default function FLSimulationDetailsPage({
       });
     });
   } else if (selectedClient !== "all" && chartData) {
-    const roundsData = chartData.slice(1); // Skip Round 0
-    const clientId = parseInt(selectedClient);
-    const metrics = clientMetricsMap.get(clientId);
-    const preFlAccuracy = metrics?.global?.pre_fl?.accuracy || 0;
-
-    roundsData.forEach((d: any, index: number) => {
+    chartData.forEach((d: any, index: number) => {
       const currentAcc = d.accuracy;
       if (typeof currentAcc !== "number") return;
 
       if (index === 0) {
-        // Round 1 vs Pre-FL
-        allRoundDeltaValues.push(currentAcc - preFlAccuracy);
+        // Round 1: no previous round to compare, delta is 0
+        allRoundDeltaValues.push(0);
       } else {
         // Round N vs Round N-1
-        const prevAcc = roundsData[index - 1].accuracy;
+        const prevAcc = chartData[index - 1].accuracy;
         if (typeof prevAcc === "number") {
           allRoundDeltaValues.push(currentAcc - prevAcc);
         }
@@ -820,6 +814,82 @@ export default function FLSimulationDetailsPage({
                 data: (chartData || []).map((d: any) => d.loss),
                 borderColor: "#3b82f6",
                 backgroundColor: "rgba(59, 130, 246, 0.1)",
+                tension: 0.3,
+                fill: true,
+                pointRadius: 4,
+                borderWidth: 2,
+              },
+            ],
+    }),
+    [chartData, multiClientData, selectedClient, clients],
+  );
+
+  // Training Loss Chart (from local training phase)
+  const trainLossChartConfig = useMemo(
+    () => ({
+      labels: (multiClientData || chartData || [])
+        .filter((d: any) => d.round > 0) // Skip Round 0 baseline (no training loss)
+        .map((d: any) => `Round ${d.round}`),
+      datasets:
+        selectedClient === "all"
+          ? clients.map((client, idx) => ({
+              label: client.client_name,
+              data:
+                multiClientData
+                  ?.filter((d: any) => d.round > 0)
+                  .map((d: any) => d[`train_loss_${client.id}`]) || [],
+              borderColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
+              backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
+              tension: 0.3,
+              pointRadius: 3,
+              borderWidth: 2,
+            }))
+          : [
+              {
+                label: "Training Loss",
+                data: (chartData || [])
+                  .filter((d: any) => d.round > 0)
+                  .map((d: any) => d.train_loss),
+                borderColor: "#ef4444", // Red for training loss
+                backgroundColor: "rgba(239, 68, 68, 0.1)",
+                tension: 0.3,
+                fill: true,
+                pointRadius: 4,
+                borderWidth: 2,
+              },
+            ],
+    }),
+    [chartData, multiClientData, selectedClient, clients],
+  );
+
+  // Validation Loss Chart (from local training phase - different from evaluation loss)
+  const valLossChartConfig = useMemo(
+    () => ({
+      labels: (multiClientData || chartData || [])
+        .filter((d: any) => d.round > 0)
+        .map((d: any) => `Round ${d.round}`),
+      datasets:
+        selectedClient === "all"
+          ? clients.map((client, idx) => ({
+              label: client.client_name,
+              data:
+                multiClientData
+                  ?.filter((d: any) => d.round > 0)
+                  .map((d: any) => d[`val_loss_${client.id}`]) || [],
+              borderColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
+              backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
+              tension: 0.3,
+              pointRadius: 3,
+              borderWidth: 2,
+            }))
+          : [
+              {
+                label: "Validation Loss",
+                data: (chartData || [])
+                  .filter((d: any) => d.round > 0)
+                  .map((d: any) => d.val_loss),
+                borderColor: "#f97316", // Orange for validation loss
+                backgroundColor: "rgba(249, 115, 22, 0.1)",
                 tension: 0.3,
                 fill: true,
                 pointRadius: 4,
@@ -928,41 +998,19 @@ export default function FLSimulationDetailsPage({
     [chartData, multiClientData, selectedClient, clients],
   );
 
-  const comparisonChartConfig = useMemo(
-    () => ({
-      labels: (comparisonData || []).map((d) => d.name),
-      datasets: [
-        {
-          label: "Post-FL Accuracy",
-          data: (comparisonData || []).map((d) => d.postFl),
-          backgroundColor: "rgba(184, 0, 40, 0.7)",
-          borderColor: "#B80028",
-          borderWidth: 1,
-        },
-        {
-          label: "Pre-FL Accuracy",
-          data: (comparisonData || []).map((d) => d.preFl),
-          backgroundColor: "rgba(148, 163, 184, 0.6)",
-          borderColor: "#94a3b8",
-          borderWidth: 1,
-        },
-      ],
-    }),
-    [comparisonData],
-  );
-
   const perClientImprovementChartConfig = useMemo(
     () => ({
       labels: (multiClientData || []).map((d: any) => `Round ${d.round}`),
       datasets: clients.map((client, idx) => {
-        const metrics = clientMetricsMap.get(client.id);
-        const preFlAccuracy = metrics?.global?.pre_fl?.accuracy || 0;
+        // Use Round 1 accuracy as baseline (first round in data)
+        const round1Accuracy =
+          multiClientData?.[0]?.[`accuracy_${client.id}`] || 0;
         return {
           label: client.client_name,
           data:
             multiClientData?.map((d: any) => {
               const val = d[`accuracy_${client.id}`];
-              return typeof val === "number" ? val - preFlAccuracy : null;
+              return typeof val === "number" ? val - round1Accuracy : null;
             }) || [],
           borderColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
           backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
@@ -972,15 +1020,14 @@ export default function FLSimulationDetailsPage({
         };
       }),
     }),
-    [multiClientData, clients, clientMetricsMap],
+    [multiClientData, clients],
   );
 
   const singleClientImprovementChartConfig = useMemo(() => {
     if (selectedClient === "all") return null;
 
-    const clientId = parseInt(selectedClient);
-    const metrics = clientMetricsMap.get(clientId);
-    const preFlAccuracy = metrics?.global?.pre_fl?.accuracy || 0;
+    // Use Round 1 accuracy as baseline (first round in data)
+    const round1Accuracy = chartData?.[0]?.accuracy || 0;
 
     return {
       labels: (chartData || []).map((d: any) => `Round ${d.round}`),
@@ -989,7 +1036,7 @@ export default function FLSimulationDetailsPage({
           label: "Accuracy Improvement",
           data: (chartData || []).map((d: any) => {
             const val = d.accuracy;
-            return typeof val === "number" ? val - preFlAccuracy : null;
+            return typeof val === "number" ? val - round1Accuracy : null;
           }),
           borderColor: "#10b981", // Green for improvement
           backgroundColor: "rgba(16, 185, 129, 0.1)",
@@ -1006,23 +1053,21 @@ export default function FLSimulationDetailsPage({
   const perClientRoundDeltaChartConfig = useMemo(() => {
     if (selectedClient !== "all" || !multiClientData) return null;
 
-    // Skip Round 0 (Pre-FL) - start from Round 1
+    // Skip Round 0 (baseline) - start from Round 1
     const roundsData = multiClientData.slice(1);
 
     return {
       labels: roundsData.map((d: any) => `Round ${d.round}`),
       datasets: clients.map((client, idx) => {
-        const metrics = clientMetricsMap.get(client.id);
-        const preFlAccuracy = metrics?.global?.pre_fl?.accuracy || 0;
-
         // Calculate round-to-round deltas (starting from Round 1)
+        // Round 1 compares to 0.50 baseline
         const deltas = roundsData.map((d: any, index: number) => {
           const currentAcc = d[`accuracy_${client.id}`];
           if (typeof currentAcc !== "number") return null;
 
           if (index === 0) {
-            // Round 1 - compare to Pre-FL
-            return currentAcc - preFlAccuracy;
+            // Round 1 - compare to 0.50 baseline
+            return currentAcc - 0.5;
           } else {
             // Round 2+ - compare to previous round
             const prevAcc = roundsData[index - 1][`accuracy_${client.id}`];
@@ -1042,26 +1087,23 @@ export default function FLSimulationDetailsPage({
         };
       }),
     };
-  }, [multiClientData, clients, clientMetricsMap, selectedClient]);
+  }, [multiClientData, clients, selectedClient]);
 
   const singleClientRoundDeltaChartConfig = useMemo(() => {
     if (selectedClient === "all" || !chartData) return null;
 
-    const clientId = parseInt(selectedClient);
-    const metrics = clientMetricsMap.get(clientId);
-    const preFlAccuracy = metrics?.global?.pre_fl?.accuracy || 0;
-
-    // Skip Round 0 (Pre-FL) - start from Round 1
+    // Skip Round 0 (baseline) - start from Round 1
     const roundsData = chartData.slice(1);
 
     // Calculate round-to-round deltas (starting from Round 1)
+    // Round 1 compares to 0.50 baseline
     const deltas = roundsData.map((d: any, index: number) => {
       const currentAcc = d.accuracy;
       if (typeof currentAcc !== "number") return null;
 
       if (index === 0) {
-        // Round 1 - compare to Pre-FL
-        return currentAcc - preFlAccuracy;
+        // Round 1 - compare to 0.50 baseline
+        return currentAcc - 0.5;
       } else {
         // Round 2+ - compare to previous round
         const prevAcc = roundsData[index - 1].accuracy;
@@ -1085,7 +1127,7 @@ export default function FLSimulationDetailsPage({
         },
       ],
     };
-  }, [chartData, selectedClient, clientMetricsMap]);
+  }, [chartData, selectedClient]);
 
   // Get selected client metrics for individual view
   const selectedClientMetrics =
@@ -1222,7 +1264,8 @@ export default function FLSimulationDetailsPage({
   const recallChartOptions = getChartOptions(recallLimits, true);
   const f1ChartOptions = getChartOptions(f1Limits, true);
   const lossChartOptions = getChartOptions(lossLimits, false);
-  const comparisonChartOptions = getChartOptions(accuracyLimits, true, false);
+  const trainLossChartOptions = getChartOptions(lossLimits, false); // Same scaling as loss
+  const valLossChartOptions = getChartOptions(lossLimits, false); // Same scaling as loss
 
   // Improvement chart options with baseline reference line
   const improvementChartOptions = useMemo(() => {
@@ -1512,19 +1555,17 @@ export default function FLSimulationDetailsPage({
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
-            {/* Pre-FL Accuracy */}
+            {/* Baseline Accuracy */}
             <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
               <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Pre-FL Baseline
+                Baseline (Random)
               </div>
               <div className="text-3xl font-bold text-slate-700">
-                {(
-                  (selectedClientMetrics.global?.pre_fl?.accuracy || 0) * 100
-                ).toFixed(1)}
+                50.0
                 <span className="text-lg text-slate-400 ml-1">%</span>
               </div>
               <div className="text-sm text-slate-400 mt-2 font-medium">
-                Initial Accuracy
+                Random Chance
               </div>
             </div>
 
@@ -1553,7 +1594,8 @@ export default function FLSimulationDetailsPage({
                 Round{" "}
                 {selectedClientMetrics.rounds?.reduce(
                   (best, round) =>
-                    round.validation.accuracy > (best?.validation.accuracy || 0)
+                    (round.validation?.accuracy || 0) >
+                    (best?.validation?.accuracy || 0)
                       ? round
                       : best,
                   selectedClientMetrics.rounds[0],
@@ -1563,12 +1605,12 @@ export default function FLSimulationDetailsPage({
                 {(
                   (selectedClientMetrics.rounds?.reduce(
                     (best, round) =>
-                      round.validation.accuracy >
-                      (best?.validation.accuracy || 0)
+                      (round.validation?.accuracy || 0) >
+                      (best?.validation?.accuracy || 0)
                         ? round
                         : best,
                     selectedClientMetrics.rounds[0],
-                  )?.validation.accuracy || 0) * 100
+                  )?.validation?.accuracy || 0) * 100
                 ).toFixed(1)}
                 % Accuracy
               </div>
@@ -1712,14 +1754,7 @@ export default function FLSimulationDetailsPage({
             <h3 className="text-lg font-bold text-slate-900 mb-6">
               Confusion Matrix Analysis
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <ConfusionMatrixCard
-                title="Pre-FL Baseline"
-                confusionMatrix={
-                  selectedClientMetrics.global?.pre_fl?.confusion_matrix
-                }
-                accuracy={selectedClientMetrics.global?.pre_fl?.accuracy}
-              />
+            <div className="max-w-md">
               <ConfusionMatrixCard
                 title="Post-FL Result"
                 confusionMatrix={
@@ -1764,7 +1799,7 @@ export default function FLSimulationDetailsPage({
                 {selectedClientInfo?.client_name}
               </strong>{" "}
               individual performance
-              {" • "}Round 0 = Pre-FL baseline
+              {" • "}Round 0 = 50% Baseline
             </span>
           </>
         )}
@@ -1777,7 +1812,7 @@ export default function FLSimulationDetailsPage({
           title="Accuracy"
           description={
             selectedClient === "all"
-              ? "Multi-client accuracy progression (Round 0 = Pre-FL)"
+              ? "Multi-client accuracy progression (Round 0 = 50% Baseline)"
               : `${selectedClientInfo?.client_name} accuracy over time`
           }
           content={
@@ -1790,10 +1825,36 @@ export default function FLSimulationDetailsPage({
           title="Loss"
           description={
             selectedClient === "all"
-              ? "Multi-client loss convergence (Round 0 = Pre-FL)"
+              ? "Multi-client loss convergence (Round 0 = 50% Baseline)"
               : `${selectedClientInfo?.client_name} loss convergence`
           }
           content={<Line data={lossChartConfig} options={lossChartOptions} />}
+        />
+
+        {/* Training Loss Chart (from local training) */}
+        <EvalCard
+          title="Training Loss"
+          description={
+            selectedClient === "all"
+              ? "Multi-client training loss during local training"
+              : `${selectedClientInfo?.client_name} training loss per round`
+          }
+          content={
+            <Line data={trainLossChartConfig} options={trainLossChartOptions} />
+          }
+        />
+
+        {/* Validation Loss Chart (from local training) */}
+        <EvalCard
+          title="Validation Loss"
+          description={
+            selectedClient === "all"
+              ? "Multi-client validation loss during local training"
+              : `${selectedClientInfo?.client_name} validation loss per round`
+          }
+          content={
+            <Line data={valLossChartConfig} options={valLossChartOptions} />
+          }
         />
 
         {/* Precision Chart */}
@@ -1801,7 +1862,7 @@ export default function FLSimulationDetailsPage({
           title="Precision"
           description={
             selectedClient === "all"
-              ? "Multi-client precision trends (Round 0 = Pre-FL)"
+              ? "Multi-client precision trends (Round 0 = 50% Baseline)"
               : `${selectedClientInfo?.client_name} precision progression`
           }
           content={
@@ -1814,7 +1875,7 @@ export default function FLSimulationDetailsPage({
           title="Recall"
           description={
             selectedClient === "all"
-              ? "Multi-client recall/sensitivity (Round 0 = Pre-FL)"
+              ? "Multi-client recall/sensitivity (Round 0 = 50% Baseline)"
               : `${selectedClientInfo?.client_name} recall progression`
           }
           content={
@@ -1827,7 +1888,7 @@ export default function FLSimulationDetailsPage({
           title="F1 Score"
           description={
             selectedClient === "all"
-              ? "Multi-client F1 score trends (Round 0 = Pre-FL)"
+              ? "Multi-client F1 score trends (Round 0 = 50% Baseline)"
               : `${selectedClientInfo?.client_name} F1 score progression`
           }
           content={<Line data={f1ChartConfig} options={f1ChartOptions} />}
@@ -1869,22 +1930,6 @@ export default function FLSimulationDetailsPage({
             }
           />
         )}
-
-        {/* Pre FL vs Post FL Comparison */}
-        <EvalCard
-          title="FL Impact"
-          description={
-            selectedClient === "all"
-              ? "Pre-FL vs Post-FL comparison across all clients"
-              : "Pre-FL baseline vs Post-FL final performance"
-          }
-          content={
-            <Bar
-              data={comparisonChartConfig}
-              options={comparisonChartOptions}
-            />
-          }
-        />
       </div>
     </div>
   );

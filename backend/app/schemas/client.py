@@ -8,47 +8,11 @@ class Status(str, Enum):
     Inactive = "Inactive"
 
 class ModelType(str, Enum):
-    # ResNet
-    ResNet18 = "resnet18"
-    ResNet34 = "resnet34"
-    ResNet50 = "resnet50"
-    ResNet101 = "resnet101"
-    ResNet152 = "resnet152"
-    
-    # VGG
-    VGG11 = "vgg11"
-    VGG13 = "vgg13"
-    VGG16 = "vgg16"
-    VGG19 = "vgg19"
-    
-    # DenseNet
-    DenseNet121 = "densenet121"
-    DenseNet161 = "densenet161"
-    DenseNet169 = "densenet169"
-    DenseNet201 = "densenet201"
-    
-    # EfficientNet
-    EfficientNetB0 = "efficientnet_b0"
-    EfficientNetB1 = "efficientnet_b1"
-    EfficientNetB2 = "efficientnet_b2"
-    EfficientNetB3 = "efficientnet_b3"
-    EfficientNetB4 = "efficientnet_b4"
-    EfficientNetB5 = "efficientnet_b5"
-    EfficientNetB6 = "efficientnet_b6"
-    EfficientNetB7 = "efficientnet_b7"
-    
-    # MobileNet
-    MobileNetV2 = "mobilenet_v2"
-    MobileNetV3Small = "mobilenet_v3_small"
-    MobileNetV3Large = "mobilenet_v3_large"
-    
-    # Inception
-    InceptionV3 = "inception_v3"
-    GoogLeNet = "googlenet"
-    
-    # Other
-    AlexNet = "alexnet"
-    SqueezeNet = "squeezenet"
+    # The "Big Four" Architectures for FLEX-Med
+    ResNet50 = "resnet50"             # The Industry Standard
+    MobileNetV2 = "mobilenet_v2"       # Mobile Optimized
+    DenseNet121 = "densenet121"       # High Dense Connections
+    EfficientNetB0 = "efficientnet_b0" # Modern Efficiency Optimizer
 
 # ==========================================
 # SCHEMAS FOR API (FastAPI Compatible)

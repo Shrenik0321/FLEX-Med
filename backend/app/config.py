@@ -163,10 +163,6 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------------
     # Orchestrator URLs (no hardcoded defaults - must be set via env or will use localhost)
     # ------------------------------------------------------------------------
-    local_train_orchestrator_url: str = os.getenv(
-        "LOCAL_TRAIN_ORCHESTRATOR_URL",
-        "http://localhost:8002"
-    )
     federated_training_orchestrator_url: str = os.getenv(
         "FEDERATED_TRAINING_ORCHESTRATOR_URL",
         "https://eb474f08357f.ngrok-free.app"
@@ -197,9 +193,14 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------------
     # Dirichlet Partitioning Configuration (Runtime Data Heterogeneity)
     # ------------------------------------------------------------------------
-    dirichlet_alpha: float = float(os.getenv("FLEX_MED_DIRICHLET_ALPHA", "0.5"))
+    # Default alpha=1.0 provides moderate heterogeneity for 4 clients
+    # - Alpha=0.5: Too extreme (99% single class for some clients) ❌
+    # - Alpha=1.0: Moderate heterogeneity (recommended for 4 clients) ✅
+    # - Alpha=1.5: Mild heterogeneity (more balanced distributions)
+    # Override via FLEX_MED_DIRICHLET_ALPHA environment variable if needed
+    dirichlet_alpha: float = float(os.getenv("FLEX_MED_DIRICHLET_ALPHA", "1.0"))  # Changed from 0.5 to 1.0
     dirichlet_seed: int = int(os.getenv("FLEX_MED_DIRICHLET_SEED", "42"))
-    dirichlet_min_partition_size: int = int(os.getenv("FLEX_MED_DIRICHLET_MIN_PARTITION_SIZE", "100"))
+    dirichlet_min_partition_size: int = int(os.getenv("FLEX_MED_DIRICHLET_MIN_PARTITION_SIZE", "400"))  # Changed from 100 to 400 for 4 clients
 
     # ------------------------------------------------------------------------
     # xAI Configuration
@@ -220,21 +221,13 @@ class Settings(BaseSettings):
     
     # Model Suitability Scores
     model_suitability_scores: Dict[str, float] = {
-        # Tier 1
-        'resnet18': 1.10, 'resnet34': 1.10, 'resnet50': 1.10, 'resnet101': 1.10, 'resnet152': 1.10,
-        'densenet121': 1.10, 'densenet161': 1.10, 'densenet169': 1.10, 'densenet201': 1.10,
-        # Tier 2
-        'efficientnet_b0': 1.05, 'efficientnet_b1': 1.05, 'efficientnet_b2': 1.05,
-        'efficientnet_b3': 1.05, 'efficientnet_b4': 1.05, 'efficientnet_b5': 1.05,
-        'efficientnet_b6': 1.05, 'efficientnet_b7': 1.05,
-        'inception_v3': 1.05, 'googlenet': 1.05,
-        # Tier 3
-        'vgg16': 1.00, 'vgg19': 1.00,
-        # Tier 4
-        'mobilenet_v2': 0.95, 'mobilenet_v3_small': 0.90, 'mobilenet_v3_large': 0.95,
-        'squeezenet': 0.90,
-        # Tier 5
-        'alexnet': 0.90, 'vgg11': 0.95, 'vgg13': 0.95,
+        # Tier 1: High Capacity (Pathology Specialists)
+        'resnet50': 1.10,      # The Industry Standard - Strong residual features
+        'densenet121': 1.10,   # High Dense Connections - Excellent feature reuse for texture
+        
+        # Tier 2: Efficiency Optimized (Hardware Diversity)
+        'efficientnet_b0': 1.05, # Modern Optimizer - Compound scaling for medical imaging
+        'mobilenet_v2': 0.95,    # Mobile Optimized - Lightweight features for edge devices
     }
 
     model_config = {

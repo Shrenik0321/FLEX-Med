@@ -1,14 +1,11 @@
-import requests
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
 from supabase import Client as SupabaseClient
 from typing import List
-from pydantic import BaseModel
-import os
 import logging
 
 from app.schemas.client import Client, ClientCreate
-from app.config import get_supabase_client, get_settings, Settings
+from app.config import get_supabase_client, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -71,112 +68,7 @@ def create_client(client: ClientCreate, supabase: SupabaseClient = Depends(get_s
 
     logger.info(f"Created client: {client.client_name} (ID: {response.data[0]['id']})")
 
-    # Trigger model creation (use orchestrator URL from config)
-    try:
-        requests.post(
-            f"{settings.local_train_orchestrator_url}/enroll_client",
-            json={"client_name": client.client_name, "model_type": client.model_type},
-            timeout=10
-        )
-    except Exception as e:
-        logger.warning(f"Failed to trigger model creation: {e}")
-
     return response.data[0]
-
-@router.post("/clients/{client_id}/start_local_train")
-async def start_local_train(
-    client_id: int,
-    supabase: SupabaseClient = Depends(get_supabase_client),
-    settings: Settings = Depends(get_settings)
-):
-    """
-    Start local training for a specific client.
-
-    Fetches client details from Supabase and forwards request to the
-    Colab orchestrator (ngrok endpoint).
-
-    Args:
-        client_id: ID of the client to train
-        epochs: Number of training epochs (default: 5)
-        batch_size: Batch size for training (default: 16)
-        learning_rate: Learning rate (default: 0.001)
-
-    Returns:
-        Training status and configuration
-    """
-    # Configs
-    epochs: int = 10
-    batch_size: int = 16
-    learning_rate: float = 0.001
-
-    # Fetch client from database
-    response = supabase.from_("clients").select("*").eq("id", client_id).execute()
-
-    if not response.data:
-        raise HTTPException(status_code=404, detail=f"Client with ID {client_id} not found")
-
-    client = response.data[0]
-
-    # Validate client has required data
-    if not client.get('model_path'):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Client '{client.get('client_name')}' does not have a model path configured"
-        )
-
-    # Prepare request for orchestrator
-    train_payload = {
-        "client_name": client['client_name'],
-        "model_path": client['model_path'],
-        "epochs": epochs,
-        "batch_size": batch_size,
-        "learning_rate": learning_rate,
-        "supabase_url": settings.supabase_url,
-        "supabase_key": settings.supabase_key
-    }
-
-    logger.info(f"Starting local training for client: {client['client_name']}")
-    logger.info(f"Training config: epochs={epochs}, batch_size={batch_size}, lr={learning_rate}")
-
-    try:
-        response = requests.post(
-            f"{settings.local_train_orchestrator_url}/start_local_train",
-            json=train_payload,
-            headers={"Content-Type": "application/json"},
-            timeout=30
-        )
-        response.raise_for_status()
-
-        result = response.json()
-
-        # Update client status to indicate training in progress
-        supabase.from_("clients").update({
-            "status": "Training"
-        }).eq("id", client_id).execute()
-
-        return {
-            "status": "started",
-            "client_id": client_id,
-            "client_name": client['client_name'],
-            "message": result.get("message", "Training started"),
-            "config": {
-                "epochs": epochs,
-                "batch_size": batch_size,
-                "learning_rate": learning_rate
-            }
-        }
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to start local training: {e}")
-        if hasattr(e, 'response') and e.response is not None:
-            raise HTTPException(
-                status_code=e.response.status_code,
-                detail=f"Orchestrator Error: {e.response.text}"
-            )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to connect to training orchestrator: {str(e)}"
-        )
 
 @router.put("/clients/{client_id}", response_model=Client)
 def update_client(client_id: int, client: ClientCreate, supabase: SupabaseClient = Depends(get_supabase_client)):

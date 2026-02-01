@@ -1,7 +1,7 @@
 "use client";
 
 import { API_BASE_PATH } from "@/utils";
-import { Search, Trash2, MoreVertical, Play, Loader2 } from "lucide-react";
+import { Search, Trash2, MoreVertical, Loader2 } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -87,14 +87,9 @@ function DeleteConfirmationModal({
 interface ActionDropdownProps {
   client: Client;
   onDelete: (client: Client) => void;
-  onStartTraining: (client: Client) => void;
 }
 
-function ActionDropdown({
-  client,
-  onDelete,
-  onStartTraining,
-}: ActionDropdownProps) {
+function ActionDropdown({ client, onDelete }: ActionDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -134,17 +129,6 @@ function ActionDropdown({
 
       {isOpen && (
         <div className="absolute right-0 mt-2 w-48 bg-card rounded-lg shadow-lg border border-border py-1 z-50">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onStartTraining(client);
-              setIsOpen(false);
-            }}
-            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
-          >
-            <Play size={16} className="text-green-600" />
-            Start Training
-          </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -238,37 +222,6 @@ export default function ClientsListPage({
     setDeleteModal({ isOpen: false, clientId: null, clientName: "" });
   };
 
-  const handleStartTraining = async (client: Client) => {
-    try {
-      const response = await fetch(
-        `${API_BASE_PATH}/clients/${client.id}/start_local_train`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        },
-      );
-
-      if (!response.ok) throw new Error("Failed to start training");
-
-      const data = await response.json();
-      console.log("Training started:", data);
-
-      // Optionally update the client's status to "Training"
-      setClients((prevClients) =>
-        prevClients.map((c) =>
-          c.id === client.id ? { ...c, status: "Training" } : c,
-        ),
-      );
-
-      toast.success(`Training started for ${client.client_name}`);
-    } catch (error) {
-      console.error("Failed to start training:", error);
-      toast.error("Failed to start training. Please try again.");
-    }
-  };
-
   if (isLoading) {
     return <Loading fullScreen text="Synchronizing client database..." />;
   }
@@ -357,7 +310,6 @@ export default function ClientsListPage({
                   <ActionDropdown
                     client={client}
                     onDelete={handleDeleteClick}
-                    onStartTraining={handleStartTraining}
                   />
                 </td>
               </tr>

@@ -90,6 +90,10 @@ async def start_fl(
         "batch_size": 32
     }
 
+    # NOTE: pyproject.toml update happens on Colab (orchestrator) side
+    # The notebook's /start_fl endpoint updates its local pyproject.toml
+    # based on the number of clients in the request payload
+
     # Create simulation record (without client_ids - new schema)
     sim_data = {
         "configs": configs,
@@ -681,19 +685,7 @@ async def run_fl_simulation(
         # Not fatal - continue with simulation (metrics will be missing though)
         logger.warning("Simulation will continue but metrics may not be saved properly")
 
-    # --------------------------------------------------------------
-    # Prepare client config for FL system (pass via environment variable)
-    # --------------------------------------------------------------
 
-    # Wrap client data and include simulation metadata
-    simulation_config = {
-        "simulation_id": simulation_id,
-        "clients": clients_data
-    }
-
-    # Serialize to JSON string for passing via environment variable
-    client_config_json = json.dumps(simulation_config)
-    logger.info(f"Prepared configuration for {len(clients_data)} clients")
 
     # --------------------------------------------------------------
     # Update pyproject.toml with FL configuration
@@ -723,13 +715,12 @@ async def run_fl_simulation(
             env_override = os.environ.copy()
             run_cmd = ["flwr", "run", "."]
 
-            # Add Supabase credentials, simulation_id, and client configs for FL system
+            # Add Supabase credentials and simulation_id for FL system
             from app.config import get_settings
             settings = get_settings()
             env_override["SUPABASE_URL"] = settings.supabase_url
             env_override["SUPABASE_KEY"] = settings.supabase_key
             env_override["FLEX_MED_SIMULATION_ID"] = str(simulation_id)
-            env_override["FLEX_MED_CLIENT_CONFIGS"] = client_config_json
 
             # Configure Ray to allow higher memory usage before killing workers
             # Default is 0.95 (95%), increase to 0.98 (98%) to prevent OOM kills
@@ -738,7 +729,7 @@ async def run_fl_simulation(
             # Alternatively, disable Ray's memory monitor (use with caution)
             # env_override["RAY_memory_monitor_refresh_ms"] = "0"
 
-            logger.info(f"Passing simulation_id={simulation_id} and client configs to FL system")
+            logger.info(f"Passing simulation_id={simulation_id} to FL system")
 
             if " " in str(FL_PATH):
                 logger.info("Spaces detected in FL_PATH, using space-free symlink workaround")

@@ -15,6 +15,9 @@ from flex_med.task import (
     train as train_fn,
     test as test_fn,
     load_existing_model,
+    get_initial_dropout_rate,
+    add_dropout_to_classifier,
+    AdaptiveTrainingState,
     NUM_CLASSES
 )
 
@@ -29,7 +32,22 @@ app = ClientApp()
 #       client_id - Numeric client identifier
 #       round_num - Optional FL round number for tracking training progress
 # Returns: None (saves checkpoint to disk)
-def save_model_checkpoint(model, model_path, model_type, client_id, round_num=None):
+def save_model_checkpoint(model, model_path, model_type, client_id, round_num=None,
+                          adaptive_state: dict = None, scheduler_state: dict = None):
+    """
+    Save model checkpoint with metadata and adaptive training state.
+
+    Args:
+        model: PyTorch model to save
+        model_path: File path for checkpoint
+        model_type: Architecture identifier
+        client_id: Numeric client identifier
+        round_num: Optional FL round number
+        adaptive_state: Adaptive training state dict (dropout, val_loss_history)
+        scheduler_state: ReduceLROnPlateau scheduler state dict
+
+    Returns: None (saves checkpoint to disk)
+    """
     checkpoint = {
         'model_type': model_type,
         'num_classes': NUM_CLASSES,
@@ -39,6 +57,14 @@ def save_model_checkpoint(model, model_path, model_type, client_id, round_num=No
 
     if round_num is not None:
         checkpoint['round'] = round_num
+
+    # NEW: Save adaptive training state for dropout management
+    if adaptive_state is not None:
+        checkpoint['adaptive_state'] = adaptive_state
+
+    # NEW: Save scheduler state for ReduceLROnPlateau
+    if scheduler_state is not None:
+        checkpoint['scheduler_state'] = scheduler_state
 
     torch.save(checkpoint, model_path)
 
@@ -99,6 +125,54 @@ def train(msg: Message, context: Context):
 
     model.to(device)
 
+    # ========== ADAPTIVE TRAINING STATE INITIALIZATION ==========
+    # Load or create adaptive training state for this client
+    adaptive_state = None
+
+    if os.path.exists(model_path):
+        try:
+            _, metadata = load_existing_model(model, model_path, device)
+
+            # Load existing adaptive state
+            if metadata.get('adaptive_state'):
+                adaptive_state = AdaptiveTrainingState.from_dict(metadata['adaptive_state'])
+                print(f"[Client {partition_id}] Loaded adaptive state: "
+                      f"Dropout={adaptive_state.dropout_rate:.2f}, "
+                      f"Val history={len(adaptive_state.val_loss_history)} rounds")
+            else:
+                # First time after upgrade - create new state
+                initial_dropout = get_initial_dropout_rate(client_config['model_type'])
+                adaptive_state = AdaptiveTrainingState(
+                    client_id=partition_id,
+                    model_type=client_config['model_type'],
+                    initial_dropout=initial_dropout
+                )
+                print(f"[Client {partition_id}] Created new adaptive state: "
+                      f"Dropout={adaptive_state.dropout_rate:.2f}")
+        except Exception as e:
+            print(f"[Client {partition_id}] Error loading adaptive state: {e}")
+            # Create fresh state
+            initial_dropout = get_initial_dropout_rate(client_config['model_type'])
+            adaptive_state = AdaptiveTrainingState(
+                client_id=partition_id,
+                model_type=client_config['model_type'],
+                initial_dropout=initial_dropout
+            )
+    else:
+        # Fresh model - create new adaptive state
+        initial_dropout = get_initial_dropout_rate(client_config['model_type'])
+        adaptive_state = AdaptiveTrainingState(
+            client_id=partition_id,
+            model_type=client_config['model_type'],
+            initial_dropout=initial_dropout
+        )
+        print(f"[Client {partition_id}] Fresh model with adaptive state: "
+              f"Dropout={adaptive_state.dropout_rate:.2f}")
+
+    # Ensure model has dropout layers with correct rate
+    model = add_dropout_to_classifier(model, client_config['model_type'], adaptive_state.dropout_rate)
+    model.to(device)
+
     # Phase 1: Adaptive Knowledge Distillation from Server Consensus
     distill_loss = 0.0
 
@@ -153,7 +227,8 @@ def train(msg: Message, context: Context):
     decayed_lr = base_lr * (lr_decay_factor ** (server_round - 1))
     print(f"[Client {partition_id}] Learning Rate: {decayed_lr:.6f}")
 
-    trainloader, _ = load_private_dataset(partition_id, num_partitions, batch_size=32)
+    # Load training and validation data (keep both loaders for adaptive training)
+    trainloader, valloader = load_private_dataset(partition_id, num_partitions, batch_size=32)
 
     if trainloader is None:
         raise ValueError(
@@ -164,27 +239,42 @@ def train(msg: Message, context: Context):
     dataset_len = len(trainloader.dataset)
 
     start_time = time.time()
-    train_loss = train_fn(
+    # Call training with validation loader and adaptive state
+    train_loss, val_loss, scheduler_state = train_fn(
         model=model,
         trainloader=trainloader,
         epochs=context.run_config["local-epochs"],
         lr=decayed_lr,
         device=device,
-        model_type=model_type
+        model_type=model_type,
+        valloader=valloader,  # NEW: Pass validation loader
+        adaptive_state=adaptive_state  # NEW: Pass adaptive state
     )
     training_time = time.time() - start_time
 
-    print(f"[Client {partition_id}] ✓ Training Loss: {train_loss:.4f} ({dataset_len} samples, {training_time:.1f}s)")
+    print(f"[Client {partition_id}] ✓ Training Loss: {train_loss:.4f}, "
+          f"Validation Loss: {val_loss:.4f} ({dataset_len} samples, {training_time:.1f}s)")
 
-    # Save updated model checkpoint
+    # Update adaptive state with validation loss
+    adaptive_state.add_val_loss(val_loss)
+
+    # Adjust dropout for next round (requires 2+ rounds of history)
+    if server_round >= 2:
+        new_dropout = adaptive_state.update_dropout(model)
+
+    # Save updated model checkpoint with adaptive state
     try:
         save_model_checkpoint(
             model=model,
             model_path=model_path,
             model_type=client_config['model_type'],
             client_id=partition_id,
-            round_num=server_round
+            round_num=server_round,
+            adaptive_state=adaptive_state.to_dict(),  # NEW
+            scheduler_state=scheduler_state  # NEW
         )
+        print(f"[Client {partition_id}] ✓ Saved checkpoint with adaptive state "
+              f"(dropout={adaptive_state.dropout_rate:.2f})")
     except Exception as e:
         print(f"[Client {partition_id}] ✗ Save failed: {e}")
 
@@ -204,6 +294,7 @@ def train(msg: Message, context: Context):
 
     metrics = {
         "train_loss": train_loss,
+        "val_loss": val_loss,  # Added for per-round tracking in database
         "distill_loss": distill_loss,
         "num-examples": dataset_len,
         "training_time": training_time,

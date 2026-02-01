@@ -141,35 +141,12 @@ PRIVATE_TRAIN_TRANSFORM = Compose([
 def load_client_config(config_path: str = CLIENT_INFO_FILE_PATH) -> List[Dict]:
     """
     Load client configuration with priority:
-    1. FLEX_MED_CLIENT_CONFIGS environment variable (JSON string) - Preferred
-    2. Database fetch using SUPABASE_CLIENT and SIMULATION_ID - Fallback 1
-    3. FLEX_MED_CONFIG_FILE environment variable (file path) - Fallback 2 (deprecated)
-    4. Default config_path parameter - Fallback 3 (deprecated)
+    1. Database fetch using SUPABASE_CLIENT and SIMULATION_ID - Preferred
+    2. FLEX_MED_CONFIG_FILE environment variable (file path) - Fallback 1 (deprecated)
+    3. Default config_path parameter - Fallback 2 (deprecated)
     """
 
-    # Priority 1: Check for in-memory config from environment variable (JSON string)
-    env_config_json = os.getenv('FLEX_MED_CLIENT_CONFIGS')
-    if env_config_json:
-        try:
-            print("[Config] Using in-memory config from FLEX_MED_CLIENT_CONFIGS environment variable")
-            config_data = json.loads(env_config_json)
-
-            # Handle both original (List) and new (Dict with 'clients' key) formats
-            if isinstance(config_data, dict) and "clients" in config_data:
-                clients = config_data["clients"]
-            else:
-                clients = config_data
-
-            # Sanitize paths for current environment
-            clients = sanitize_client_paths(clients)
-
-            print(f"[Config] ✓ Loaded {len(clients)} clients from environment variable")
-            return clients
-        except json.JSONDecodeError as e:
-            print(f"[Config] Error parsing FLEX_MED_CLIENT_CONFIGS: {e}")
-            print("[Config] Falling back to database or file-based config")
-
-    # Priority 2: Fallback to database fetch if SUPABASE is available
+    # Priority 1: Database fetch if SUPABASE is available
     if SUPABASE_CLIENT is not None and SIMULATION_ID is not None:
         try:
             print(f"[Config] Attempting to load clients from database for simulation {SIMULATION_ID}")
@@ -200,20 +177,20 @@ def load_client_config(config_path: str = CLIENT_INFO_FILE_PATH) -> List[Dict]:
             print(f"[Config] Error fetching clients from database: {e}")
             print("[Config] Falling back to file-based config")
 
-    # Priority 3: Check for file path from environment variable (deprecated)
+    # Priority 2: Check for file path from environment variable (deprecated)
     env_config_path = os.getenv('FLEX_MED_CONFIG_FILE')
     if env_config_path:
         config_path = env_config_path
         print(f"[Config] Using file-based config from: {config_path} (DEPRECATED)")
 
-    # Priority 4: Use default config_path parameter (deprecated)
+    # Priority 3: Use default config_path parameter (deprecated)
     if not os.path.exists(config_path):
         raise FileNotFoundError(
             f"Configuration file not found at {config_path}. "
-            f"Please set FLEX_MED_CLIENT_CONFIGS environment variable or ensure database is configured."
+            f"Please ensure database is configured or config file exists."
         )
 
-    print(f"[Config] Loading from file: {config_path} (DEPRECATED - use FLEX_MED_CLIENT_CONFIGS instead)")
+    print(f"[Config] Loading from file: {config_path} (DEPRECATED - use database instead)")
     with open(config_path, 'r') as f:
         config_data = json.load(f)
 
@@ -305,72 +282,266 @@ def get_public_logits(model, public_loader, device):
 #   ✗ Discard ImageNet classifier head (1000 classes → not relevant)
 #   ✓ Replace with new binary classifier (2 classes: ALL vs Healthy)
 #   ✓ Fine-tune head first (frozen backbone), then unfreeze for full training
-def get_model_by_type(model_type: str, use_pretrained: bool = True):
+def get_model_by_type(model_type: str, use_pretrained: bool = True, dropout_rate: float = None):
+    """
+    Create a model instance by type with dropout-enhanced classifier.
+
+    Args:
+        model_type: Architecture identifier (resnet50, mobilenet_v2, densenet121, efficientnet_b0)
+        use_pretrained: Whether to use pretrained weights (currently unused, kept for compatibility)
+        dropout_rate: Optional dropout rate override. If None, uses architecture-specific default.
+
+    Returns:
+        PyTorch model with dropout layer before final classifier
+    """
     model_type = model_type.lower()
 
-    if model_type == 'resnet18':
-        # Load ImageNet pre-trained backbone
-        # model = models.resnet18(weights='IMAGENET1K_V1' if use_pretrained else None)
-        model = models.resnet18(weights=None) # hopefully it starts with lower pre_fl accuracy
-        # Replace classifier head with binary classifier
-        model.fc = nn.Linear(model.fc.in_features, NUM_CLASSES)
+    # Determine dropout rate (use provided or architecture default)
+    if dropout_rate is None:
+        dropout_rate = get_initial_dropout_rate(model_type)
+
+    if model_type == 'resnet50':
+        # ResNet-50: The Industry Standard (Standard residual network)
+        # Higher capacity for complex morphological features in pathology
+        model = models.resnet50(weights=None)
+        model = add_dropout_to_classifier(model, model_type, dropout_rate)
         return model
 
     elif model_type == 'mobilenet_v2':
-        # Load ImageNet pre-trained backbone
-        # model = models.mobilenet_v2(weights='IMAGENET1K_V1' if use_pretrained else None)
+        # MobileNet-V2: Mobile Optimized (Lightweight architecture)
+        # Represents resource-constrained clients or point-of-care devices
         model = models.mobilenet_v2(weights=None)
-        # Replace classifier head with binary classifier
-        model.classifier[1] = nn.Linear(model.classifier[1].in_features, NUM_CLASSES)
+        model = add_dropout_to_classifier(model, model_type, dropout_rate)
         return model
 
-    elif model_type == 'efficientnet_b3':
-        # Load ImageNet pre-trained backbone
-        # model = models.efficientnet_b3(weights='IMAGENET1K_V1' if use_pretrained else None)
-        model = models.efficientnet_b3(weights=None)
-        # Replace classifier head with binary classifier
-        model.classifier[1] = nn.Linear(model.classifier[1].in_features, NUM_CLASSES)
+    elif model_type == 'densenet121':
+        # DenseNet-121: High Dense Connections (Efficient feature reuse)
+        # Excellent at preserving subtle textural patterns in blood smears
+        model = models.densenet121(weights=None)
+        model = add_dropout_to_classifier(model, model_type, dropout_rate)
+        return model
+
+    elif model_type == 'efficientnet_b0':
+        # EfficientNet-B0: Modern Efficiency Optimizer (Compound scaling)
+        # SOTA balance between parameter count and feature extraction quality
+        model = models.efficientnet_b0(weights=None)
+        model = add_dropout_to_classifier(model, model_type, dropout_rate)
+        return model
+
+    elif model_type == 'resnet18':
+        # ResNet-18: Lightweight ResNet variant
+        # Faster training with lower memory requirements
+        model = models.resnet18(weights=None)
+        model = add_dropout_to_classifier(model, model_type, dropout_rate)
         return model
 
     else:
         raise ValueError(f"Unsupported model type: {model_type}. "
-                        f"Supported types: resnet18, mobilenet_v2, efficientnet_b3")
+                        f"Supported types: resnet50, resnet18, mobilenet_v2, densenet121, efficientnet_b0")
+
+# <------------------------------------------ DROPOUT MANAGEMENT UTILITIES ------------------------------------------>
+
+def get_initial_dropout_rate(model_type: str) -> float:
+    """
+    Get default initial dropout rate for model architecture.
+
+    Different architectures require different dropout rates based on their capacity and tendency to overfit.
+    Larger models (ResNet50, DenseNet121) use moderate dropout, while lightweight models (MobileNetV2)
+    use higher dropout to prevent overfitting.
+
+    Args:
+        model_type: Architecture identifier (e.g., 'resnet50', 'mobilenet_v2')
+
+    Returns:
+        Initial dropout probability (float between 0.0 and 1.0)
+    """
+    DEFAULT_DROPOUT_RATES = {
+        'resnet50': 0.35,        # Higher capacity model, moderate dropout
+        'mobilenet_v2': 0.45,    # Lightweight model, higher dropout needed
+        'densenet121': 0.35,     # Dense connections provide natural regularization
+        'efficientnet_b0': 0.40, # Modern efficient architecture, moderate dropout
+        'resnet18': 0.35,        # Similar to ResNet50
+    }
+    return DEFAULT_DROPOUT_RATES.get(model_type.lower(), 0.3)
+
+
+def add_dropout_to_classifier(model, model_type: str, dropout_rate: float = 0.3):
+    """
+    Add dropout layer before the final classifier head.
+
+    This function modifies the classifier to include dropout for regularization.
+    Dropout rates are adaptive and will be adjusted based on overfitting signals.
+
+    This function is idempotent - if dropout has already been added, it will only
+    update the dropout rate without modifying the structure.
+
+    Args:
+        model: PyTorch model instance
+        model_type: Architecture identifier
+        dropout_rate: Initial dropout probability (default: 0.3)
+
+    Returns:
+        Modified model with dropout layer
+    """
+    model_type = model_type.lower()
+
+    if model_type == 'resnet50' or model_type == 'resnet18':
+        # ResNet: fc = nn.Linear(in_features, num_classes)
+        # Replace with Sequential: Dropout → Linear
+        # Check if dropout already exists (idempotent behavior)
+        if isinstance(model.fc, nn.Sequential):
+            # Dropout already added - just update the rate
+            if len(model.fc) > 0 and isinstance(model.fc[0], nn.Dropout):
+                model.fc[0].p = dropout_rate
+        else:
+            # First time - add dropout
+            in_features = model.fc.in_features
+            model.fc = nn.Sequential(
+                nn.Dropout(p=dropout_rate),
+                nn.Linear(in_features, NUM_CLASSES)
+            )
+
+    elif model_type == 'mobilenet_v2':
+        # MobileNetV2: classifier[1] = nn.Linear(1280, num_classes)
+        # Replace classifier[1] with Sequential: Dropout → Linear
+        # Check if dropout already exists (idempotent behavior)
+        if isinstance(model.classifier[1], nn.Sequential):
+            # Dropout already added - just update the rate
+            if len(model.classifier[1]) > 0 and isinstance(model.classifier[1][0], nn.Dropout):
+                model.classifier[1][0].p = dropout_rate
+        else:
+            # First time - add dropout
+            in_features = model.classifier[1].in_features
+            model.classifier[1] = nn.Sequential(
+                nn.Dropout(p=dropout_rate),
+                nn.Linear(in_features, NUM_CLASSES)
+            )
+
+    elif model_type == 'densenet121':
+        # DenseNet121: classifier = nn.Linear(1024, num_classes)
+        # Replace with Sequential: Dropout → Linear
+        # Check if dropout already exists (idempotent behavior)
+        if isinstance(model.classifier, nn.Sequential):
+            # Dropout already added - just update the rate
+            if len(model.classifier) > 0 and isinstance(model.classifier[0], nn.Dropout):
+                model.classifier[0].p = dropout_rate
+        else:
+            # First time - add dropout
+            in_features = model.classifier.in_features
+            model.classifier = nn.Sequential(
+                nn.Dropout(p=dropout_rate),
+                nn.Linear(in_features, NUM_CLASSES)
+            )
+
+    elif model_type == 'efficientnet_b0':
+        # EfficientNetB0: classifier[1] = nn.Linear(1280, num_classes)
+        # Replace classifier[1] with Sequential: Dropout → Linear
+        # Check if dropout already exists (idempotent behavior)
+        if isinstance(model.classifier[1], nn.Sequential):
+            # Dropout already added - just update the rate
+            if len(model.classifier[1]) > 0 and isinstance(model.classifier[1][0], nn.Dropout):
+                model.classifier[1][0].p = dropout_rate
+        else:
+            # First time - add dropout
+            in_features = model.classifier[1].in_features
+            model.classifier[1] = nn.Sequential(
+                nn.Dropout(p=dropout_rate),
+                nn.Linear(in_features, NUM_CLASSES)
+            )
+
+    return model
+
+
+def get_dropout_rate_from_model(model, model_type: str) -> float:
+    """
+    Extract current dropout rate from model architecture.
+
+    Args:
+        model: PyTorch model instance
+        model_type: Architecture identifier
+
+    Returns:
+        Current dropout rate (0.0 if no dropout found)
+    """
+    model_type = model_type.lower()
+
+    try:
+        if model_type == 'resnet50' or model_type == 'resnet18':
+            if isinstance(model.fc, nn.Sequential) and len(model.fc) > 0:
+                if isinstance(model.fc[0], nn.Dropout):
+                    return model.fc[0].p
+        elif model_type in ['mobilenet_v2', 'efficientnet_b0']:
+            if isinstance(model.classifier[1], nn.Sequential) and len(model.classifier[1]) > 0:
+                if isinstance(model.classifier[1][0], nn.Dropout):
+                    return model.classifier[1][0].p
+        elif model_type == 'densenet121':
+            if isinstance(model.classifier, nn.Sequential) and len(model.classifier) > 0:
+                if isinstance(model.classifier[0], nn.Dropout):
+                    return model.classifier[0].p
+    except Exception as e:
+        print(f"[Dropout] Error extracting dropout rate: {e}")
+
+    return 0.0  # Default if no dropout found
+
+
+def update_dropout_rate(model, model_type: str, new_dropout_rate: float):
+    """
+    Update dropout rate in existing model architecture.
+
+    This function dynamically adjusts the dropout probability without recreating the model.
+    Used for adaptive dropout adjustment between federated learning rounds.
+
+    Args:
+        model: PyTorch model instance
+        model_type: Architecture identifier
+        new_dropout_rate: New dropout probability
+
+    Returns:
+        Modified model with updated dropout rate
+    """
+    model_type = model_type.lower()
+
+    try:
+        if model_type == 'resnet50' or model_type == 'resnet18':
+            if isinstance(model.fc, nn.Sequential) and len(model.fc) > 0:
+                if isinstance(model.fc[0], nn.Dropout):
+                    model.fc[0].p = new_dropout_rate
+
+        elif model_type in ['mobilenet_v2', 'efficientnet_b0']:
+            if isinstance(model.classifier[1], nn.Sequential) and len(model.classifier[1]) > 0:
+                if isinstance(model.classifier[1][0], nn.Dropout):
+                    model.classifier[1][0].p = new_dropout_rate
+
+        elif model_type == 'densenet121':
+            if isinstance(model.classifier, nn.Sequential) and len(model.classifier) > 0:
+                if isinstance(model.classifier[0], nn.Dropout):
+                    model.classifier[0].p = new_dropout_rate
+    except Exception as e:
+        print(f"[Dropout] Error updating dropout rate: {e}")
+
+    return model
 
 # <------------------------------------------ TRANSFER LEARNING UTILITIES ------------------------------------------>
 
 def freeze_backbone(model, model_type: str):
     """
     Freeze all layers except the classifier head for initial training.
-
-    Strategy: Train only the new classifier head while keeping ImageNet features frozen.
-    This prevents catastrophic forgetting and allows the head to learn task-specific features.
-
-    Args:
-        model: PyTorch model
-        model_type: Model architecture identifier
     """
     model_type = model_type.lower()
 
-    if model_type == 'resnet18':
-        # Freeze all layers except fc (classifier head)
+    if model_type == 'resnet50':
+        # Freeze all layers except 'fc'
         for name, param in model.named_parameters():
             if 'fc' not in name:
                 param.requires_grad = False
-        print(f"[Transfer Learning] ResNet18 backbone frozen, training head only")
+        print(f"[Transfer Learning] ResNet50 backbone frozen, training head only")
 
-    elif model_type == 'mobilenet_v2':
-        # Freeze all layers except classifier
+    elif model_type in ['mobilenet_v2', 'efficientnet_b0', 'densenet121']:
+        # Freeze all layers except 'classifier'
         for name, param in model.named_parameters():
             if 'classifier' not in name:
                 param.requires_grad = False
-        print(f"[Transfer Learning] MobileNetV2 backbone frozen, training head only")
-
-    elif model_type == 'efficientnet_b3':
-        # Freeze all layers except classifier
-        for name, param in model.named_parameters():
-            if 'classifier' not in name:
-                param.requires_grad = False
-        print(f"[Transfer Learning] EfficientNetB3 backbone frozen, training head only")
+        print(f"[Transfer Learning] {model_type.upper()} backbone frozen, training head only")
 
     return model
 
@@ -422,6 +593,207 @@ def get_weighted_sampler(targets):
     )
     
     return sampler
+
+# <------------------------------------------ ADAPTIVE TRAINING STATE MANAGEMENT ------------------------------------------>
+
+class AdaptiveTrainingState:
+    """
+    Manages per-client adaptive training state for overfitting control.
+
+    This class tracks validation loss history and adaptively adjusts dropout rates
+    based on overfitting/stability signals. State persists across FL rounds via
+    checkpoint serialization.
+
+    Features:
+    - Bidirectional dropout adaptation (can increase or decrease)
+    - Conservative strategy (requires 2 consecutive rounds for adjustment)
+    - Per-client state (each client has independent adaptation)
+    - Checkpoint serialization for persistence
+
+    Attributes:
+        client_id: Numeric client identifier
+        model_type: Architecture name (for dropout management)
+        dropout_rate: Current dropout probability
+        max_dropout: Maximum allowed dropout (default 0.6)
+        dropout_increment: Adjustment step size (default 0.1)
+        patience_rounds: Rounds to wait before adjustment (default 2)
+        val_loss_history: List of validation losses from recent rounds
+        scheduler_state: Serialized scheduler state (optional)
+    """
+
+    def __init__(
+        self,
+        client_id: int,
+        model_type: str,
+        initial_dropout: float = 0.3,
+        max_dropout: float = 0.6,
+        min_dropout: float = 0.2,
+        dropout_increment: float = 0.1,
+        patience_rounds: int = 2
+    ):
+        """
+        Initialize adaptive training state.
+
+        Args:
+            client_id: Numeric client identifier
+            model_type: Architecture name
+            initial_dropout: Starting dropout rate (default: 0.3)
+            max_dropout: Maximum dropout ceiling (default: 0.6)
+            min_dropout: Minimum dropout floor (default: 0.2)
+            dropout_increment: Adjustment step size (default: 0.1)
+            patience_rounds: Rounds needed for trend detection (default: 2)
+        """
+        self.client_id = client_id
+        self.model_type = model_type
+        self.dropout_rate = initial_dropout
+        self.max_dropout = max_dropout
+        self.min_dropout = min_dropout
+        self.dropout_increment = dropout_increment
+        self.patience_rounds = patience_rounds
+
+        # Validation loss history (stores last N rounds)
+        self.val_loss_history = []
+
+        # Scheduler state (will be populated when scheduler is created)
+        self.scheduler_state = None
+
+    def should_increase_dropout(self) -> bool:
+        """
+        Check if dropout should be increased based on validation loss trend.
+
+        Detects overfitting by looking for 2 consecutive rounds of increasing
+        validation loss.
+
+        Returns:
+            True if overfitting detected (dropout should increase)
+        """
+        if len(self.val_loss_history) < self.patience_rounds + 1:
+            return False
+
+        # Check last 3 rounds (need 3 points to detect 2 consecutive increases)
+        recent_losses = self.val_loss_history[-3:]
+
+        # Increasing trend: loss[i] > loss[i-1] for 2 consecutive rounds
+        if recent_losses[1] > recent_losses[0] and recent_losses[2] > recent_losses[1]:
+            return True
+
+        return False
+
+    def should_decrease_dropout(self) -> bool:
+        """
+        Check if dropout should be decreased based on validation loss improvement.
+
+        Detects stable learning by looking for 2 consecutive rounds of decreasing
+        validation loss.
+
+        Returns:
+            True if learning is stable (dropout can safely decrease)
+        """
+        if len(self.val_loss_history) < self.patience_rounds + 1:
+            return False
+
+        # Check last 3 rounds (need 3 points to detect 2 consecutive decreases)
+        recent_losses = self.val_loss_history[-3:]
+
+        # Decreasing trend: loss[i] < loss[i-1] for 2 consecutive rounds
+        if recent_losses[1] < recent_losses[0] and recent_losses[2] < recent_losses[1]:
+            return True
+
+        return False
+
+    def update_dropout(self, model) -> float:
+        """
+        Adaptively adjust dropout rate based on validation loss trends.
+
+        Strategy:
+        - Increase dropout (+0.1) if overfitting detected (2 consecutive increases)
+        - Decrease dropout (-0.1) if learning is stable (2 consecutive decreases)
+        - Conservative: Max dropout 0.6, min dropout 0.2
+        - Bidirectional: Can both increase and decrease
+
+        Args:
+            model: PyTorch model to update
+
+        Returns:
+            New dropout rate after adjustment
+        """
+        old_dropout = self.dropout_rate
+
+        if self.should_increase_dropout() and self.dropout_rate < self.max_dropout:
+            # Overfitting detected - increase regularization
+            self.dropout_rate = min(self.max_dropout, self.dropout_rate + self.dropout_increment)
+            print(f"[Client {self.client_id}] Dropout INCREASED: {old_dropout:.2f} → {self.dropout_rate:.2f} (overfitting detected)")
+
+        elif self.should_decrease_dropout() and self.dropout_rate > self.min_dropout:
+            # Stable learning - can reduce regularization
+            self.dropout_rate = max(self.min_dropout, self.dropout_rate - self.dropout_increment)
+            print(f"[Client {self.client_id}] Dropout DECREASED: {old_dropout:.2f} → {self.dropout_rate:.2f} (stable learning)")
+
+        else:
+            # No change needed
+            if len(self.val_loss_history) >= 3:
+                print(f"[Client {self.client_id}] Dropout UNCHANGED: {self.dropout_rate:.2f} (no clear trend)")
+
+        # Update model dropout rate if changed
+        if self.dropout_rate != old_dropout:
+            update_dropout_rate(model, self.model_type, self.dropout_rate)
+
+        return self.dropout_rate
+
+    def add_val_loss(self, val_loss: float):
+        """
+        Add validation loss to history.
+
+        Args:
+            val_loss: Validation loss from current round
+        """
+        self.val_loss_history.append(val_loss)
+        # Keep only last 5 rounds for memory efficiency
+        if len(self.val_loss_history) > 5:
+            self.val_loss_history.pop(0)
+
+    def to_dict(self) -> dict:
+        """
+        Serialize state for checkpoint saving.
+
+        Returns:
+            Dictionary containing all state for serialization
+        """
+        return {
+            'client_id': self.client_id,
+            'model_type': self.model_type,
+            'dropout_rate': self.dropout_rate,
+            'max_dropout': self.max_dropout,
+            'min_dropout': self.min_dropout,
+            'dropout_increment': self.dropout_increment,
+            'patience_rounds': self.patience_rounds,
+            'val_loss_history': self.val_loss_history,
+            'scheduler_state': self.scheduler_state
+        }
+
+    @classmethod
+    def from_dict(cls, state_dict: dict) -> 'AdaptiveTrainingState':
+        """
+        Deserialize state from checkpoint.
+
+        Args:
+            state_dict: Dictionary from checkpoint
+
+        Returns:
+            AdaptiveTrainingState instance with restored state
+        """
+        state = cls(
+            client_id=state_dict['client_id'],
+            model_type=state_dict['model_type'],
+            initial_dropout=state_dict['dropout_rate'],
+            max_dropout=state_dict.get('max_dropout', 0.6),
+            min_dropout=state_dict.get('min_dropout', 0.2),
+            dropout_increment=state_dict.get('dropout_increment', 0.1),
+            patience_rounds=state_dict.get('patience_rounds', 2)
+        )
+        state.val_loss_history = state_dict.get('val_loss_history', [])
+        state.scheduler_state = state_dict.get('scheduler_state')
+        return state
 
 # <------------------------------------------ DIRICHLET PARTITIONER FOR RUNTIME DATA HETEROGENEITY ------------------------------------------>
 
@@ -798,9 +1170,9 @@ def evaluate_all_clients_on_public_test(client_configs: List[Dict], device: torc
 #       contaminating the test set.
 def evaluate_all_clients_on_validation(client_configs: List[Dict], device: torch.device, num_partitions: int) -> Dict:
     """
-    Evaluate all clients on their private validation sets (20% of private data).
+    Evaluate all clients on their private validation sets (15% of private partition).
     Used for per-round progress tracking without exposing the test set.
-    Free rider clients (no local data) are evaluated on public test as a proxy.
+    All clients use runtime Dirichlet partitioning (v3.0).
     """
     client_metrics = {}
 
@@ -809,7 +1181,6 @@ def evaluate_all_clients_on_validation(client_configs: List[Dict], device: torch
         model_path = client['model_path']
         model_type = client['model_type']
         client_name = client['client_name']
-        has_local_data = client.get('has_local_data', False)
 
         print(f"[Round Eval] Evaluating client {i}: {client_name} ({model_type}) on validation")
 
@@ -828,21 +1199,15 @@ def evaluate_all_clients_on_validation(client_configs: List[Dict], device: torch
 
             model.to(device)
 
-            # Load appropriate dataset
-            if has_local_data:
-                # Load validation set (20% of private data)
-                _, valloader = load_private_dataset(i, num_partitions, batch_size=64)
+            # All clients use runtime Dirichlet partitioning (v3.0)
+            # Load validation set (15% of private partition)
+            _, valloader = load_private_dataset(i, num_partitions, batch_size=64)
 
-                if valloader is not None:
-                    dataset_type = 'validation'
-                    num_samples = len(valloader.dataset)
-                else:
-                    # Fallback if data loading fails
-                    valloader = load_public_test_dataset(batch_size=64)
-                    dataset_type = 'public_test_proxy'
-                    num_samples = len(valloader.dataset)
+            if valloader is not None:
+                dataset_type = 'validation'
+                num_samples = len(valloader.dataset)
             else:
-                # Free rider: use public test as proxy for generalization
+                # Fallback if data loading fails
                 valloader = load_public_test_dataset(batch_size=64)
                 dataset_type = 'public_test_proxy'
                 num_samples = len(valloader.dataset)
@@ -942,83 +1307,17 @@ def extract_training_metrics_for_persistence(
         training_metrics[client_id] = {
             "distill_loss": metrics.get("distill_loss"),
             "train_loss": metrics.get("train_loss"),
+            "val_loss": metrics.get("val_loss"),  # Added for per-round tracking
             "num-examples": metrics.get("num-examples"),
             "training_time": metrics.get("training_time"),
-            "consensus_weight": consensus_weight,
-            "has_local_data": metrics.get("has_local_data", 0)
+            "consensus_weight": consensus_weight
         }
 
     return training_metrics
 
 
-# Helper functions for the new hybrid evaluation strategy
-
-def save_global_pre_fl_metrics(metrics: Dict, client_configs: List[Dict]):
-    """
-    Save global Pre-FL metrics to client_simulation_metrics table.
-
-    Updates each client's metrics field in the database with pre_fl evaluation.
-
-    Args:
-        metrics: Dict mapping client_id (str) to metrics dict
-        client_configs: List of client configuration dicts with 'id' and 'client_name' fields
-    """
-    if SUPABASE_CLIENT is None or SIMULATION_ID is None:
-        print("[Pre-FL] Database not available, skipping save")
-        return
-
-    try:
-        print(f"[Pre-FL] Saving metrics for {len(metrics)} clients to database...")
-
-        for client_id_str, client_metrics in metrics.items():
-            # Find client's database ID from config
-            client_idx = int(client_id_str)
-            if client_idx >= len(client_configs):
-                print(f"[Pre-FL] Warning: Invalid client index {client_idx}")
-                continue
-
-            client_config = client_configs[client_idx]
-            db_client_id = client_config.get('id')
-
-            if db_client_id is None:
-                print(f"[Pre-FL] Warning: Client {client_idx} missing database ID")
-                continue
-
-            # Fetch current metrics from client_simulation_metrics
-            response = SUPABASE_CLIENT.from_('client_simulation_metrics') \
-                .select('metrics') \
-                .eq('simulation_id', SIMULATION_ID) \
-                .eq('client_id', db_client_id) \
-                .execute()
-
-            if not response.data:
-                print(f"[Pre-FL] Warning: No metrics record found for client {db_client_id}")
-                continue
-
-            # Update metrics
-            existing_metrics = response.data[0].get('metrics', {})
-
-            if 'global' not in existing_metrics:
-                existing_metrics['global'] = {}
-
-            existing_metrics['global']['pre_fl'] = client_metrics
-
-            # Save back to database
-            SUPABASE_CLIENT.from_('client_simulation_metrics').update({
-                'metrics': existing_metrics,
-                'status': 'training'
-            }).eq('simulation_id', SIMULATION_ID) \
-              .eq('client_id', db_client_id) \
-              .execute()
-
-            print(f"[Pre-FL] ✓ Client {db_client_id} ({client_config.get('client_name')})")
-
-        print("[Pre-FL] Successfully saved all pre_fl metrics to database")
-
-    except Exception as e:
-        print(f"[Pre-FL] Error: {e}")
-        import traceback
-        traceback.print_exc()
+# Note: save_global_pre_fl_metrics removed - Pre-FL evaluation on untrained models
+# gives meaningless ~50% accuracy for binary classification and has been eliminated.
 
 
 def save_global_post_fl_metrics(
@@ -1071,18 +1370,9 @@ def save_global_post_fl_metrics(
             # Save post_fl metrics
             existing_metrics['global']['post_fl'] = client_metrics
 
-            # Calculate improvement
-            pre_fl = existing_metrics['global'].get('pre_fl', {})
-            post_fl = client_metrics
-
-            improvement = {}
-            for metric in ['accuracy', 'loss', 'precision', 'recall', 'f1_score',
-                           'class_gap', 'leukemia_accuracy', 'healthy_accuracy',
-                           'specificity', 'roc_auc']:
-                if metric in pre_fl and metric in post_fl:
-                    improvement[metric] = round(post_fl[metric] - pre_fl[metric], 6)
-
-            existing_metrics['global']['improvement'] = improvement
+            # Note: Improvement calculation removed since we no longer store pre_fl metrics
+            # (pre_fl on untrained models gives meaningless ~50% baseline)
+            # Improvement is now tracked via round-over-round progression in 'rounds' array
 
             # Save back to database
             SUPABASE_CLIENT.from_('client_simulation_metrics').update({
@@ -1166,7 +1456,7 @@ def compute_aggregate_metrics_local(all_metrics: List[dict]) -> dict:
     if not all_metrics:
         return {}
 
-    # Calculate aggregates for pre_fl and post_fl
+    # Calculate aggregates for post_fl only (pre_fl removed as it was meaningless)
     def calc_avg(metric_name: str, stage: str) -> float:
         """Calculate average of a metric across all clients"""
         values = []
@@ -1203,6 +1493,8 @@ def compute_aggregate_metrics_local(all_metrics: List[dict]) -> dict:
             'avg_f1': 0.0,
             'avg_precision': 0.0,
             'avg_recall': 0.0,
+            'avg_train_loss': 0.0,  # Added training losses
+            'avg_val_loss': 0.0,     # Added validation loss from training
             'num_clients_trained': 0,
             'timestamp': None
         }
@@ -1212,11 +1504,14 @@ def compute_aggregate_metrics_local(all_metrics: List[dict]) -> dict:
         values_f1 = []
         values_precision = []
         values_recall = []
+        values_train_loss = []
+        values_val_loss = []
 
         for m in all_metrics:
             rounds = m.get('rounds', [])
             for r in rounds:
                 if r.get('round') == round_num:
+                    # Validation evaluation metrics
                     if 'validation' in r:
                         val = r['validation']
                         values_acc.append(val.get('accuracy', 0))
@@ -1226,6 +1521,14 @@ def compute_aggregate_metrics_local(all_metrics: List[dict]) -> dict:
                         values_recall.append(val.get('recall', 0))
                         if not round_metrics['timestamp']:
                             round_metrics['timestamp'] = val.get('evaluated_at')
+                    
+                    # Training metrics (train_loss, val_loss from local training)
+                    if 'training' in r:
+                        train_data = r['training']
+                        if train_data.get('train_loss') is not None:
+                            values_train_loss.append(train_data['train_loss'])
+                        if train_data.get('val_loss') is not None:
+                            values_val_loss.append(train_data['val_loss'])
 
         if values_acc:
             round_metrics['avg_accuracy'] = sum(values_acc) / len(values_acc)
@@ -1234,22 +1537,33 @@ def compute_aggregate_metrics_local(all_metrics: List[dict]) -> dict:
             round_metrics['avg_precision'] = sum(values_precision) / len(values_precision)
             round_metrics['avg_recall'] = sum(values_recall) / len(values_recall)
             round_metrics['num_clients_trained'] = len(values_acc)
+        
+        if values_train_loss:
+            round_metrics['avg_train_loss'] = sum(values_train_loss) / len(values_train_loss)
+        if values_val_loss:
+            round_metrics['avg_val_loss'] = sum(values_val_loss) / len(values_val_loss)
+        
+        # Only add rounds with actual data
+        if values_acc or values_train_loss:
             rounds_aggregate.append(round_metrics)
 
     # Find best round
     best_round = max(rounds_aggregate, key=lambda r: r['avg_accuracy']) if rounds_aggregate else {}
+    
+    # Calculate improvement: Round 1 vs Final Round (more meaningful than untrained baseline)
+    round_1_metrics = next((r for r in rounds_aggregate if r['round'] == 1), {})
+    final_round_metrics = rounds_aggregate[-1] if rounds_aggregate else {}
+    
+    improvement = {}
+    if round_1_metrics and final_round_metrics:
+        for metric in ['avg_accuracy', 'avg_loss', 'avg_f1', 'avg_precision', 'avg_recall']:
+            r1_val = round_1_metrics.get(metric, 0)
+            final_val = final_round_metrics.get(metric, 0)
+            if r1_val is not None and final_val is not None:
+                improvement[metric] = round(final_val - r1_val, 6)
 
     return {
         "aggregate": {
-            "pre_fl": {
-                "avg_accuracy": calc_avg('accuracy', 'pre_fl'),
-                "avg_loss": calc_avg('loss', 'pre_fl'),
-                "avg_precision": calc_avg('precision', 'pre_fl'),
-                "avg_recall": calc_avg('recall', 'pre_fl'),
-                "avg_f1": calc_avg('f1_score', 'pre_fl'),
-                "std_accuracy": calc_std('accuracy', 'pre_fl'),
-                "num_clients": len(all_metrics)
-            },
             "post_fl": {
                 "avg_accuracy": calc_avg('accuracy', 'post_fl'),
                 "avg_loss": calc_avg('loss', 'post_fl'),
@@ -1259,13 +1573,7 @@ def compute_aggregate_metrics_local(all_metrics: List[dict]) -> dict:
                 "std_accuracy": calc_std('accuracy', 'post_fl'),
                 "num_clients": len(all_metrics)
             },
-            "improvement": {
-                "avg_accuracy": calc_avg('accuracy', 'post_fl') - calc_avg('accuracy', 'pre_fl'),
-                "avg_loss": calc_avg('loss', 'post_fl') - calc_avg('loss', 'pre_fl'),
-                "avg_precision": calc_avg('precision', 'post_fl') - calc_avg('precision', 'pre_fl'),
-                "avg_recall": calc_avg('recall', 'post_fl') - calc_avg('recall', 'pre_fl'),
-                "avg_f1": calc_avg('f1_score', 'post_fl') - calc_avg('f1_score', 'pre_fl')
-            }
+            "improvement": improvement  # Now based on Round 1 vs Final Round
         },
         "rounds": rounds_aggregate,
         "best_round": {
@@ -1275,6 +1583,98 @@ def compute_aggregate_metrics_local(all_metrics: List[dict]) -> dict:
         "total_rounds_completed": len(rounds_aggregate),
         "total_clients": len(all_metrics)
     }
+
+
+def save_round_training_metrics(
+    round_num: int,
+    training_metrics: Dict,
+    client_configs: List[Dict]
+):
+    """
+    Save per-round training metrics (train_loss, val_loss from local training) to database.
+
+    This stores the training loss and validation loss from the client's local training phase,
+    which is different from the validation evaluation on test data.
+
+    Args:
+        round_num: Current round number
+        training_metrics: Dict mapping client_id (str) to training metrics dict with:
+            - train_loss: Average training loss during local training
+            - val_loss: Average validation loss during local training
+            - distill_loss: Knowledge distillation loss
+            - training_time: Time spent training
+        client_configs: List of client configuration dicts with 'id' field
+    """
+    if SUPABASE_CLIENT is None or SIMULATION_ID is None:
+        print(f"[Round {round_num}] Database not available, skipping training metrics save")
+        return
+
+    try:
+        print(f"[Round {round_num}] Saving training metrics for {len(training_metrics)} clients...")
+
+        for client_id_str, client_metrics in training_metrics.items():
+            client_idx = int(client_id_str)
+            if client_idx >= len(client_configs):
+                continue
+
+            client_config = client_configs[client_idx]
+            db_client_id = client_config.get('id')
+
+            if db_client_id is None:
+                continue
+
+            # Fetch current metrics from client_simulation_metrics
+            response = SUPABASE_CLIENT.from_('client_simulation_metrics') \
+                .select('metrics') \
+                .eq('simulation_id', SIMULATION_ID) \
+                .eq('client_id', db_client_id) \
+                .execute()
+
+            if not response.data:
+                print(f"[Round {round_num}] Warning: No metrics record for client {db_client_id}")
+                continue
+
+            # Update metrics
+            existing_metrics = response.data[0].get('metrics', {})
+
+            # Initialize rounds array if needed
+            if 'rounds' not in existing_metrics:
+                existing_metrics['rounds'] = []
+
+            # Find or create round entry
+            round_entry = None
+            for r in existing_metrics['rounds']:
+                if r.get('round') == round_num:
+                    round_entry = r
+                    break
+
+            if round_entry is None:
+                round_entry = {'round': round_num}
+                existing_metrics['rounds'].append(round_entry)
+
+            # Add training metrics (from local client training)
+            round_entry['training'] = {
+                'train_loss': client_metrics.get('train_loss'),
+                'val_loss': client_metrics.get('val_loss'),
+                'distill_loss': client_metrics.get('distill_loss'),
+                'training_time': client_metrics.get('training_time'),
+                'num_examples': client_metrics.get('num-examples'),
+                'consensus_weight': client_metrics.get('consensus_weight')
+            }
+
+            # Save back to database
+            SUPABASE_CLIENT.from_('client_simulation_metrics').update({
+                'metrics': existing_metrics
+            }).eq('simulation_id', SIMULATION_ID) \
+              .eq('client_id', db_client_id) \
+              .execute()
+
+        print(f"[Round {round_num}] ✓ Saved training metrics (train_loss, val_loss)")
+
+    except Exception as e:
+        print(f"[Round {round_num}] Error saving training metrics: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def save_round_validation_metrics(
@@ -1359,23 +1759,7 @@ def save_round_validation_metrics(
         traceback.print_exc()
 
 
-def load_global_pre_fl_for_client(client_id: str, client_configs: List[Dict], data_json_path: str = CLIENT_INFO_FILE_PATH) -> Dict:
-    """Load global Pre-FL metrics for a specific client."""
-    if not os.path.exists(data_json_path):
-        return {}
-
-    try:
-        with open(data_json_path, 'r') as f:
-            clients_data = json.load(f)
-
-        for i, client in enumerate(clients_data):
-            if str(i) == client_id:
-                return client.get('metrics', {}).get('global', {}).get('pre_fl', {})
-
-    except Exception as e:
-        print(f"[Global Metrics] Error loading Pre-FL for client {client_id}: {e}")
-
-    return {}
+# Note: load_global_pre_fl_for_client removed - no longer needed since we don't store pre_fl metrics
 
 
 def check_for_degradation_warnings(current_metrics: Dict, round_num: int, client_history: Dict):
@@ -1424,21 +1808,42 @@ def check_for_degradation_warnings(current_metrics: Dict, round_num: int, client
 #       device - Device to map model tensors to (cpu/cuda)
 # Returns: Tuple of (model, metadata_dict) where metadata contains training info
 def load_existing_model(model, model_path, device):
+    """
+    Load existing model from checkpoint with metadata and adaptive training state.
+
+    Handles both legacy (direct state_dict) and new (checkpoint with metadata) formats.
+    Provides backward compatibility for checkpoints created before adaptive training was added.
+
+    Args:
+        model: PyTorch model instance to load weights into
+        model_path: Path to checkpoint file
+        device: Device to map model tensors to
+
+    Returns:
+        Tuple of (model, metadata) where metadata contains:
+        - model_type: Architecture identifier
+        - num_classes: Number of output classes
+        - round: FL round number
+        - adaptive_state: Adaptive training state dict (NEW)
+        - scheduler_state: Scheduler state dict (NEW)
+    """
     checkpoint = torch.load(model_path, map_location=device)
-    
+
     if isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
         # Load from checkpoint with metadata
         model.load_state_dict(checkpoint['state_dict'])
-        
-        # Return metadata if available
+
+        # Return metadata if available (including new adaptive state)
         metadata = {
             'model_type': checkpoint.get('model_type'),
             'num_classes': checkpoint.get('num_classes'),
             'round': checkpoint.get('round'),
+            'adaptive_state': checkpoint.get('adaptive_state'),  # NEW
+            'scheduler_state': checkpoint.get('scheduler_state')  # NEW
         }
         return model, metadata
     else:
-        # Direct state_dict
+        # Direct state_dict (legacy format)
         model.load_state_dict(checkpoint)
         return model, {}
 
@@ -1585,9 +1990,68 @@ class FocalLoss(nn.Module):
 #     - Lower learning rate (lr/10)
 #     - Adapts pre-trained features to medical domain
 #     - Fine-tunes entire network for ALL vs Healthy classification
-def train(model, trainloader, epochs, lr, device, model_type: str = None):
+
+def _validate_epoch(model, valloader, criterion, device):
+    """
+    Perform validation for a single epoch.
+
+    This helper function evaluates the model on the validation set and returns
+    the average loss. It temporarily switches the model to eval mode and back.
+
+    Args:
+        model: PyTorch model
+        valloader: Validation DataLoader
+        criterion: Loss function
+        device: Device to run on
+
+    Returns:
+        Average validation loss for the epoch
+    """
+    model.eval()
+    val_loss = 0.0
+    val_batches = 0
+
+    with torch.no_grad():
+        for images, labels in valloader:
+            images = images.to(device)
+            labels = labels.to(device)
+
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+
+            val_loss += loss.item()
+            val_batches += 1
+
+    model.train()  # Switch back to training mode
+
+    return val_loss / val_batches if val_batches > 0 else 0.0
+
+
+def train(model, trainloader, epochs, lr, device, model_type: str = None,
+          valloader=None, adaptive_state=None):
+    """
+    Train model with two-stage transfer learning, per-epoch validation, and adaptive scheduling.
+
+    NEW FEATURES (Adaptive Training):
+    - Per-epoch validation loop during training
+    - ReduceLROnPlateau scheduler for both stages
+    - Returns validation loss and scheduler state
+
+    Args:
+        model: PyTorch model to train
+        trainloader: DataLoader for training data
+        epochs: Total number of epochs
+        lr: Initial learning rate
+        device: Device to train on
+        model_type: Architecture identifier
+        valloader: DataLoader for validation data (REQUIRED for adaptive training)
+        adaptive_state: AdaptiveTrainingState instance for dropout management
+
+    Returns:
+        Tuple of (avg_train_loss, avg_val_loss, scheduler_state_dict)
+    """
     if trainloader is None:
-        return 0.0  # Skip training for clients without data
+        return 0.0, 0.0, None  # Skip training for clients without data
 
     model.to(device)
 
@@ -1601,16 +2065,21 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None):
     stage1_epochs = max(2, int(epochs * 0.4))
     stage2_epochs = epochs - stage1_epochs
 
-    total_loss = 0.0
-    total_batches = 0
+    total_train_loss = 0.0
+    total_val_loss = 0.0
+    total_train_batches = 0
+    total_val_epochs = 0
+
+    scheduler_state = {}  # Store both schedulers' states
+
+    # Check if validation is available
+    has_validation = valloader is not None
 
     # ========== STAGE 1: HEAD-ONLY TRAINING (Frozen Backbone) ==========
     if model_type and stage1_epochs > 0:
         print(f"\n[Train] Stage 1/2: Training classifier head only ({stage1_epochs} epochs, lr={lr:.6f})")
 
-        # FIXED: Reset all parameters to trainable first (ensures clean state for freeze/unfreeze)
-        # This is critical for Round 2+ where models are loaded from checkpoints
-        # Without this, freeze_backbone() won't work correctly on already-unfrozen models
+        # Reset all parameters to trainable first (ensures clean state)
         for param in model.parameters():
             param.requires_grad = True
 
@@ -1620,16 +2089,31 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None):
         trainable, frozen, total_params = get_trainable_params(model)
         print(f"[Train] Parameters: {trainable:,} trainable, {frozen:,} frozen, {total_params:,} total")
 
-        # Optimizer for head-only training (higher LR)
+        # Optimizer for head-only training
         optimizer_head = torch.optim.AdamW(
             filter(lambda p: p.requires_grad, model.parameters()),
-            lr=lr,  # Full learning rate for head
+            lr=lr,
             betas=(0.9, 0.999),
             weight_decay=0.01
         )
 
+        # ReduceLROnPlateau scheduler for Stage 1
+        if has_validation:
+            scheduler_head = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer_head,
+                mode='min',
+                factor=0.5,
+                patience=2,
+                min_lr=1e-6
+            )
+
+        # Training loop with per-epoch validation
         model.train()
         for epoch in range(stage1_epochs):
+            epoch_train_loss = 0.0
+            epoch_train_batches = 0
+
+            # Training phase
             for images, labels in trainloader:
                 images = images.to(device)
                 labels = labels.to(device)
@@ -1637,12 +2121,37 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None):
                 optimizer_head.zero_grad()
                 loss = criterion(model(images), labels)
                 loss.backward()
-                # SOLUTION 5: Gradient clipping to prevent large updates
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer_head.step()
 
-                total_loss += loss.item()
-                total_batches += 1
+                epoch_train_loss += loss.item()
+                epoch_train_batches += 1
+
+            avg_epoch_train_loss = epoch_train_loss / epoch_train_batches if epoch_train_batches > 0 else 0.0
+            total_train_loss += epoch_train_loss
+            total_train_batches += epoch_train_batches
+
+            # Validation phase (if available)
+            if has_validation:
+                epoch_val_loss = _validate_epoch(model, valloader, criterion, device)
+                total_val_loss += epoch_val_loss
+                total_val_epochs += 1
+
+                # Step scheduler based on validation loss
+                scheduler_head.step(epoch_val_loss)
+
+                # Get current LR
+                current_lr = optimizer_head.param_groups[0]['lr']
+
+                print(f"[Train] Stage 1 Epoch {epoch+1}/{stage1_epochs}: "
+                      f"Train Loss={avg_epoch_train_loss:.4f}, Val Loss={epoch_val_loss:.4f}, LR={current_lr:.6f}")
+            else:
+                print(f"[Train] Stage 1 Epoch {epoch+1}/{stage1_epochs}: "
+                      f"Train Loss={avg_epoch_train_loss:.4f}")
+
+        # Save scheduler state
+        if has_validation:
+            scheduler_state['stage1'] = scheduler_head.state_dict()
 
         print(f"[Train] Stage 1 complete: Head trained on task-specific features")
 
@@ -1655,16 +2164,31 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None):
         trainable, frozen, total_params = get_trainable_params(model)
         print(f"[Train] Parameters: {trainable:,} trainable, {frozen:,} frozen, {total_params:,} total")
 
-        # Optimizer for full fine-tuning (lower LR to prevent destroying pre-trained features)
+        # Optimizer for full fine-tuning (lower LR)
         optimizer_full = torch.optim.AdamW(
             model.parameters(),
-            lr=lr / 10,  # 10x lower learning rate for backbone fine-tuning
+            lr=lr / 10,
             betas=(0.9, 0.999),
             weight_decay=0.01
         )
 
+        # ReduceLROnPlateau scheduler for Stage 2
+        if has_validation:
+            scheduler_full = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer_full,
+                mode='min',
+                factor=0.5,
+                patience=2,
+                min_lr=1e-7  # Lower min_lr for fine-tuning
+            )
+
+        # Training loop with per-epoch validation
         model.train()
         for epoch in range(stage2_epochs):
+            epoch_train_loss = 0.0
+            epoch_train_batches = 0
+
+            # Training phase
             for images, labels in trainloader:
                 images = images.to(device)
                 labels = labels.to(device)
@@ -1672,12 +2196,37 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None):
                 optimizer_full.zero_grad()
                 loss = criterion(model(images), labels)
                 loss.backward()
-                # SOLUTION 5: Gradient clipping to prevent large updates
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer_full.step()
 
-                total_loss += loss.item()
-                total_batches += 1
+                epoch_train_loss += loss.item()
+                epoch_train_batches += 1
+
+            avg_epoch_train_loss = epoch_train_loss / epoch_train_batches if epoch_train_batches > 0 else 0.0
+            total_train_loss += epoch_train_loss
+            total_train_batches += epoch_train_batches
+
+            # Validation phase (if available)
+            if has_validation:
+                epoch_val_loss = _validate_epoch(model, valloader, criterion, device)
+                total_val_loss += epoch_val_loss
+                total_val_epochs += 1
+
+                # Step scheduler based on validation loss
+                scheduler_full.step(epoch_val_loss)
+
+                # Get current LR
+                current_lr = optimizer_full.param_groups[0]['lr']
+
+                print(f"[Train] Stage 2 Epoch {epoch+1}/{stage2_epochs}: "
+                      f"Train Loss={avg_epoch_train_loss:.4f}, Val Loss={epoch_val_loss:.4f}, LR={current_lr:.6f}")
+            else:
+                print(f"[Train] Stage 2 Epoch {epoch+1}/{stage2_epochs}: "
+                      f"Train Loss={avg_epoch_train_loss:.4f}")
+
+        # Save scheduler state
+        if has_validation:
+            scheduler_state['stage2'] = scheduler_full.state_dict()
 
         print(f"[Train] Stage 2 complete: Full model fine-tuned for medical domain")
 
@@ -1700,15 +2249,17 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None):
                 optimizer.zero_grad()
                 loss = criterion(model(images), labels)
                 loss.backward()
-                # SOLUTION 5: Gradient clipping to prevent large updates
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
 
-                total_loss += loss.item()
-                total_batches += 1
+                total_train_loss += loss.item()
+                total_train_batches += 1
 
-    avg_loss = total_loss / total_batches if total_batches > 0 else 0.0
-    return avg_loss
+    # Calculate overall averages
+    avg_train_loss = total_train_loss / total_train_batches if total_train_batches > 0 else 0.0
+    avg_val_loss = total_val_loss / total_val_epochs if total_val_epochs > 0 else 0.0
+
+    return avg_train_loss, avg_val_loss, scheduler_state
 
 # Evaluate model on validation/test data with comprehensive metrics
 # Args: model - PyTorch model to evaluate
@@ -1944,14 +2495,13 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
 # <------------------------------------------ CONSENSUS COMPUTATION ------------------------------------------>
 
 def compute_consensus(
-    logits_list: List[np.ndarray], 
+    logits_list: List[np.ndarray],
     client_metrics: List[Dict],
     client_configs: List[Dict],
     server_round: int,
     last_consensus: Optional[np.ndarray] = None,
     eval_history: Optional[List[Dict]] = None,
     momentum: float = CONSENSUS_MOMENTUM,
-    exclude_free_riders: bool = True,
 ) -> Tuple[Optional[np.ndarray], Dict]:
     """ 
     Computes a robust consensus value by aggregating client logits from the anchor dataset using multi-factor quality weighting.
@@ -1963,11 +2513,10 @@ def compute_consensus(
                 ]
         - server_round: Current FL round number
         - client_configs: List of client configuration dicts (model_type, client_name, etc.)
-        - client_metrics: List of dicts with training metrics (train_loss, distill_loss, num-examples, has_local_data)
+        - client_metrics: List of dicts with training metrics (train_loss, distill_loss, num-examples)
         - last_consensus: Previous round's consensus logits (for momentum smoothing)
         - eval_history: Historical evaluation metrics across rounds
         - momentum: Weight for previous consensus (default 0.3)
-        - exclude_free_riders: If True, free riders get zero weight (default True)
 
     Returns:
         - consensus_logits: Weighted average of client logits with momentum and class reweighting, or None if no valid clients
@@ -1978,10 +2527,9 @@ def compute_consensus(
         1. Number of data points for local trainig per client (highest influence)
         2. Calculates the combined loss from both the private training loss and the distillation loss
         3. Model architecture factor on model suitability for medical imaging
-        4. Free riders: Zero weight (complete exclusion)
-        
+
         CLASS-LEVEL WEIGHTING (compensates for class imbalance in training data):
-        5. Inverse frequency weighting: Minority class predictions get boosted via sqrt(inverse_frequency)
+        4. Inverse frequency weighting: Minority class predictions get boosted via sqrt(inverse_frequency)
            - Computes class distribution in consensus predictions
            - Applies higher weight to underrepresented class
            - Helps maintain balanced learning signal despite imbalanced client training data
@@ -2006,38 +2554,23 @@ def compute_consensus(
 
         # Extract metrics with safe defaults
         num_samples = metrics.get("num-examples", 1)
-        has_local_data = metrics.get("has_local_data", 0)
         train_loss = metrics.get("train_loss", 0.0)
         distill_loss = metrics.get("distill_loss", 0.0)
         model_type = config.get("model_type", "unknown").lower()
         client_name = config.get("client_name", f"client_{i}")
 
-        # <------------------- 1. Free Rider Exclusion -------------------->
-        if exclude_free_riders and not has_local_data:
-            weights.append(0.0) # Set to 0
-            weight_breakdown.append({
-                "client_name": client_name,
-                "model_type": model_type,
-                "base_weight": 0.0,
-                "quality_multiplier": 0.0,
-                "architecture_factor": 0.0,
-                "final_weight": 0.0,
-                "reason": "free_rider_excluded"
-            })
-            continue
-
-        # <------------------- 2. Local Dataset Point Quantity -------------------->
+        # <------------------- 1. Local Dataset Point Quantity -------------------->
         # Clients with more data get higher base weight
         base_weight = max(num_samples, 1)  # At least 1 to avoid zero division
 
-        # <------------------- 3. Combined Loss Calculation (Distill Loss and Train Loss) : Determines the quality of the logits -------------------->
+        # <------------------- 2. Combined Loss Calculation (Distill Loss and Train Loss) : Determines the quality of the logits -------------------->
         # Lower combined loss = better convergence = higher multiplier
         combined_loss = (TRAIN_LOSS_WEIGHT * train_loss +
                         DISTILL_LOSS_WEIGHT * distill_loss)
 
         quality_multiplier = 1.0 / (1.0 + combined_loss)
 
-        # <------------------- 4. Model Achitecture Suitability Factor -------------------->
+        # <------------------- 3. Model Achitecture Suitability Factor -------------------->
         architecture_factor = MODEL_SUITABILITY_SCORES.get(model_type, 1.0)
 
         # <------------------- Compte Final Weight -------------------->
@@ -2061,9 +2594,9 @@ def compute_consensus(
     total_weight = sum(weights)
 
     if total_weight == 0:
-            # All clients are free riders or have zero weight
+            # All clients have zero weight (should not happen in normal operation)
         return None, {
-            "error": "All clients excluded (free riders or zero weight)",
+            "error": "All clients have zero weight",
             "weight_breakdown": weight_breakdown
         }
 
@@ -2166,7 +2699,6 @@ def compute_consensus(
         "server_round": server_round,
         "num_clients": num_clients,
         "num_contributing_clients": sum(1 for w in weights if w > 0),
-        "num_excluded_free_riders": sum(1 for w in weights if w == 0),
         "total_raw_weight": total_weight,
         "momentum": momentum if smoothing_applied else None,
         "smoothing_applied": smoothing_applied,
@@ -2182,7 +2714,6 @@ def compute_consensus(
         "parameters": {
             "train_loss_weight": TRAIN_LOSS_WEIGHT,
             "distill_loss_weight": DISTILL_LOSS_WEIGHT,
-            "exclude_free_riders": exclude_free_riders,
         }
     }
 
@@ -2278,31 +2809,9 @@ class FLEXMedStrategy(Strategy):
         # Store per-round metrics for visualization
         self.round_metrics_history = {}
 
-        # ========== GLOBAL PRE-FL EVALUATION (ONLY IF STARTING FRESH) ==========
-        if self.start_round == 1:
-            log(INFO, "")
-            log(INFO, "=" * 70)
-            log(INFO, "[GLOBAL] Initial Centralized Model Evaluation (Public Test)")
-            log(INFO, "=" * 70)
-            log(INFO, "")
-
-            try:
-                global_pre_fl_metrics = evaluate_all_clients_on_public_test(
-                    self.client_configs, device
-                )
-
-                # Save global metrics to client_data.json
-                save_global_pre_fl_metrics(global_pre_fl_metrics, self.client_configs)
-
-                log(INFO, f"[GLOBAL] Pre-FL Evaluation Complete")
-                for client_id, metrics in global_pre_fl_metrics.items():
-                    acc = metrics.get('accuracy', 0)
-                    loss = metrics.get('loss', 0)
-                    log(INFO, f"  Client {client_id}: Accuracy={acc:.1%}, Loss={loss:.3f} on public test")
-                log(INFO, "")
-
-            except Exception as e:
-                log(WARNING, f"[GLOBAL] Pre-FL Evaluation failed: {e}")
+        # Note: Pre-FL evaluation removed as it evaluates untrained models which gives
+        # meaningless ~50% accuracy results for binary classification.
+        # Post-FL evaluation now only runs after FL training completes.
 
         # KEY: Loop from start_round to num_rounds (not 1 to num_rounds)
         for current_round in range(self.start_round, num_rounds + 1):
@@ -2325,6 +2834,10 @@ class FLEXMedStrategy(Strategy):
                 arrays = agg_arrays
             if agg_metrics:
                 result.train_metrics_clientapp[current_round] = agg_metrics
+
+            # Save training metrics (train_loss, val_loss from local training)
+            if training_metrics:
+                save_round_training_metrics(current_round, training_metrics, self.client_configs)
 
             # --- PER-ROUND VALIDATION EVALUATION PHASE ---
             log(INFO, "")
@@ -2390,44 +2903,32 @@ class FLEXMedStrategy(Strategy):
                 self.client_configs, device
             )
 
-            # Save global Post-FL metrics and calculate improvements
+            # Save global Post-FL metrics
             save_global_post_fl_metrics(global_post_fl_metrics, self.client_configs)
 
             log(INFO, f"[GLOBAL] Post-FL Evaluation Complete")
             log(INFO, "")
-            log(INFO, "FL BENEFIT ANALYSIS:")
+            log(INFO, "FINAL FL RESULTS (Public Test Evaluation):")
             log(INFO, "=" * 70)
 
-            # Compare Pre-FL vs Post-FL for each client
+            # Show final results for each client
             for client_id, post_metrics in global_post_fl_metrics.items():
-                # Load pre-FL metrics from saved data
-                pre_metrics = load_global_pre_fl_for_client(client_id, self.client_configs)
-
-                pre_acc = pre_metrics.get('accuracy', 0)
                 post_acc = post_metrics.get('accuracy', 0)
-                improvement = post_acc - pre_acc
-
-                pre_loss = pre_metrics.get('loss', 0)
                 post_loss = post_metrics.get('loss', 0)
-                loss_delta = post_loss - pre_loss
-
-                pre_gap = pre_metrics.get('class_gap', 0)
                 post_gap = post_metrics.get('class_gap', 0)
-                gap_delta = post_gap - pre_gap
+                f1 = post_metrics.get('f1_score', 0)
 
                 log(INFO, f"Client {client_id}:")
-                log(INFO, f"  Pre-FL  (Centralized): Acc={pre_acc:.1%}, Loss={pre_loss:.3f}, Gap={pre_gap:.1%}")
-                log(INFO, f"  Post-FL (Federated):   Acc={post_acc:.1%}, Loss={post_loss:.3f}, Gap={post_gap:.1%}")
-                log(INFO, f"  FL Improvement:        Acc={improvement:+.1%}, Loss={loss_delta:+.3f}, Gap={gap_delta:+.1%}")
+                log(INFO, f"  Accuracy: {post_acc:.1%}, Loss: {post_loss:.3f}")
+                log(INFO, f"  F1 Score: {f1:.3f}, Class Gap: {post_gap:.1%}")
                 log(INFO, "")
 
-            # Calculate average improvement
-            avg_pre_acc = np.mean([load_global_pre_fl_for_client(cid, self.client_configs).get('accuracy', 0)
-                                   for cid in global_post_fl_metrics.keys()])
+            # Calculate averages
             avg_post_acc = np.mean([m.get('accuracy', 0) for m in global_post_fl_metrics.values()])
-            avg_improvement = avg_post_acc - avg_pre_acc
+            avg_post_loss = np.mean([m.get('loss', 0) for m in global_post_fl_metrics.values()])
+            avg_f1 = np.mean([m.get('f1_score', 0) for m in global_post_fl_metrics.values()])
 
-            log(INFO, f"Average FL Benefit: {avg_improvement:+.1%}")
+            log(INFO, f"Average Results: Accuracy={avg_post_acc:.1%}, Loss={avg_post_loss:.3f}, F1={avg_f1:.3f}")
             log(INFO, "")
 
         except Exception as e:
@@ -2486,9 +2987,8 @@ class FLEXMedStrategy(Strategy):
 
         print(f"\n[ROUND {server_round}] Evaluation Results:")
 
-        # Separate results by client type
+        # Track client evaluation results
         clients_with_data = []
-        free_riders = []
 
         total_loss = 0.0
         total_acc = 0.0
@@ -2506,7 +3006,6 @@ class FLEXMedStrategy(Strategy):
             eval_acc = metrics.get("eval_acc", 0.0)
             num_examples = metrics.get("num-examples", 0)
             client_id = metrics.get("client_id", -1)
-            has_data = metrics.get("has_local_data", 0)
 
             # Track by client type
             client_info = {
@@ -2516,10 +3015,8 @@ class FLEXMedStrategy(Strategy):
                 "examples": num_examples
             }
 
-            if has_data:
-                clients_with_data.append(client_info)
-            else:
-                free_riders.append(client_info)
+            # All clients have data (v3.0 runtime Dirichlet partitioning)
+            clients_with_data.append(client_info)
 
             # Aggregate (weighted by number of examples)
             total_loss += eval_loss * num_examples
@@ -2541,8 +3038,7 @@ class FLEXMedStrategy(Strategy):
             "avg_loss": avg_loss,
             "avg_acc": avg_acc,
             "total_examples": total_examples,
-            "clients_with_data": clients_with_data,
-            "free_riders": free_riders
+            "clients_with_data": clients_with_data
         }
         self.eval_history.append(round_metrics)
 
@@ -2565,8 +3061,7 @@ class FLEXMedStrategy(Strategy):
                 "eval_acc": avg_acc,
                 "num_clients": len(results_list),
                 "total_examples": total_examples,
-                "clients_with_data": len(clients_with_data),
-                "free_riders": len(free_riders)
+                "clients_with_data": len(clients_with_data)
             }
         }
 
@@ -2619,8 +3114,7 @@ class FLEXMedStrategy(Strategy):
             server_round=server_round,
             last_consensus=self.last_consensus_logits,
             eval_history=self.eval_history,
-            momentum=CONSENSUS_MOMENTUM,
-            exclude_free_riders=True
+            momentum=CONSENSUS_MOMENTUM
         )
 
         if consensus_logits is None:
@@ -2629,8 +3123,6 @@ class FLEXMedStrategy(Strategy):
 
         # Print informative summary
         print(f"[SERVER] ✓ Consensus computed from {aggregation_metadata['num_contributing_clients']}/{aggregation_metadata['num_clients']} clients")
-        if aggregation_metadata['num_excluded_free_riders'] > 0:
-            print(f"[SERVER]   Excluded {aggregation_metadata['num_excluded_free_riders']} free riders")
 
         # Print top 3 contributors
         breakdown = aggregation_metadata['weight_breakdown']

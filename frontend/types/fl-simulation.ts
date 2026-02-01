@@ -22,6 +22,8 @@ export interface RoundMetrics {
   avg_f1: number;
   avg_precision: number;
   avg_recall: number;
+  avg_train_loss?: number; // Training loss from local training phase
+  avg_val_loss?: number; // Validation loss from local training phase
   num_clients_trained: number;
   timestamp: string;
 }
@@ -38,14 +40,15 @@ export interface AggregateMetrics {
 
 export interface FLSimulationMetrics {
   aggregate: {
-    pre_fl: AggregateMetrics;
+    // Note: pre_fl removed as evaluating untrained models gives meaningless ~50% accuracy
     post_fl: AggregateMetrics;
     improvement: {
+      // Now calculated as Round 1 vs Final Round progression
       avg_accuracy: number;
       avg_loss: number;
-      avg_precision: number;
-      avg_recall: number;
-      avg_f1: number;
+      avg_precision?: number;
+      avg_recall?: number;
+      avg_f1?: number;
     };
   };
   rounds: RoundMetrics[];
@@ -70,14 +73,16 @@ export interface FLSimulation {
 }
 
 // Helper to parse metrics (handles both object and JSON string for backwards compatibility)
-export function parseMetrics(metrics: FLSimulationMetrics | string | any): FLSimulationMetrics | null {
+export function parseMetrics(
+  metrics: FLSimulationMetrics | string | any,
+): FLSimulationMetrics | null {
   // If already an object with expected structure
-  if (metrics && typeof metrics === 'object' && !Array.isArray(metrics)) {
+  if (metrics && typeof metrics === "object" && !Array.isArray(metrics)) {
     return metrics as FLSimulationMetrics;
   }
 
   // If it's a JSON string (backwards compatibility)
-  if (typeof metrics === 'string') {
+  if (typeof metrics === "string") {
     if (!metrics || metrics.trim() === "" || metrics === "{}") {
       return null;
     }

@@ -90,113 +90,72 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
               <span className="flex-red-dot" />
               Select Model
             </h2>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
-                CNN Model Architecture
-              </label>
-              <select
-                value={modelType}
-                onChange={(e) => setModelType(e.target.value)}
-                className="w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
-              >
-                <option value="">Select a PyTorch CNN model...</option>
-                <optgroup label="ResNet">
-                  <option value="resnet18">
-                    ResNet-18 - Lightweight residual network
-                  </option>
-                  <option value="resnet34">
-                    ResNet-34 - Deeper residual network
-                  </option>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  CNN Model Architecture
+                </label>
+                <select
+                  value={modelType}
+                  onChange={(e) => setModelType(e.target.value)}
+                  className="w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
+                >
+                  <option value="">Select a PyTorch CNN model...</option>
                   <option value="resnet50">
-                    ResNet-50 - Standard residual network
+                    ResNet-50 (Industry Standard)
                   </option>
-                  <option value="resnet101">
-                    ResNet-101 - Deep residual network
-                  </option>
-                  <option value="resnet152">
-                    ResNet-152 - Very deep residual network
-                  </option>
-                </optgroup>
-                <optgroup label="VGG">
-                  <option value="vgg11">
-                    VGG-11 - Lightweight VGG architecture
-                  </option>
-                  <option value="vgg13">
-                    VGG-13 - Medium VGG architecture
-                  </option>
-                  <option value="vgg16">
-                    VGG-16 - Standard VGG architecture
-                  </option>
-                  <option value="vgg19">
-                    VGG-19 - Deepest VGG architecture
-                  </option>
-                </optgroup>
-                <optgroup label="DenseNet">
-                  <option value="densenet121">
-                    DenseNet-121 - Efficient dense connections
-                  </option>
-                  <option value="densenet161">
-                    DenseNet-161 - Wide dense network
-                  </option>
-                  <option value="densenet169">
-                    DenseNet-169 - Deep dense network
-                  </option>
-                  <option value="densenet201">
-                    DenseNet-201 - Very deep dense network
-                  </option>
-                </optgroup>
-                <optgroup label="EfficientNet">
-                  <option value="efficientnet_b0">
-                    EfficientNet-B0 - Smallest efficient model
-                  </option>
-                  <option value="efficientnet_b1">
-                    EfficientNet-B1 - Balanced efficiency
-                  </option>
-                  <option value="efficientnet_b2">
-                    EfficientNet-B2 - Enhanced efficiency
-                  </option>
-                  <option value="efficientnet_b3">
-                    EfficientNet-B3 - Advanced efficiency
-                  </option>
-                  <option value="efficientnet_b4">
-                    EfficientNet-B4 - High efficiency
-                  </option>
-                  <option value="efficientnet_b5">
-                    EfficientNet-B5 - Very high efficiency
-                  </option>
-                  <option value="efficientnet_b6">
-                    EfficientNet-B6 - Ultra efficiency
-                  </option>
-                  <option value="efficientnet_b7">
-                    EfficientNet-B7 - Maximum efficiency
-                  </option>
-                </optgroup>
-                <optgroup label="MobileNet">
                   <option value="mobilenet_v2">
-                    MobileNet-V2 - Mobile-optimized network
+                    MobileNet-V2 (Mobile Optimized)
                   </option>
-                  <option value="mobilenet_v3_small">
-                    MobileNet-V3 Small - Compact mobile model
+                  <option value="densenet121">
+                    DenseNet-121 (High Dense Connections)
                   </option>
-                  <option value="mobilenet_v3_large">
-                    MobileNet-V3 Large - Enhanced mobile model
+                  <option value="efficientnet_b0">
+                    EfficientNet-B0 (Modern Efficiency Optimizer)
                   </option>
-                </optgroup>
-                <optgroup label="Inception">
-                  <option value="inception_v3">
-                    Inception-V3 - Multi-scale feature extraction
-                  </option>
-                  <option value="googlenet">
-                    GoogLeNet - Original inception architecture
-                  </option>
-                </optgroup>
-                <optgroup label="Other">
-                  <option value="alexnet">AlexNet - Classic deep CNN</option>
-                  <option value="squeezenet">
-                    SqueezeNet - Compact architecture
-                  </option>
-                </optgroup>
-              </select>
+                </select>
+              </div>
+
+              {/* Architectural Insight Note */}
+              {modelType && (
+                <div className="p-4 bg-muted/50 rounded-lg border border-border">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
+                    Architectural Insight
+                  </h4>
+                  {modelType === "resnet50" && (
+                    <p className="text-sm text-foreground">
+                      <strong>The Industry Standard:</strong> Uses residual
+                      skip-connections to solve the vanishing gradient problem.
+                      Best for establishing a high-accuracy baseline for medical
+                      pathology.
+                    </p>
+                  )}
+                  {modelType === "mobilenet_v2" && (
+                    <p className="text-sm text-foreground">
+                      <strong>Mobile Optimized:</strong> Uses depthwise
+                      separable convolutions to reduce parameter count. Ideal
+                      for clinical point-of-care devices with limited compute
+                      power.
+                    </p>
+                  )}
+                  {modelType === "densenet121" && (
+                    <p className="text-sm text-foreground">
+                      <strong>High Dense Connections:</strong> Connects every
+                      layer to every other layer in a dense block. Superior at
+                      feature reuse for capturing subtle textures in blood smear
+                      images.
+                    </p>
+                  )}
+                  {modelType === "efficientnet_b0" && (
+                    <p className="text-sm text-foreground">
+                      <strong>Modern Efficiency Optimizer:</strong> Uses
+                      compound scaling to balance depth, width, and resolution.
+                      Provides state-of-the-art accuracy with minimal
+                      computational overhead.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
