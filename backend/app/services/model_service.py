@@ -79,6 +79,49 @@ def select_model(model_path: Path) -> Tuple[torch.nn.Module, str]:
 
     return model, model_name
 
+def adapt_state_dict(model: torch.nn.Module, state_dict: Dict[str, torch.Tensor], model_name: str) -> Dict[str, torch.Tensor]:
+    """
+    Adapt legacy state dicts to match current model architecture.
+    Handles the transition from Linear classifier to Sequential(Dropout, Linear).
+    """
+    new_state_dict = state_dict.copy()
+    
+    # Check for dropout layer mismatch in ResNet (fc.weight -> fc.1.weight)
+    if "ResNet" in model_name:
+        if "fc.weight" in state_dict and "fc.1.weight" not in state_dict:
+            # Check if model expects fc.1
+            if hasattr(model, "fc") and isinstance(model.fc, torch.nn.Sequential):
+                print(f"[Model Service] Adapting legacy ResNet checkpoint: fc -> fc.1")
+                new_state_dict["fc.1.weight"] = state_dict["fc.weight"]
+                new_state_dict["fc.1.bias"] = state_dict["fc.bias"]
+                del new_state_dict["fc.weight"]
+                del new_state_dict["fc.bias"]
+
+    # Check for MobileNet/EfficientNet (classifier.1.weight -> classifier.1.1.weight)
+    elif "MobileNet" in model_name or "EfficientNet" in model_name:
+        if "classifier.1.weight" in state_dict and "classifier.1.1.weight" not in state_dict:
+             # Check if model has Sequential classifier[1]
+             if hasattr(model, "classifier") and isinstance(model.classifier[1], torch.nn.Sequential):
+                print(f"[Model Service] Adapting legacy {model_name} checkpoint: classifier.1 -> classifier.1.1")
+                new_state_dict["classifier.1.1.weight"] = state_dict["classifier.1.weight"]
+                new_state_dict["classifier.1.1.bias"] = state_dict["classifier.1.bias"]
+                del new_state_dict["classifier.1.weight"]
+                del new_state_dict["classifier.1.bias"]
+
+    # Check for DenseNet (classifier.weight -> classifier.0.weight)
+    elif "DenseNet" in model_name:
+        if "classifier.weight" in state_dict and "classifier.0.weight" not in state_dict:
+             # Check if model has Sequential classifier
+             if hasattr(model, "classifier") and isinstance(model.classifier, torch.nn.Sequential):
+                print(f"[Model Service] Adapting legacy DenseNet checkpoint: classifier -> classifier.0")
+                new_state_dict["classifier.0.weight"] = state_dict["classifier.weight"]
+                new_state_dict["classifier.0.bias"] = state_dict["classifier.bias"]
+                del new_state_dict["classifier.weight"]
+                del new_state_dict["classifier.bias"]
+                
+    return new_state_dict
+
+
 def load_model(settings: Settings, model_path: Optional[Path] = None) -> ModelBundle:
     """Load and cache the model by its path."""
     global MODEL_CACHE
@@ -95,7 +138,11 @@ def load_model(settings: Settings, model_path: Optional[Path] = None) -> ModelBu
         device_str = "cpu"
     device = torch.device(device_str)
 
-    checkpoint = torch.load(model_path, map_location=device)
+    try:
+        checkpoint = torch.load(model_path, map_location=device)
+    except Exception as e:
+        print(f"[Model Service] Failed to load checkpoint {model_path}: {e}")
+        return None
 
     # Handle checkpoint format (with metadata) vs legacy format (direct state_dict)
     if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
@@ -115,7 +162,19 @@ def load_model(settings: Settings, model_path: Optional[Path] = None) -> ModelBu
         state_dict = checkpoint
         model, model_name = select_model(model_path)
 
-    model.load_state_dict(state_dict)
+    # Adapt state dict if necessary (handles added dropout layers)
+    state_dict = adapt_state_dict(model, state_dict, model_name)
+
+    try:
+        model.load_state_dict(state_dict)
+    except RuntimeError as e:
+        # If strict loading fails, try non-strict but warn
+        print(f"[Model Service] Strict loading failed for {model_name}: {e}")
+        print(f"[Model Service] Retrying with strict=False...")
+        keys = model.load_state_dict(state_dict, strict=False)
+        print(f"[Model Service] Missing keys: {keys.missing_keys}")
+        print(f"[Model Service] Unexpected keys: {keys.unexpected_keys}")
+
     model.eval()
     model.to(device)
 

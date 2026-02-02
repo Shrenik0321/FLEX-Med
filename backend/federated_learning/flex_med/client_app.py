@@ -240,7 +240,7 @@ def train(msg: Message, context: Context):
 
     start_time = time.time()
     # Call training with validation loader and adaptive state
-    train_loss, val_loss, scheduler_state = train_fn(
+    train_loss, val_loss, train_accuracy, scheduler_state = train_fn(
         model=model,
         trainloader=trainloader,
         epochs=context.run_config["local-epochs"],
@@ -253,6 +253,7 @@ def train(msg: Message, context: Context):
     training_time = time.time() - start_time
 
     print(f"[Client {partition_id}] ✓ Training Loss: {train_loss:.4f}, "
+          f"Train Accuracy: {train_accuracy:.2%}, "
           f"Validation Loss: {val_loss:.4f} ({dataset_len} samples, {training_time:.1f}s)")
 
     # Update adaptive state with validation loss
@@ -294,6 +295,7 @@ def train(msg: Message, context: Context):
 
     metrics = {
         "train_loss": train_loss,
+        "train_accuracy": train_accuracy,  # Training accuracy for combined charts
         "val_loss": val_loss,  # Added for per-round tracking in database
         "distill_loss": distill_loss,
         "num-examples": dataset_len,

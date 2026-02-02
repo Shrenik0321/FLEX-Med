@@ -156,3 +156,37 @@ CREATE INDEX idx_client_sim_metrics_simulation
 
 CREATE INDEX idx_client_sim_metrics_client
     ON client_simulation_metrics(client_id);
+
+-- ------------------------------------------
+-- 5. SYSTEM_CONFIG TABLE
+-- ------------------------------------------
+-- Stores system-wide configuration for FL simulations
+-- Uses singleton pattern (only one row exists)
+
+CREATE TABLE system_config (
+    id SERIAL PRIMARY KEY,
+    config JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Insert default configuration (singleton row)
+INSERT INTO system_config (config) VALUES ('{
+    "num_rounds": 10,
+    "local_epochs": 5,
+    "batch_size": 32,
+    "learning_rate": 0.0001,
+    "lr_decay": 0.99,
+    "distill_lr": 0.001,
+    "distill_epochs": 2,
+    "temperature": 3.0,
+    "dirichlet_alpha": 1.0,
+    "dirichlet_seed": 42,
+    "dirichlet_min_partition_size": 400,
+    "public_anchor_dataset_path": "/content/datasets/cnmc/cnmc_public_anchor",
+    "public_test_dataset_path": "/content/datasets/cnmc/cnmc_public_test",
+    "local_train_dataset_path": "/content/datasets/cnmc/cnmc_local_train",
+    "ngrok_url": "https://eb474f08357f.ngrok-free.app"
+}'::jsonb);
+
+CREATE INDEX idx_system_config_id ON system_config(id);

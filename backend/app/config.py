@@ -106,7 +106,7 @@ class Settings(BaseSettings):
 
     @property
     def public_anchor_dataset_path(self) -> Path:
-        """Public anchor dataset for FedMD distillation."""
+        """Public anchor dataset for federated learning distillation."""
         env_path = os.getenv("PUBLIC_ANCHOR_DATASET_PATH")
         if env_path:
             return Path(env_path)
@@ -219,16 +219,7 @@ class Settings(BaseSettings):
         float(x) for x in os.getenv("IMG_NORM_STD", "0.229,0.224,0.225").split(",")
     ]
     
-    # Model Suitability Scores
-    model_suitability_scores: Dict[str, float] = {
-        # Tier 1: High Capacity (Pathology Specialists)
-        'resnet50': 1.10,      # The Industry Standard - Strong residual features
-        'densenet121': 1.10,   # High Dense Connections - Excellent feature reuse for texture
-        
-        # Tier 2: Efficiency Optimized (Hardware Diversity)
-        'efficientnet_b0': 1.05, # Modern Optimizer - Compound scaling for medical imaging
-        'mobilenet_v2': 0.95,    # Mobile Optimized - Lightweight features for edge devices
-    }
+
 
     model_config = {
         "env_file": ".env",

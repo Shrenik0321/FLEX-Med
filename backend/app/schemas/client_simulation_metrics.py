@@ -146,7 +146,14 @@ def get_latest_round_metrics(metrics: dict) -> Optional[dict]:
 
 def get_improvement_summary(metrics: dict) -> dict:
     """
-    Get improvement summary from pre_fl to post_fl.
+    Get improvement summary from theoretical baseline to post_fl.
+
+    Theoretical baselines for binary classification:
+    - accuracy, precision, recall, f1_score: 0.5 (random chance)
+    - loss: 0.693 (ln(2) for random binary classifier)
+    - specificity, roc_auc: 0.5
+    - healthy_accuracy, leukemia_accuracy: 0.5
+    - class_gap: 1.0 (max gap)
 
     Args:
         metrics: Full metrics dict
@@ -160,7 +167,13 @@ def get_improvement_summary(metrics: dict) -> dict:
         "accuracy": improvement.get("accuracy", 0.0),
         "loss": improvement.get("loss", 0.0),
         "f1_score": improvement.get("f1_score", 0.0),
+        "precision": improvement.get("precision", 0.0),
+        "recall": improvement.get("recall", 0.0),
+        "specificity": improvement.get("specificity", 0.0),
+        "roc_auc": improvement.get("roc_auc", 0.0),
         "class_gap": improvement.get("class_gap", 0.0),
+        "healthy_accuracy": improvement.get("healthy_accuracy", 0.0),
+        "leukemia_accuracy": improvement.get("leukemia_accuracy", 0.0),
     }
 
 
@@ -192,20 +205,15 @@ if __name__ == "__main__":
 
     metrics_data = {
         "global": {
-            "pre_fl": {
-                "accuracy": 0.5,
-                "loss": 1.383,
-                "f1_score": 0.666
-            },
             "post_fl": {
                 "accuracy": 0.88,
                 "loss": 0.255,
                 "f1_score": 0.873
             },
             "improvement": {
-                "accuracy": 0.38,
-                "loss": -1.128,
-                "f1_score": 0.207
+                "accuracy": 0.38,  # From 0.5 baseline
+                "loss": -0.438,   # From ln(2) baseline
+                "f1_score": 0.373
             }
         },
         "rounds": [

@@ -122,9 +122,8 @@ def get_client_metrics_history(
             metrics = record.get("metrics", {})
 
             # Extract key metrics for quick reference
-            pre_fl = metrics.get("global", {}).get("pre_fl", {})
+            # Note: pre_fl no longer stored - we use theoretical baseline (0.5 accuracy for binary classification)
             post_fl = metrics.get("global", {}).get("post_fl", {})
-            improvement = metrics.get("global", {}).get("improvement", {})
 
             history.append({
                 "simulation_id": simulation.get("id"),
@@ -132,10 +131,10 @@ def get_client_metrics_history(
                 "simulation_status": simulation.get("status"),
                 "client_status": record.get("status"),
                 "num_rounds": len(metrics.get("rounds", [])),
-                "pre_fl_accuracy": pre_fl.get("accuracy"),
+                "pre_fl_accuracy": None,  # No longer stored - baseline is 0.5 (random chance)
                 "post_fl_accuracy": post_fl.get("accuracy"),
-                "improvement_accuracy": improvement.get("accuracy"),
-                "pre_fl_loss": pre_fl.get("loss"),
+                "improvement_accuracy": None,  # Calculated from round progression instead
+                "pre_fl_loss": None,  # No longer stored - baseline is ln(2) ≈ 0.693
                 "post_fl_loss": post_fl.get("loss"),
                 "full_metrics": metrics  # Include full metrics for detailed view
             })

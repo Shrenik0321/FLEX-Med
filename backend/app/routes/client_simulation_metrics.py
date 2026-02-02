@@ -127,7 +127,7 @@ async def update_client_simulation_metrics(
     Update metrics for a specific client-simulation pair.
 
     This endpoint is typically called by the FL system to update metrics
-    during training (pre_fl, rounds, post_fl).
+    during training (rounds, post_fl).
     """
     try:
         # Only include non-None fields in update

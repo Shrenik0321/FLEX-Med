@@ -55,8 +55,7 @@ IMG_SIZE = _settings.img_size
 # Shell runner
 RUN_SIMULATION_SHELL_FILE_PATH = str(_settings.run_simulation_shell_file_path)
 
-# Model suitability scores
-MODEL_SUITABILITY_SCORES = _settings.model_suitability_scores
+
 
 # Loss weighting
 TRAIN_LOSS_WEIGHT = _settings.train_loss_weight

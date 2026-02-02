@@ -52,12 +52,48 @@ interface Client {
 
 interface ClientMetrics {
   global: {
-    pre_fl?: any; // Made optional - no longer stored for new simulations
-    post_fl: any;
-    improvement?: any; // Made optional - now based on round progression
+    // pre_fl removed - use theoretical baseline (0.5 for accuracy, ln(2) for loss)
+    post_fl: {
+      loss: number;
+      accuracy: number;
+      precision: number;
+      recall: number;
+      f1_score: number;
+      specificity?: number;
+      roc_auc?: number;
+      class_gap?: number;
+      leukemia_accuracy?: number;
+      healthy_accuracy?: number;
+      num_samples?: number;
+      num_healthy_samples?: number;
+      num_leukemia_samples?: number;
+      confusion_matrix?: ConfusionMatrix;
+      evaluated_at?: string;
+    };
+    improvement: {
+      loss: number;
+      accuracy: number;
+      precision?: number;
+      recall?: number;
+      f1_score?: number;
+      specificity?: number;
+      roc_auc?: number;
+      class_gap?: number;
+      healthy_accuracy?: number;
+      leukemia_accuracy?: number;
+    };
   };
   rounds: Array<{
     round: number;
+    training?: {
+      train_loss: number;
+      train_accuracy: number; // Training accuracy for combined charts
+      val_loss?: number;
+      distill_loss?: number;
+      training_time?: number;
+      num_examples?: number;
+      consensus_weight?: number;
+    };
     validation?: {
       loss: number;
       accuracy: number;
@@ -65,14 +101,9 @@ interface ClientMetrics {
       recall: number;
       f1_score: number;
       evaluated_at: string;
-    };
-    training?: {
-      // New: training metrics from local training
-      train_loss: number;
-      val_loss: number;
-      distill_loss?: number;
-      training_time?: number;
-      num_examples?: number;
+      healthy_accuracy?: number;
+      leukemia_accuracy?: number;
+      class_gap?: number;
     };
   }>;
 }
@@ -456,10 +487,13 @@ export default function FLSimulationDetailsPage({
   ): number[] => {
     const allValues: number[] = [];
 
-    // Include 0.50 baseline for bounded metrics (accuracy, precision, recall, f1)
-    // This ensures the chart y-axis shows from the baseline
-    if (metricKey !== "loss") {
-      allValues.push(0.5);
+    // Include baseline for smart scaling
+    // For bounded metrics (accuracy, precision, recall, f1): 0.5 (random chance for binary classification)
+    // For loss: ln(2) ≈ 0.693 (expected cross-entropy for random binary classifier)
+    if (metricKey === "loss") {
+      allValues.push(Math.log(2)); // ~0.693 for random binary classifier
+    } else {
+      allValues.push(0.5); // 50% random chance baseline
     }
 
     if (selectedClient === "all") {
@@ -508,36 +542,62 @@ export default function FLSimulationDetailsPage({
   // Prepare data for charts (includes Round 0 at 0.50 baseline - random chance for binary classification)
   const prepareChartData = () => {
     if (selectedClient === "all") {
-      // Show aggregate data from simulation metrics
-      if (!simulationMetrics?.rounds) return [];
+      // Calculate averaged metrics across all clients per round
+      if (clients.length === 0) return [];
+
+      // Find max rounds across all clients
+      let maxRounds = 0;
+      clients.forEach((client) => {
+        const metrics = clientMetricsMap.get(client.id);
+        if (metrics?.rounds) {
+          maxRounds = Math.max(maxRounds, metrics.rounds.length);
+        }
+      });
 
       const data: any[] = [];
 
-      // Round 0: Baseline at 0.50 (50% random chance for binary classification)
+      // Round 0: Baseline before FL training
+      // - Bounded metrics (accuracy, precision, recall, f1): 0.5 (random chance for binary classification)
+      // - Loss: ln(2) ≈ 0.693 (expected cross-entropy for random binary classifier)
       data.push({
         round: 0,
         accuracy: 0.5,
         precision: 0.5,
         recall: 0.5,
         f1: 0.5,
-        loss: null, // No loss at baseline
-        train_loss: null,
-        val_loss: null,
+        loss: Math.log(2), // ~0.693 for random binary classifier baseline
       });
 
-      // Add validation rounds (starting from Round 1)
-      simulationMetrics.rounds.forEach((round) => {
-        data.push({
-          round: round.round,
-          accuracy: round.avg_accuracy,
-          precision: round.avg_precision,
-          recall: round.avg_recall,
-          f1: round.avg_f1,
-          loss: round.avg_loss,
-          train_loss: round.avg_train_loss, // Training loss from local training
-          val_loss: round.avg_val_loss, // Validation loss from local training
+      // Calculate averages for each round
+      for (let roundNum = 1; roundNum <= maxRounds; roundNum++) {
+        let sumAccuracy = 0, sumLoss = 0, sumPrecision = 0, sumRecall = 0, sumF1 = 0;
+        let count = 0;
+
+        clients.forEach((client) => {
+          const metrics = clientMetricsMap.get(client.id);
+          const roundData = metrics?.rounds?.find((r) => r.round === roundNum);
+
+          if (roundData?.validation) {
+            sumAccuracy += roundData.validation.accuracy || 0;
+            sumLoss += roundData.validation.loss || 0;
+            sumPrecision += roundData.validation.precision || 0;
+            sumRecall += roundData.validation.recall || 0;
+            sumF1 += roundData.validation.f1_score || 0;
+            count++;
+          }
         });
-      });
+
+        if (count > 0) {
+          data.push({
+            round: roundNum,
+            accuracy: sumAccuracy / count,
+            precision: sumPrecision / count,
+            recall: sumRecall / count,
+            f1: sumF1 / count,
+            loss: sumLoss / count,
+          });
+        }
+      }
 
       return data;
     } else {
@@ -548,16 +608,16 @@ export default function FLSimulationDetailsPage({
 
       const data: any[] = [];
 
-      // Round 0: Baseline at 0.50 (50% random chance for binary classification)
+      // Round 0: Baseline before FL training
+      // - Bounded metrics (accuracy, precision, recall, f1): 0.5 (random chance for binary classification)
+      // - Loss: ln(2) ≈ 0.693 (expected cross-entropy for random binary classifier)
       data.push({
         round: 0,
         accuracy: 0.5,
         precision: 0.5,
         recall: 0.5,
         f1: 0.5,
-        loss: null,
-        train_loss: null,
-        val_loss: null,
+        loss: Math.log(2), // ~0.693 for random binary classifier baseline
       });
 
       // Add validation rounds (starting from Round 1)
@@ -575,12 +635,6 @@ export default function FLSimulationDetailsPage({
           entry.loss = round.validation.loss;
         }
 
-        // Training metrics (train_loss, val_loss from local training)
-        if (round.training) {
-          entry.train_loss = round.training.train_loss;
-          entry.val_loss = round.training.val_loss;
-        }
-
         data.push(entry);
       });
 
@@ -588,68 +642,7 @@ export default function FLSimulationDetailsPage({
     }
   };
 
-  // Prepare multi-client data (when "all" is selected, show individual lines)
-  const prepareMultiClientData = () => {
-    if (selectedClient !== "all") return null;
-
-    // Get max rounds from any client
-    let maxRounds = 0;
-    clients.forEach((client) => {
-      const metrics = clientMetricsMap.get(client.id);
-      if (metrics?.rounds) {
-        maxRounds = Math.max(maxRounds, metrics.rounds.length);
-      }
-    });
-
-    // Build data with one entry per round (including Round 0 at 0.50 baseline)
-    const data: any[] = [];
-
-    // Round 0: Baseline at 0.50 (50% random chance for binary classification)
-    const round0Data: any = { round: 0 };
-    clients.forEach((client) => {
-      round0Data[`accuracy_${client.id}`] = 0.5;
-      round0Data[`precision_${client.id}`] = 0.5;
-      round0Data[`recall_${client.id}`] = 0.5;
-      round0Data[`f1_${client.id}`] = 0.5;
-      round0Data[`loss_${client.id}`] = null; // No loss at baseline
-      round0Data[`train_loss_${client.id}`] = null;
-      round0Data[`val_loss_${client.id}`] = null;
-    });
-    data.push(round0Data);
-
-    // Validation rounds (starting from Round 1)
-    for (let roundNum = 1; roundNum <= maxRounds; roundNum++) {
-      const roundData: any = { round: roundNum };
-
-      clients.forEach((client) => {
-        const metrics = clientMetricsMap.get(client.id);
-        const roundMetrics = metrics?.rounds.find((r) => r.round === roundNum);
-
-        if (roundMetrics?.validation) {
-          roundData[`accuracy_${client.id}`] = roundMetrics.validation.accuracy;
-          roundData[`precision_${client.id}`] =
-            roundMetrics.validation.precision;
-          roundData[`recall_${client.id}`] = roundMetrics.validation.recall;
-          roundData[`f1_${client.id}`] = roundMetrics.validation.f1_score;
-          roundData[`loss_${client.id}`] = roundMetrics.validation.loss;
-        }
-
-        // Include training metrics for train_loss/val_loss charts
-        if (roundMetrics?.training) {
-          roundData[`train_loss_${client.id}`] =
-            roundMetrics.training.train_loss;
-          roundData[`val_loss_${client.id}`] = roundMetrics.training.val_loss;
-        }
-      });
-
-      data.push(roundData);
-    }
-
-    return data;
-  };
-
   const chartData = prepareChartData();
-  const multiClientData = prepareMultiClientData();
 
   // Collect all values for smart scaling
   const allAccuracyValues = collectAllValues("accuracy");
@@ -665,60 +658,26 @@ export default function FLSimulationDetailsPage({
   const f1Limits = smartYLimit(allF1Values, "bounded");
   const lossLimits = smartYLimit(allLossValues, "unbounded");
 
-  // Calculate improvement values for smart scaling (now using Round 1 as baseline instead of pre_fl)
+  // Calculate improvement values from baseline (Round 0 = 0.5)
   const allImprovementValues: number[] = [];
-  if (selectedClient === "all" && multiClientData) {
-    clients.forEach((client) => {
-      // Use Round 1 accuracy as baseline (first round in data)
-      const round1Accuracy = multiClientData[0]?.[`accuracy_${client.id}`] || 0;
-
-      multiClientData.forEach((d: any, index: number) => {
-        const val = d[`accuracy_${client.id}`];
-        if (typeof val === "number") {
-          allImprovementValues.push(val - round1Accuracy);
-        }
-      });
-    });
-  } else if (selectedClient !== "all") {
-    // For single client, calculate improvement values
-    const round1Accuracy = chartData?.[0]?.accuracy || 0;
-
-    chartData?.forEach((d: any) => {
-      const val = d.accuracy;
-      if (typeof val === "number") {
-        allImprovementValues.push(val - round1Accuracy);
-      }
-    });
-  }
+  const baselineAccuracy = 0.5; // Random chance baseline
+  chartData?.forEach((d: any) => {
+    const val = d.accuracy;
+    if (typeof val === "number") {
+      allImprovementValues.push(val - baselineAccuracy);
+    }
+  });
   const improvementLimits = smartYLimit(allImprovementValues, "unbounded", 0.1);
 
   // Calculate round-to-round delta values for smart scaling
   const allRoundDeltaValues: number[] = [];
-  if (selectedClient === "all" && multiClientData) {
-    clients.forEach((client) => {
-      multiClientData.forEach((d: any, index: number) => {
-        const currentAcc = d[`accuracy_${client.id}`];
-        if (typeof currentAcc !== "number") return;
-
-        if (index === 0) {
-          // Round 1: no previous round to compare, delta is 0
-          allRoundDeltaValues.push(0);
-        } else {
-          // Round N vs Round N-1
-          const prevAcc = multiClientData[index - 1][`accuracy_${client.id}`];
-          if (typeof prevAcc === "number") {
-            allRoundDeltaValues.push(currentAcc - prevAcc);
-          }
-        }
-      });
-    });
-  } else if (selectedClient !== "all" && chartData) {
+  if (chartData) {
     chartData.forEach((d: any, index: number) => {
       const currentAcc = d.accuracy;
       if (typeof currentAcc !== "number") return;
 
       if (index === 0) {
-        // Round 1: no previous round to compare, delta is 0
+        // Round 0: baseline, delta is 0
         allRoundDeltaValues.push(0);
       } else {
         // Round N vs Round N-1
@@ -759,338 +718,98 @@ export default function FLSimulationDetailsPage({
   // Charts configuration (with smart scaling dependencies)
   const accuracyChartConfig = useMemo(
     () => ({
-      labels: (multiClientData || chartData || []).map(
-        (d: any) => `Round ${d.round}`,
-      ),
-      datasets:
-        selectedClient === "all"
-          ? clients.map((client, idx) => ({
-              label: client.client_name,
-              data:
-                multiClientData?.map((d: any) => d[`accuracy_${client.id}`]) ||
-                [],
-              borderColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-              backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-              tension: 0.3,
-              pointRadius: 3,
-              borderWidth: 2,
-            }))
-          : [
-              {
-                label: "Accuracy",
-                data: (chartData || []).map((d: any) => d.accuracy),
-                borderColor: "#B80028",
-                backgroundColor: "#B80028",
-                tension: 0.3,
-                pointRadius: 4,
-                borderWidth: 2,
-              },
-            ],
+      labels: (chartData || []).map((d: any) => `Round ${d.round}`),
+      datasets: [
+        {
+          label: selectedClient === "all" ? "Avg Accuracy" : "Accuracy",
+          data: (chartData || []).map((d: any) => d.accuracy),
+          borderColor: "#B80028",
+          backgroundColor: "#B80028",
+          tension: 0.3,
+          pointRadius: 4,
+          borderWidth: 2,
+        },
+      ],
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chartData, multiClientData, selectedClient, clients],
+    [chartData, selectedClient],
   );
 
   const lossChartConfig = useMemo(
     () => ({
-      labels: (multiClientData || chartData || []).map(
-        (d: any) => `Round ${d.round}`,
-      ),
-      datasets:
-        selectedClient === "all"
-          ? clients.map((client, idx) => ({
-              label: client.client_name,
-              data:
-                multiClientData?.map((d: any) => d[`loss_${client.id}`]) || [],
-              borderColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-              backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-              tension: 0.3,
-              pointRadius: 3,
-              borderWidth: 2,
-            }))
-          : [
-              {
-                label: "Loss",
-                data: (chartData || []).map((d: any) => d.loss),
-                borderColor: "#3b82f6",
-                backgroundColor: "rgba(59, 130, 246, 0.1)",
-                tension: 0.3,
-                fill: true,
-                pointRadius: 4,
-                borderWidth: 2,
-              },
-            ],
-    }),
-    [chartData, multiClientData, selectedClient, clients],
-  );
-
-  // Training Loss Chart (from local training phase)
-  const trainLossChartConfig = useMemo(
-    () => ({
-      labels: (multiClientData || chartData || [])
-        .filter((d: any) => d.round > 0) // Skip Round 0 baseline (no training loss)
-        .map((d: any) => `Round ${d.round}`),
-      datasets:
-        selectedClient === "all"
-          ? clients.map((client, idx) => ({
-              label: client.client_name,
-              data:
-                multiClientData
-                  ?.filter((d: any) => d.round > 0)
-                  .map((d: any) => d[`train_loss_${client.id}`]) || [],
-              borderColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-              backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-              tension: 0.3,
-              pointRadius: 3,
-              borderWidth: 2,
-            }))
-          : [
-              {
-                label: "Training Loss",
-                data: (chartData || [])
-                  .filter((d: any) => d.round > 0)
-                  .map((d: any) => d.train_loss),
-                borderColor: "#ef4444", // Red for training loss
-                backgroundColor: "rgba(239, 68, 68, 0.1)",
-                tension: 0.3,
-                fill: true,
-                pointRadius: 4,
-                borderWidth: 2,
-              },
-            ],
-    }),
-    [chartData, multiClientData, selectedClient, clients],
-  );
-
-  // Validation Loss Chart (from local training phase - different from evaluation loss)
-  const valLossChartConfig = useMemo(
-    () => ({
-      labels: (multiClientData || chartData || [])
-        .filter((d: any) => d.round > 0)
-        .map((d: any) => `Round ${d.round}`),
-      datasets:
-        selectedClient === "all"
-          ? clients.map((client, idx) => ({
-              label: client.client_name,
-              data:
-                multiClientData
-                  ?.filter((d: any) => d.round > 0)
-                  .map((d: any) => d[`val_loss_${client.id}`]) || [],
-              borderColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-              backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-              tension: 0.3,
-              pointRadius: 3,
-              borderWidth: 2,
-            }))
-          : [
-              {
-                label: "Validation Loss",
-                data: (chartData || [])
-                  .filter((d: any) => d.round > 0)
-                  .map((d: any) => d.val_loss),
-                borderColor: "#f97316", // Orange for validation loss
-                backgroundColor: "rgba(249, 115, 22, 0.1)",
-                tension: 0.3,
-                fill: true,
-                pointRadius: 4,
-                borderWidth: 2,
-              },
-            ],
-    }),
-    [chartData, multiClientData, selectedClient, clients],
-  );
-
-  const precisionChartConfig = useMemo(
-    () => ({
-      labels: (multiClientData || chartData || []).map(
-        (d: any) => `Round ${d.round}`,
-      ),
-      datasets:
-        selectedClient === "all"
-          ? clients.map((client, idx) => ({
-              label: client.client_name,
-              data:
-                multiClientData?.map((d: any) => d[`precision_${client.id}`]) ||
-                [],
-              borderColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-              backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-              tension: 0.3,
-              pointRadius: 3,
-              borderWidth: 2,
-            }))
-          : [
-              {
-                label: "Precision",
-                data: (chartData || []).map((d: any) => d.precision),
-                borderColor: "#10b981",
-                backgroundColor: "#10b981",
-                tension: 0.3,
-                pointRadius: 4,
-                borderWidth: 2,
-              },
-            ],
-    }),
-    [chartData, multiClientData, selectedClient, clients],
-  );
-
-  const recallChartConfig = useMemo(
-    () => ({
-      labels: (multiClientData || chartData || []).map(
-        (d: any) => `Round ${d.round}`,
-      ),
-      datasets:
-        selectedClient === "all"
-          ? clients.map((client, idx) => ({
-              label: client.client_name,
-              data:
-                multiClientData?.map((d: any) => d[`recall_${client.id}`]) ||
-                [],
-              borderColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-              backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-              tension: 0.3,
-              pointRadius: 3,
-              borderWidth: 2,
-            }))
-          : [
-              {
-                label: "Recall",
-                data: (chartData || []).map((d: any) => d.recall),
-                borderColor: "#f59e0b",
-                backgroundColor: "#f59e0b",
-                tension: 0.3,
-                pointRadius: 4,
-                borderWidth: 2,
-              },
-            ],
-    }),
-    [chartData, multiClientData, selectedClient, clients],
-  );
-
-  const f1ChartConfig = useMemo(
-    () => ({
-      labels: (multiClientData || chartData || []).map(
-        (d: any) => `Round ${d.round}`,
-      ),
-      datasets:
-        selectedClient === "all"
-          ? clients.map((client, idx) => ({
-              label: client.client_name,
-              data:
-                multiClientData?.map((d: any) => d[`f1_${client.id}`]) || [],
-              borderColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-              backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-              tension: 0.3,
-              pointRadius: 3,
-              borderWidth: 2,
-            }))
-          : [
-              {
-                label: "F1 Score",
-                data: (chartData || []).map((d: any) => d.f1),
-                borderColor: "#8b5cf6",
-                backgroundColor: "#8b5cf6",
-                tension: 0.3,
-                pointRadius: 4,
-                borderWidth: 2,
-              },
-            ],
-    }),
-    [chartData, multiClientData, selectedClient, clients],
-  );
-
-  const perClientImprovementChartConfig = useMemo(
-    () => ({
-      labels: (multiClientData || []).map((d: any) => `Round ${d.round}`),
-      datasets: clients.map((client, idx) => {
-        // Use Round 1 accuracy as baseline (first round in data)
-        const round1Accuracy =
-          multiClientData?.[0]?.[`accuracy_${client.id}`] || 0;
-        return {
-          label: client.client_name,
-          data:
-            multiClientData?.map((d: any) => {
-              const val = d[`accuracy_${client.id}`];
-              return typeof val === "number" ? val - round1Accuracy : null;
-            }) || [],
-          borderColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-          backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-          tension: 0.3,
-          pointRadius: 3,
-          borderWidth: 2,
-        };
-      }),
-    }),
-    [multiClientData, clients],
-  );
-
-  const singleClientImprovementChartConfig = useMemo(() => {
-    if (selectedClient === "all") return null;
-
-    // Use Round 1 accuracy as baseline (first round in data)
-    const round1Accuracy = chartData?.[0]?.accuracy || 0;
-
-    return {
       labels: (chartData || []).map((d: any) => `Round ${d.round}`),
       datasets: [
         {
-          label: "Accuracy Improvement",
-          data: (chartData || []).map((d: any) => {
-            const val = d.accuracy;
-            return typeof val === "number" ? val - round1Accuracy : null;
-          }),
-          borderColor: "#10b981", // Green for improvement
-          backgroundColor: "rgba(16, 185, 129, 0.1)",
+          label: selectedClient === "all" ? "Avg Loss" : "Loss",
+          data: (chartData || []).map((d: any) => d.loss),
+          borderColor: "#3b82f6",
+          backgroundColor: "rgba(59, 130, 246, 0.1)",
           tension: 0.3,
           fill: true,
           pointRadius: 4,
           borderWidth: 2,
         },
       ],
-    };
-  }, [chartData, selectedClient, clientMetricsMap]);
+    }),
+    [chartData, selectedClient],
+  );
+
+  const precisionChartConfig = useMemo(
+    () => ({
+      labels: (chartData || []).map((d: any) => `Round ${d.round}`),
+      datasets: [
+        {
+          label: selectedClient === "all" ? "Avg Precision" : "Precision",
+          data: (chartData || []).map((d: any) => d.precision),
+          borderColor: "#10b981",
+          backgroundColor: "#10b981",
+          tension: 0.3,
+          pointRadius: 4,
+          borderWidth: 2,
+        },
+      ],
+    }),
+    [chartData, selectedClient],
+  );
+
+  const recallChartConfig = useMemo(
+    () => ({
+      labels: (chartData || []).map((d: any) => `Round ${d.round}`),
+      datasets: [
+        {
+          label: selectedClient === "all" ? "Avg Recall" : "Recall",
+          data: (chartData || []).map((d: any) => d.recall),
+          borderColor: "#f59e0b",
+          backgroundColor: "#f59e0b",
+          tension: 0.3,
+          pointRadius: 4,
+          borderWidth: 2,
+        },
+      ],
+    }),
+    [chartData, selectedClient],
+  );
+
+  const f1ChartConfig = useMemo(
+    () => ({
+      labels: (chartData || []).map((d: any) => `Round ${d.round}`),
+      datasets: [
+        {
+          label: selectedClient === "all" ? "Avg F1 Score" : "F1 Score",
+          data: (chartData || []).map((d: any) => d.f1),
+          borderColor: "#8b5cf6",
+          backgroundColor: "#8b5cf6",
+          tension: 0.3,
+          pointRadius: 4,
+          borderWidth: 2,
+        },
+      ],
+    }),
+    [chartData, selectedClient],
+  );
 
   // Round-to-Round Improvement Chart (Delta from Previous Round)
-  const perClientRoundDeltaChartConfig = useMemo(() => {
-    if (selectedClient !== "all" || !multiClientData) return null;
-
-    // Skip Round 0 (baseline) - start from Round 1
-    const roundsData = multiClientData.slice(1);
-
-    return {
-      labels: roundsData.map((d: any) => `Round ${d.round}`),
-      datasets: clients.map((client, idx) => {
-        // Calculate round-to-round deltas (starting from Round 1)
-        // Round 1 compares to 0.50 baseline
-        const deltas = roundsData.map((d: any, index: number) => {
-          const currentAcc = d[`accuracy_${client.id}`];
-          if (typeof currentAcc !== "number") return null;
-
-          if (index === 0) {
-            // Round 1 - compare to 0.50 baseline
-            return currentAcc - 0.5;
-          } else {
-            // Round 2+ - compare to previous round
-            const prevAcc = roundsData[index - 1][`accuracy_${client.id}`];
-            if (typeof prevAcc !== "number") return null;
-            return currentAcc - prevAcc;
-          }
-        });
-
-        return {
-          label: client.client_name,
-          data: deltas,
-          borderColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-          backgroundColor: CLIENT_COLORS[idx % CLIENT_COLORS.length],
-          tension: 0.3,
-          pointRadius: 3,
-          borderWidth: 2,
-        };
-      }),
-    };
-  }, [multiClientData, clients, selectedClient]);
-
-  const singleClientRoundDeltaChartConfig = useMemo(() => {
-    if (selectedClient === "all" || !chartData) return null;
+  const roundDeltaChartConfig = useMemo(() => {
+    if (!chartData || chartData.length < 2) return null;
 
     // Skip Round 0 (baseline) - start from Round 1
     const roundsData = chartData.slice(1);
@@ -1151,7 +870,7 @@ export default function FLSimulationDetailsPage({
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        display: selectedClient === "all",
+        display: true,
         position: "top" as const,
         labels: {
           usePointStyle: true,
@@ -1264,8 +983,6 @@ export default function FLSimulationDetailsPage({
   const recallChartOptions = getChartOptions(recallLimits, true);
   const f1ChartOptions = getChartOptions(f1Limits, true);
   const lossChartOptions = getChartOptions(lossLimits, false);
-  const trainLossChartOptions = getChartOptions(lossLimits, false); // Same scaling as loss
-  const valLossChartOptions = getChartOptions(lossLimits, false); // Same scaling as loss
 
   // Improvement chart options with baseline reference line
   const improvementChartOptions = useMemo(() => {
@@ -1775,9 +1492,10 @@ export default function FLSimulationDetailsPage({
             <span>
               Viewing{" "}
               <strong className="text-slate-900 font-semibold">
-                all clients
+                averaged metrics
               </strong>{" "}
-              with individual trend lines per client
+              across all {clients.length} clients
+              {" • "}Round 0 = 50% Baseline
             </span>
           </>
         ) : (
@@ -1809,10 +1527,10 @@ export default function FLSimulationDetailsPage({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-6">
         {/* Accuracy Progression Chart */}
         <EvalCard
-          title="Accuracy"
+          title="Accuracy (Validation)"
           description={
             selectedClient === "all"
-              ? "Multi-client accuracy progression (Round 0 = 50% Baseline)"
+              ? "Averaged accuracy across clients (Round 0 = 50% Baseline)"
               : `${selectedClientInfo?.client_name} accuracy over time`
           }
           content={
@@ -1822,39 +1540,13 @@ export default function FLSimulationDetailsPage({
 
         {/* Loss Progression Chart */}
         <EvalCard
-          title="Loss"
+          title="Loss (Validation)"
           description={
             selectedClient === "all"
-              ? "Multi-client loss convergence (Round 0 = 50% Baseline)"
+              ? "Averaged loss across clients (Round 0 = ln(2) Baseline)"
               : `${selectedClientInfo?.client_name} loss convergence`
           }
           content={<Line data={lossChartConfig} options={lossChartOptions} />}
-        />
-
-        {/* Training Loss Chart (from local training) */}
-        <EvalCard
-          title="Training Loss"
-          description={
-            selectedClient === "all"
-              ? "Multi-client training loss during local training"
-              : `${selectedClientInfo?.client_name} training loss per round`
-          }
-          content={
-            <Line data={trainLossChartConfig} options={trainLossChartOptions} />
-          }
-        />
-
-        {/* Validation Loss Chart (from local training) */}
-        <EvalCard
-          title="Validation Loss"
-          description={
-            selectedClient === "all"
-              ? "Multi-client validation loss during local training"
-              : `${selectedClientInfo?.client_name} validation loss per round`
-          }
-          content={
-            <Line data={valLossChartConfig} options={valLossChartOptions} />
-          }
         />
 
         {/* Precision Chart */}
@@ -1862,7 +1554,7 @@ export default function FLSimulationDetailsPage({
           title="Precision"
           description={
             selectedClient === "all"
-              ? "Multi-client precision trends (Round 0 = 50% Baseline)"
+              ? "Averaged precision across clients (Round 0 = 50% Baseline)"
               : `${selectedClientInfo?.client_name} precision progression`
           }
           content={
@@ -1875,7 +1567,7 @@ export default function FLSimulationDetailsPage({
           title="Recall"
           description={
             selectedClient === "all"
-              ? "Multi-client recall/sensitivity (Round 0 = 50% Baseline)"
+              ? "Averaged recall across clients (Round 0 = 50% Baseline)"
               : `${selectedClientInfo?.client_name} recall progression`
           }
           content={
@@ -1888,48 +1580,33 @@ export default function FLSimulationDetailsPage({
           title="F1 Score"
           description={
             selectedClient === "all"
-              ? "Multi-client F1 score trends (Round 0 = 50% Baseline)"
+              ? "Averaged F1 score across clients (Round 0 = 50% Baseline)"
               : `${selectedClientInfo?.client_name} F1 score progression`
           }
           content={<Line data={f1ChartConfig} options={f1ChartOptions} />}
         />
 
         {/* Round-to-Round Improvement Delta */}
-        {selectedClient === "all" ? (
-          <EvalCard
-            title="Round-to-Round Improvement"
-            description="Accuracy gain from previous round (shows diminishing returns and convergence)"
-            content={
-              perClientRoundDeltaChartConfig ? (
-                <Line
-                  data={perClientRoundDeltaChartConfig}
-                  options={roundDeltaChartOptions}
-                />
-              ) : (
-                <div className="flex items-center justify-center h-48 text-slate-400">
-                  No delta data available
-                </div>
-              )
-            }
-          />
-        ) : (
-          <EvalCard
-            title="Round-to-Round Improvement"
-            description={`${selectedClientInfo?.client_name} accuracy gain from previous round`}
-            content={
-              singleClientRoundDeltaChartConfig ? (
-                <Line
-                  data={singleClientRoundDeltaChartConfig}
-                  options={roundDeltaChartOptions}
-                />
-              ) : (
-                <div className="flex items-center justify-center h-48 text-slate-400">
-                  No delta data available
-                </div>
-              )
-            }
-          />
-        )}
+        <EvalCard
+          title="Round-to-Round Improvement"
+          description={
+            selectedClient === "all"
+              ? "Averaged accuracy gain from previous round (shows diminishing returns)"
+              : `${selectedClientInfo?.client_name} accuracy gain from previous round`
+          }
+          content={
+            roundDeltaChartConfig ? (
+              <Line
+                data={roundDeltaChartConfig}
+                options={roundDeltaChartOptions}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-48 text-slate-400">
+                No delta data available
+              </div>
+            )
+          }
+        />
       </div>
     </div>
   );

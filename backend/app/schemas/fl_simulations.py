@@ -100,7 +100,7 @@ def compute_aggregate_metrics(clients_data: List[dict]) -> dict:
     """
     Compute aggregate metrics from multiple clients' metrics.
 
-    This function aggregates individual client metrics (pre_fl, post_fl, rounds)
+    This function aggregates individual client metrics (post_fl, rounds)
     into simulation-level averages and statistics.
 
     Args:
@@ -108,10 +108,12 @@ def compute_aggregate_metrics(clients_data: List[dict]) -> dict:
 
     Returns:
         Aggregated metrics structure with:
-        - aggregate: {pre_fl, post_fl, improvement} with averages and std
+        - aggregate: {post_fl, improvement} with averages and std
         - rounds: Array of per-round aggregate metrics
         - best_round: Best performing round
         - total_rounds_completed, total_clients
+
+    Note: Improvement is calculated from theoretical baseline (0.5 for binary classification)
     """
     # Parse all client metrics
     all_metrics = []
@@ -127,7 +129,7 @@ def compute_aggregate_metrics(clients_data: List[dict]) -> dict:
     if not all_metrics:
         return {}
 
-    # Calculate aggregates for pre_fl and post_fl
+    # Calculate aggregates for post_fl (pre_fl removed - use theoretical baseline)
     def calc_avg(metric_name: str, stage: str) -> float:
         """Calculate average of a metric across all clients"""
         values = []
@@ -164,6 +166,8 @@ def compute_aggregate_metrics(clients_data: List[dict]) -> dict:
             'avg_f1': 0.0,
             'avg_precision': 0.0,
             'avg_recall': 0.0,
+            'avg_train_loss': 0.0,      # Training loss from local training
+            'avg_train_accuracy': 0.0,  # Training accuracy from local training
             'num_clients_trained': 0,
             'timestamp': None
         }
@@ -173,11 +177,14 @@ def compute_aggregate_metrics(clients_data: List[dict]) -> dict:
         values_f1 = []
         values_precision = []
         values_recall = []
+        values_train_loss = []      # Training loss values
+        values_train_accuracy = []  # Training accuracy values
 
         for m in all_metrics:
             rounds = m.get('rounds', [])
             for r in rounds:
                 if r.get('round') == round_num:
+                    # Validation metrics
                     if 'validation' in r:
                         val = r['validation']
                         values_acc.append(val.get('accuracy', 0))
@@ -188,6 +195,14 @@ def compute_aggregate_metrics(clients_data: List[dict]) -> dict:
                         if not round_metrics['timestamp']:
                             round_metrics['timestamp'] = val.get('evaluated_at')
 
+                    # Training metrics
+                    if 'training' in r:
+                        train = r['training']
+                        if train.get('train_loss') is not None:
+                            values_train_loss.append(train['train_loss'])
+                        if train.get('train_accuracy') is not None:
+                            values_train_accuracy.append(train['train_accuracy'])
+
         if values_acc:
             round_metrics['avg_accuracy'] = sum(values_acc) / len(values_acc)
             round_metrics['avg_loss'] = sum(values_loss) / len(values_loss)
@@ -195,37 +210,49 @@ def compute_aggregate_metrics(clients_data: List[dict]) -> dict:
             round_metrics['avg_precision'] = sum(values_precision) / len(values_precision)
             round_metrics['avg_recall'] = sum(values_recall) / len(values_recall)
             round_metrics['num_clients_trained'] = len(values_acc)
+
+        # Add training metrics averages
+        if values_train_loss:
+            round_metrics['avg_train_loss'] = sum(values_train_loss) / len(values_train_loss)
+        if values_train_accuracy:
+            round_metrics['avg_train_accuracy'] = sum(values_train_accuracy) / len(values_train_accuracy)
+
+        if values_acc or values_train_loss:
             rounds_aggregate.append(round_metrics)
 
     # Find best round
     best_round = max(rounds_aggregate, key=lambda r: r['avg_accuracy']) if rounds_aggregate else {}
 
+    # Theoretical baseline for binary classification (random chance)
+    BASELINE_ACCURACY = 0.5
+    BASELINE_PRECISION = 0.5
+    BASELINE_RECALL = 0.5
+    BASELINE_F1 = 0.5
+    BASELINE_LOSS = 0.693  # ln(2) for random binary classifier
+    BASELINE_SPECIFICITY = 0.5
+    BASELINE_ROC_AUC = 0.5
+
     return {
         "aggregate": {
-            "pre_fl": {
-                "avg_accuracy": calc_avg('accuracy', 'pre_fl'),
-                "avg_loss": calc_avg('loss', 'pre_fl'),
-                "avg_precision": calc_avg('precision', 'pre_fl'),
-                "avg_recall": calc_avg('recall', 'pre_fl'),
-                "avg_f1": calc_avg('f1_score', 'pre_fl'),
-                "std_accuracy": calc_std('accuracy', 'pre_fl'),
-                "num_clients": len(all_metrics)
-            },
             "post_fl": {
                 "avg_accuracy": calc_avg('accuracy', 'post_fl'),
                 "avg_loss": calc_avg('loss', 'post_fl'),
                 "avg_precision": calc_avg('precision', 'post_fl'),
                 "avg_recall": calc_avg('recall', 'post_fl'),
                 "avg_f1": calc_avg('f1_score', 'post_fl'),
+                "avg_specificity": calc_avg('specificity', 'post_fl'),
+                "avg_roc_auc": calc_avg('roc_auc', 'post_fl'),
                 "std_accuracy": calc_std('accuracy', 'post_fl'),
                 "num_clients": len(all_metrics)
             },
             "improvement": {
-                "avg_accuracy": calc_avg('accuracy', 'post_fl') - calc_avg('accuracy', 'pre_fl'),
-                "avg_loss": calc_avg('loss', 'post_fl') - calc_avg('loss', 'pre_fl'),
-                "avg_precision": calc_avg('precision', 'post_fl') - calc_avg('precision', 'pre_fl'),
-                "avg_recall": calc_avg('recall', 'post_fl') - calc_avg('recall', 'pre_fl'),
-                "avg_f1": calc_avg('f1_score', 'post_fl') - calc_avg('f1_score', 'pre_fl')
+                "avg_accuracy": calc_avg('accuracy', 'post_fl') - BASELINE_ACCURACY,
+                "avg_loss": calc_avg('loss', 'post_fl') - BASELINE_LOSS,
+                "avg_precision": calc_avg('precision', 'post_fl') - BASELINE_PRECISION,
+                "avg_recall": calc_avg('recall', 'post_fl') - BASELINE_RECALL,
+                "avg_f1": calc_avg('f1_score', 'post_fl') - BASELINE_F1,
+                "avg_specificity": calc_avg('specificity', 'post_fl') - BASELINE_SPECIFICITY,
+                "avg_roc_auc": calc_avg('roc_auc', 'post_fl') - BASELINE_ROC_AUC
             }
         },
         "rounds": rounds_aggregate,

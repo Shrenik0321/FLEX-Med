@@ -60,7 +60,7 @@ def main(grid: Grid, context: Context) -> None:
 
     # <------------------------------------------ CONSENSUS MATRIX INITIALIZATION ------------------------------------------>
 
-    # Initialize consensus matrix for FedMD knowledge distillation
+    # Initialize consensus matrix for federated knowledge distillation
     # Matrix shape: (num_public_samples, num_classes) stores soft predictions
     # Round 1: Zero matrix (no consensus yet), Round 2+: Aggregated logits from previous round
     public_loader = load_public_dataset(batch_size=1, round_num=server_round, total_rounds=num_rounds)
@@ -83,7 +83,7 @@ def main(grid: Grid, context: Context) -> None:
 
     # <------------------------------------------ STRATEGY INITIALIZATION ------------------------------------------>
 
-    # Initialize FedMD strategy with weighted consensus aggregation
+    # Initialize federated learning simulation strategy with weighted consensus aggregation
     # Strategy handles: client selection, consensus aggregation, evaluation coordination
     strategy = FLEXMedStrategy(config_path=CLIENT_INFO_FILE_PATH, checkpoint_dir=MODEL_CHECKPOINT_FILE_PATH)
 

@@ -36,7 +36,6 @@ from flex_med.utils.config import (
     NUM_CLASSES,
     IMG_SIZE,
     CLIENT_INFO_FILE_PATH,
-    MODEL_SUITABILITY_SCORES,
     TRAIN_LOSS_WEIGHT,
     DISTILL_LOSS_WEIGHT,
     CONSENSUS_MOMENTUM,
@@ -303,35 +302,40 @@ def get_model_by_type(model_type: str, use_pretrained: bool = True, dropout_rate
     if model_type == 'resnet50':
         # ResNet-50: The Industry Standard (Standard residual network)
         # Higher capacity for complex morphological features in pathology
-        model = models.resnet50(weights=None)
+        weights = 'IMAGENET1K_V1' if use_pretrained else None
+        model = models.resnet50(weights=weights)
         model = add_dropout_to_classifier(model, model_type, dropout_rate)
         return model
 
     elif model_type == 'mobilenet_v2':
         # MobileNet-V2: Mobile Optimized (Lightweight architecture)
         # Represents resource-constrained clients or point-of-care devices
-        model = models.mobilenet_v2(weights=None)
+        weights = 'IMAGENET1K_V1' if use_pretrained else None
+        model = models.mobilenet_v2(weights=weights)
         model = add_dropout_to_classifier(model, model_type, dropout_rate)
         return model
 
     elif model_type == 'densenet121':
         # DenseNet-121: High Dense Connections (Efficient feature reuse)
         # Excellent at preserving subtle textural patterns in blood smears
-        model = models.densenet121(weights=None)
+        weights = 'IMAGENET1K_V1' if use_pretrained else None
+        model = models.densenet121(weights=weights)
         model = add_dropout_to_classifier(model, model_type, dropout_rate)
         return model
 
     elif model_type == 'efficientnet_b0':
         # EfficientNet-B0: Modern Efficiency Optimizer (Compound scaling)
         # SOTA balance between parameter count and feature extraction quality
-        model = models.efficientnet_b0(weights=None)
+        weights = 'IMAGENET1K_V1' if use_pretrained else None
+        model = models.efficientnet_b0(weights=weights)
         model = add_dropout_to_classifier(model, model_type, dropout_rate)
         return model
 
     elif model_type == 'resnet18':
         # ResNet-18: Lightweight ResNet variant
         # Faster training with lower memory requirements
-        model = models.resnet18(weights=None)
+        weights = 'IMAGENET1K_V1' if use_pretrained else None
+        model = models.resnet18(weights=weights)
         model = add_dropout_to_classifier(model, model_type, dropout_rate)
         return model
 
@@ -1307,6 +1311,7 @@ def extract_training_metrics_for_persistence(
         training_metrics[client_id] = {
             "distill_loss": metrics.get("distill_loss"),
             "train_loss": metrics.get("train_loss"),
+            "train_accuracy": metrics.get("train_accuracy"),  # Training accuracy for combined charts
             "val_loss": metrics.get("val_loss"),  # Added for per-round tracking
             "num-examples": metrics.get("num-examples"),
             "training_time": metrics.get("training_time"),
@@ -1370,9 +1375,26 @@ def save_global_post_fl_metrics(
             # Save post_fl metrics
             existing_metrics['global']['post_fl'] = client_metrics
 
-            # Note: Improvement calculation removed since we no longer store pre_fl metrics
-            # (pre_fl on untrained models gives meaningless ~50% baseline)
-            # Improvement is now tracked via round-over-round progression in 'rounds' array
+            # Calculate improvement from theoretical baseline (random chance for binary classification)
+            THEORETICAL_BASELINE = {
+                'accuracy': 0.5,
+                'precision': 0.5,
+                'recall': 0.5,
+                'f1_score': 0.5,
+                'loss': 0.693,  # ln(2) for random binary classifier
+                'specificity': 0.5,
+                'roc_auc': 0.5,
+                'healthy_accuracy': 0.5,
+                'leukemia_accuracy': 0.5,
+                'class_gap': 1.0,  # Max gap baseline (improvement = reduction)
+            }
+
+            improvement = {}
+            for metric, baseline in THEORETICAL_BASELINE.items():
+                if metric in client_metrics:
+                    improvement[metric] = client_metrics[metric] - baseline
+
+            existing_metrics['global']['improvement'] = improvement
 
             # Save back to database
             SUPABASE_CLIENT.from_('client_simulation_metrics').update({
@@ -1655,6 +1677,7 @@ def save_round_training_metrics(
             # Add training metrics (from local client training)
             round_entry['training'] = {
                 'train_loss': client_metrics.get('train_loss'),
+                'train_accuracy': client_metrics.get('train_accuracy'),  # Training accuracy for combined charts
                 'val_loss': client_metrics.get('val_loss'),
                 'distill_loss': client_metrics.get('distill_loss'),
                 'training_time': client_metrics.get('training_time'),
@@ -1908,6 +1931,118 @@ def clear_checkpoints(checkpoint_dir: str):
         import shutil
         shutil.rmtree(checkpoint_dir)
 
+# <------------------------------------------ EARLY STOPPING UTILITIES ------------------------------------------>
+
+def check_early_stopping(
+    current_round: int,
+    current_avg_loss: float,
+    current_avg_acc: float,
+    best_loss: float,
+    best_acc: float,
+    patience: int,
+    degradation_count: int,
+) -> Tuple[bool, float, float, int, bool]:
+    """
+    Check if early stopping criteria is met based on average validation metrics.
+    
+    Strategy: Combined metric approach using loss as primary and accuracy as secondary.
+    
+    Args:
+        current_round: Current FL round
+        current_avg_loss: Current average validation loss across clients
+        current_avg_acc: Current average validation accuracy across clients
+        best_loss: Best average validation loss seen so far
+        best_acc: Best average accuracy seen so far
+        patience: Number of rounds to wait for improvement
+        degradation_count: Current count of consecutive degradation rounds
+        
+    Returns:
+        Tuple of (should_stop, new_best_loss, new_best_acc, new_degradation_count, is_new_best)
+    """
+    is_new_best = False
+    new_best_loss = best_loss
+    new_best_acc = best_acc
+    new_degradation_count = degradation_count
+    
+    # Primary metric: validation loss (lower is better)
+    # Secondary metric: accuracy (higher is better)
+    if current_avg_loss < best_loss - 0.01:  # Significant improvement threshold
+        # New best found
+        new_best_loss = current_avg_loss
+        new_best_acc = current_avg_acc
+        new_degradation_count = 0
+        is_new_best = True
+    elif current_avg_loss > best_loss + 0.01:  # Significant degradation
+        new_degradation_count += 1
+    else:
+        # Marginal change - use accuracy as tiebreaker
+        if current_avg_acc > best_acc:
+            new_best_loss = current_avg_loss
+            new_best_acc = current_avg_acc
+            new_degradation_count = 0
+            is_new_best = True
+        # else: maintain current counts
+    
+    should_stop = new_degradation_count >= patience
+    
+    return should_stop, new_best_loss, new_best_acc, new_degradation_count, is_new_best
+
+
+def save_best_checkpoints(
+    checkpoint_dir: str,
+    best_round: int,
+    client_configs: List[Dict],
+) -> bool:
+    """
+    Copy checkpoints from the best round to a 'best_models' directory.
+    
+    Args:
+        checkpoint_dir: Base checkpoint directory
+        best_round: The round number with best performance
+        client_configs: List of client configurations
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    import shutil
+    
+    best_models_dir = os.path.join(checkpoint_dir, "best_models")
+    os.makedirs(best_models_dir, exist_ok=True)
+    
+    print(f"\n[EARLY STOPPING] Saving best models from Round {best_round}")
+    
+    success = True
+    for i, config in enumerate(client_configs):
+        client_name = config.get('client_name', f'client_{i}')
+        model_path = config.get('model_path', '')
+        
+        if model_path and os.path.exists(model_path):
+            # Copy to best_models directory
+            dest_path = os.path.join(best_models_dir, f"{client_name}_best_round_{best_round}.pt")
+            try:
+                shutil.copy2(model_path, dest_path)
+                print(f"  ✓ {client_name}: Saved to {dest_path}")
+            except Exception as e:
+                print(f"  ✗ {client_name}: Failed to save - {e}")
+                success = False
+        else:
+            print(f"  ✗ {client_name}: Model path not found at {model_path}")
+            success = False
+    
+    # Save metadata about the best round
+    metadata = {
+        'best_round': best_round,
+        'timestamp': time.time(),
+        'clients': [c.get('client_name') for c in client_configs]
+    }
+    metadata_path = os.path.join(best_models_dir, "best_round_metadata.json")
+    with open(metadata_path, 'w') as f:
+        json.dump(metadata, f, indent=2)
+    
+    print(f"  ✓ Metadata saved to {metadata_path}")
+    return success
+
+
 # <------------------------------------------ LOSS FUNCTIONS ------------------------------------------>
 
 class FocalLoss(nn.Module):
@@ -2048,10 +2183,10 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
         adaptive_state: AdaptiveTrainingState instance for dropout management
 
     Returns:
-        Tuple of (avg_train_loss, avg_val_loss, scheduler_state_dict)
+        Tuple of (avg_train_loss, avg_val_loss, train_accuracy, scheduler_state_dict)
     """
     if trainloader is None:
-        return 0.0, 0.0, None  # Skip training for clients without data
+        return 0.0, 0.0, 0.0, None  # Skip training for clients without data
 
     model.to(device)
 
@@ -2069,6 +2204,8 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
     total_val_loss = 0.0
     total_train_batches = 0
     total_val_epochs = 0
+    total_train_correct = 0  # Track correct predictions for accuracy
+    total_train_samples = 0  # Track total samples for accuracy
 
     scheduler_state = {}  # Store both schedulers' states
 
@@ -2114,12 +2251,15 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
             epoch_train_batches = 0
 
             # Training phase
+            epoch_correct = 0
+            epoch_samples = 0
             for images, labels in trainloader:
                 images = images.to(device)
                 labels = labels.to(device)
 
                 optimizer_head.zero_grad()
-                loss = criterion(model(images), labels)
+                outputs = model(images)
+                loss = criterion(outputs, labels)
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer_head.step()
@@ -2127,9 +2267,16 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
                 epoch_train_loss += loss.item()
                 epoch_train_batches += 1
 
+                # Track accuracy
+                _, predicted = torch.max(outputs.data, 1)
+                epoch_samples += labels.size(0)
+                epoch_correct += (predicted == labels).sum().item()
+
             avg_epoch_train_loss = epoch_train_loss / epoch_train_batches if epoch_train_batches > 0 else 0.0
             total_train_loss += epoch_train_loss
             total_train_batches += epoch_train_batches
+            total_train_correct += epoch_correct
+            total_train_samples += epoch_samples
 
             # Validation phase (if available)
             if has_validation:
@@ -2187,6 +2334,8 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
         for epoch in range(stage2_epochs):
             epoch_train_loss = 0.0
             epoch_train_batches = 0
+            epoch_correct = 0
+            epoch_samples = 0
 
             # Training phase
             for images, labels in trainloader:
@@ -2194,7 +2343,8 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
                 labels = labels.to(device)
 
                 optimizer_full.zero_grad()
-                loss = criterion(model(images), labels)
+                outputs = model(images)
+                loss = criterion(outputs, labels)
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer_full.step()
@@ -2202,9 +2352,16 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
                 epoch_train_loss += loss.item()
                 epoch_train_batches += 1
 
+                # Track accuracy
+                _, predicted = torch.max(outputs.data, 1)
+                epoch_samples += labels.size(0)
+                epoch_correct += (predicted == labels).sum().item()
+
             avg_epoch_train_loss = epoch_train_loss / epoch_train_batches if epoch_train_batches > 0 else 0.0
             total_train_loss += epoch_train_loss
             total_train_batches += epoch_train_batches
+            total_train_correct += epoch_correct
+            total_train_samples += epoch_samples
 
             # Validation phase (if available)
             if has_validation:
@@ -2247,7 +2404,8 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
                 labels = labels.to(device)
 
                 optimizer.zero_grad()
-                loss = criterion(model(images), labels)
+                outputs = model(images)
+                loss = criterion(outputs, labels)
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
@@ -2255,11 +2413,17 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
                 total_train_loss += loss.item()
                 total_train_batches += 1
 
+                # Track accuracy
+                _, predicted = torch.max(outputs.data, 1)
+                total_train_samples += labels.size(0)
+                total_train_correct += (predicted == labels).sum().item()
+
     # Calculate overall averages
     avg_train_loss = total_train_loss / total_train_batches if total_train_batches > 0 else 0.0
     avg_val_loss = total_val_loss / total_val_epochs if total_val_epochs > 0 else 0.0
+    train_accuracy = total_train_correct / total_train_samples if total_train_samples > 0 else 0.0
 
-    return avg_train_loss, avg_val_loss, scheduler_state
+    return avg_train_loss, avg_val_loss, train_accuracy, scheduler_state
 
 # Evaluate model on validation/test data with comprehensive metrics
 # Args: model - PyTorch model to evaluate
@@ -2526,10 +2690,10 @@ def compute_consensus(
         CLIENT-LEVEL WEIGHTING (determines weightage based on contribution by each client):
         1. Number of data points for local trainig per client (highest influence)
         2. Calculates the combined loss from both the private training loss and the distillation loss
-        3. Model architecture factor on model suitability for medical imaging
+
 
         CLASS-LEVEL WEIGHTING (compensates for class imbalance in training data):
-        4. Inverse frequency weighting: Minority class predictions get boosted via sqrt(inverse_frequency)
+        3. Inverse frequency weighting: Minority class predictions get boosted via sqrt(inverse_frequency)
            - Computes class distribution in consensus predictions
            - Applies higher weight to underrepresented class
            - Helps maintain balanced learning signal despite imbalanced client training data
@@ -2570,11 +2734,10 @@ def compute_consensus(
 
         quality_multiplier = 1.0 / (1.0 + combined_loss)
 
-        # <------------------- 3. Model Achitecture Suitability Factor -------------------->
-        architecture_factor = MODEL_SUITABILITY_SCORES.get(model_type, 1.0)
+
 
         # <------------------- Compte Final Weight -------------------->
-        final_weight = (base_weight * quality_multiplier * architecture_factor)
+        final_weight = (base_weight * quality_multiplier)
 
         weights.append(final_weight)
         weight_breakdown.append({
@@ -2586,7 +2749,7 @@ def compute_consensus(
             "combined_loss": combined_loss,
             "base_weight": base_weight,
             "quality_multiplier": quality_multiplier,
-            "architecture_factor": architecture_factor,
+
             "final_weight": final_weight,
         })
 
@@ -2740,7 +2903,14 @@ class FLEXMedStrategy(Strategy):
         self.start_round = 1
         self.last_consensus_logits = None
 
-        # SOLUTION 3: Early stopping tracking
+        # Early stopping configuration and state tracking
+        self.early_stopping_enabled = True
+        self.patience = 2  # Stop after N rounds of degradation
+        self.best_round = 0
+        self.best_avg_val_loss = float('inf')
+        self.best_avg_val_acc = 0.0
+        self.degradation_count = 0
+        self.best_checkpoints_saved = False
         self.client_history = {}  # Track per-client metrics history
 
         print(f"\n[SERVER] Initialized {self.num_clients} clients")
@@ -2878,6 +3048,45 @@ class FLEXMedStrategy(Strategy):
                     log(INFO, f"  Client {client_id}: Acc={acc:.1%}, Loss={loss:.3f}, Gap={gap:.1%} ({dataset})")
 
                 log(INFO, f"[ROUND {current_round}] Average: Acc={avg_val_acc:.1%}, Loss={avg_val_loss:.3f}, Gap={avg_class_gap:.1%}")
+
+                # --- EARLY STOPPING CHECK ---
+                if self.early_stopping_enabled and round_val_metrics:
+                    should_stop, new_best_loss, new_best_acc, new_degradation, is_new_best = \
+                        check_early_stopping(
+                            current_round=current_round,
+                            current_avg_loss=avg_val_loss,
+                            current_avg_acc=avg_val_acc,
+                            best_loss=self.best_avg_val_loss,
+                            best_acc=self.best_avg_val_acc,
+                            patience=self.patience,
+                            degradation_count=self.degradation_count,
+                        )
+                    
+                    # Update tracking state
+                    self.best_avg_val_loss = new_best_loss
+                    self.best_avg_val_acc = new_best_acc
+                    self.degradation_count = new_degradation
+                    
+                    if is_new_best:
+                        self.best_round = current_round
+                        log(INFO, f"[EARLY STOPPING] ✓ New best at Round {current_round}: "
+                                  f"Loss={new_best_loss:.3f}, Acc={new_best_acc:.1%}")
+                        
+                        # Save best models immediately when new best is found
+                        save_best_checkpoints(self.checkpoint_dir, current_round, self.client_configs)
+                        self.best_checkpoints_saved = True
+                    
+                    if should_stop:
+                        log(WARNING, f"\n{'='*70}")
+                        log(WARNING, f"[EARLY STOPPING] Training stopped at Round {current_round}")
+                        log(WARNING, f"  Best performance at Round {self.best_round}:")
+                        log(WARNING, f"    Avg Loss: {self.best_avg_val_loss:.3f}")
+                        log(WARNING, f"    Avg Accuracy: {self.best_avg_val_acc:.1%}")
+                        log(WARNING, f"  Reason: {self.patience} consecutive rounds of degradation")
+                        log(WARNING, f"{'='*70}\n")
+                        
+                        # Break out of training loop
+                        break
 
             except Exception as e:
                 log(WARNING, f"[ROUND {current_round}] Validation evaluation failed: {e}")

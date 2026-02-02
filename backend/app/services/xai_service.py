@@ -91,7 +91,7 @@ def generate_gradcam_base64(
     input_tensor: torch.Tensor,
     target_layers: list,
     class_idx: int,
-    eigen_smooth: bool = True,
+    eigen_smooth: bool = False,
     aug_smooth: bool = True,
 ) -> str:
     """
@@ -102,7 +102,7 @@ def generate_gradcam_base64(
         input_tensor: (1, 3, H, W) preprocessed tensor
         target_layers: List of target layers for CAM
         class_idx: Target class index
-        eigen_smooth: Use EigenCAM for smoother, less noisy heatmaps (default: True)
+        eigen_smooth: Use EigenCAM for smoother, less noisy heatmaps (default: False)
         aug_smooth: Average over augmentations for stability (default: True)
 
     Returns:
@@ -114,7 +114,9 @@ def generate_gradcam_base64(
     # Ensure gradients are enabled for input
     input_tensor.requires_grad_(True)
 
-    # Choose CAM method (EigenCAM is more stable with noisy gradients)
+    # Choose CAM method
+    # GradCAM is generally better for class-discriminative localization
+    # EigenCAM is better for object localization regardless of class
     CAMClass = EigenCAM if eigen_smooth else GradCAM
     cam = CAMClass(model=model, target_layers=target_layers)
 

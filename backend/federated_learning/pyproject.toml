@@ -5,9 +5,9 @@ build-backend = "hatchling.build"
 [project]
 name = "flex_med"
 version = "2.0.0"
-description = "Federated Learning for Medical Image Classification with FedMD + Adaptive Training"
+description = "Federated Learning for Medical Image Classification + Adaptive Training"
 license = "Apache-2.0"
-dependencies = [ "flwr[simulation]>=1.23.0", "flwr-datasets[vision]>=0.5.0", "torch==2.7.1", "torchvision==0.22.1", "matplotlib>=3.7.0", "pandas>=2.0.0", "numpy>=1.24.0", "pillow>=10.0.0", "scikit-learn>=1.3.0", "requests>=2.28.0",]
+dependencies = [ "flwr[simulation]>=1.23.0", "flwr-datasets[vision]>=0.5.0", "torch==2.7.1", "torchvision==0.22.1", "matplotlib>=3.7.0", "pandas>=2.0.0", "numpy>=1.24.0", "pillow>=10.0.0", "scikit-learn>=1.3.0", "requests>=2.28.0", "grad-cam>=1.4.8", "lime>=0.2.0.1", "scikit-image>=0.21.0",]
 
 [tool.flwr.app]
 publisher = "shrenik"
@@ -31,7 +31,7 @@ batch-size = 32
 lr = 0.0001
 lr-decay = 0.99
 
-# Knowledge Distillation Configuration (FedMD)
+# Knowledge Distillation Configuration
 distill-lr = 0.001
 distill-epochs = 2
 temperature = 3.0
@@ -56,7 +56,7 @@ build-backend = "hatchling.build"
 [project]
 name = "flex_med"
 version = "2.0.0"
-description = "Federated Learning for Medical Image Classification with FedMD + Adaptive Training"
+description = "Federated Learning for Medical Image Classification + Adaptive Training"
 license = "Apache-2.0"
 dependencies = [ "flwr[simulation]>=1.23.0", "flwr-datasets[vision]>=0.5.0", "torch==2.7.1", "torchvision==0.22.1", "matplotlib>=3.7.0", "pandas>=2.0.0", "numpy>=1.24.0", "pillow>=10.0.0", "scikit-learn>=1.3.0", "requests>=2.28.0",]
 
@@ -82,7 +82,7 @@ batch-size = 32
 lr = 0.0001
 lr-decay = 0.99
 
-# Knowledge Distillation Configuration (FedMD)
+# Knowledge Distillation Configuration
 distill-lr = 0.001
 distill-epochs = 2
 temperature = 3.0
