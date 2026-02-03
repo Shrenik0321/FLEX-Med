@@ -193,14 +193,9 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------------
     # Dirichlet Partitioning Configuration (Runtime Data Heterogeneity)
     # ------------------------------------------------------------------------
-    # Default alpha=1.0 provides moderate heterogeneity for 4 clients
-    # - Alpha=0.5: Too extreme (99% single class for some clients) ❌
-    # - Alpha=1.0: Moderate heterogeneity (recommended for 4 clients) ✅
-    # - Alpha=1.5: Mild heterogeneity (more balanced distributions)
-    # Override via FLEX_MED_DIRICHLET_ALPHA environment variable if needed
-    dirichlet_alpha: float = float(os.getenv("FLEX_MED_DIRICHLET_ALPHA", "1.0"))  # Changed from 0.5 to 1.0
+    dirichlet_alpha: float = float(os.getenv("FLEX_MED_DIRICHLET_ALPHA", "5.0"))
     dirichlet_seed: int = int(os.getenv("FLEX_MED_DIRICHLET_SEED", "42"))
-    dirichlet_min_partition_size: int = int(os.getenv("FLEX_MED_DIRICHLET_MIN_PARTITION_SIZE", "400"))  # Changed from 100 to 400 for 4 clients
+    dirichlet_min_partition_size: int = int(os.getenv("FLEX_MED_DIRICHLET_MIN_PARTITION_SIZE", "400"))  # Minimum samples per client partition
 
     # ------------------------------------------------------------------------
     # xAI Configuration

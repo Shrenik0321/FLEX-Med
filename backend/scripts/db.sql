@@ -9,6 +9,7 @@
 DROP TABLE IF EXISTS client_simulation_metrics CASCADE;
 DROP TABLE IF EXISTS fl_simulations CASCADE;
 DROP TABLE IF EXISTS clients CASCADE;
+DROP TABLE IF EXISTS system_config CASCADE;
 
 -- ------------------------------------------
 -- 1. ENUM TYPES (IDEMPOTENT)
@@ -109,6 +110,19 @@ CREATE INDEX idx_fl_simulations_created_at
 -- {
 --   "global": {
 --     "post_fl": { accuracy, precision, recall, f1_score, loss, ... }
+--   },
+--   "data_heterogeneity": {          -- Partition statistics from Dirichlet partitioning
+--     "total_samples": 2500,         -- Total samples in this client's partition
+--     "train_samples": 2125,         -- 85% for training
+--     "val_samples": 375,            -- 15% for validation
+--     "class_distribution": {
+--       "leukemia": 1800,            -- ALL (class 0) sample count
+--       "healthy": 700,              -- Healthy (class 1) sample count
+--       "leukemia_pct": 72.0,        -- Percentage of leukemia samples
+--       "healthy_pct": 28.0          -- Percentage of healthy samples
+--     },
+--     "imbalance_ratio": 2.57,       -- Ratio of majority to minority class
+--     "partition_id": 0              -- Client's partition ID in Dirichlet partitioner
 --   },
 --   "rounds": [
 --     {

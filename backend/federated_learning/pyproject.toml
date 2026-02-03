@@ -1,101 +1,59 @@
 [build-system]
-requires = [ "hatchling",]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
 name = "flex_med"
 version = "2.0.0"
-description = "Federated Learning for Medical Image Classification + Adaptive Training"
+description = "Federated Learning for Medical Image Classification"
 license = "Apache-2.0"
-dependencies = [ "flwr[simulation]>=1.23.0", "flwr-datasets[vision]>=0.5.0", "torch==2.7.1", "torchvision==0.22.1", "matplotlib>=3.7.0", "pandas>=2.0.0", "numpy>=1.24.0", "pillow>=10.0.0", "scikit-learn>=1.3.0", "requests>=2.28.0", "grad-cam>=1.4.8", "lime>=0.2.0.1", "scikit-image>=0.21.0",]
+dependencies = [
+    "flwr[simulation]>=1.23.0",
+    "flwr-datasets[vision]>=0.5.0",
+    "torch==2.7.1",
+    "torchvision==0.22.1",
+    "matplotlib>=3.7.0",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "pillow>=10.0.0",
+    "scikit-learn>=1.3.0",
+    "requests>=2.28.0",
+    "grad-cam>=1.4.8",
+    "lime>=0.2.0.1",
+    "scikit-image>=0.21.0",
+]
 
 [tool.flwr.app]
 publisher = "shrenik"
-
-[tool.flwr.federations]
-default = "local-simulation"
 
 [tool.flwr.app.components]
 serverapp = "flex_med.server_app:app"
 clientapp = "flex_med.client_app:app"
 
 [tool.flwr.app.config]
-# Training Configuration
 num-server-rounds = 10
 fraction-train = 1.0
 fraction-evaluate = 1.0
 local-epochs = 5
 batch-size = 32
-
-# Learning Rate Configuration
-lr = 0.0001
-lr-decay = 0.99
-
-# Knowledge Distillation Configuration
+lr = 0.001
+lr-decay = 0.95
 distill-lr = 0.001
 distill-epochs = 2
 temperature = 3.0
-
-[tool.flwr.federations.remote-federation]
-address = "<SUPERLINK-ADDRESS>:<PORT>"
-insecure = true
-
-[tool.flwr.federations.local-simulation.options]
-num-supernodes = 3
-
-[tool.flwr.app.federations.default.options]
-num-supernodes = 3
-
-[tool.hatch.build.targets.wheel]
-packages = [ ".",]
-
-[build-system]
-requires = [ "hatchling",]
-build-backend = "hatchling.build"
-
-[project]
-name = "flex_med"
-version = "2.0.0"
-description = "Federated Learning for Medical Image Classification + Adaptive Training"
-license = "Apache-2.0"
-dependencies = [ "flwr[simulation]>=1.23.0", "flwr-datasets[vision]>=0.5.0", "torch==2.7.1", "torchvision==0.22.1", "matplotlib>=3.7.0", "pandas>=2.0.0", "numpy>=1.24.0", "pillow>=10.0.0", "scikit-learn>=1.3.0", "requests>=2.28.0",]
-
-[tool.flwr.app]
-publisher = "shrenik"
 
 [tool.flwr.federations]
 default = "local-simulation"
 
-[tool.flwr.app.components]
-serverapp = "flex_med.server_app:app"
-clientapp = "flex_med.client_app:app"
-
-[tool.flwr.app.config]
-# Training Configuration
-num-server-rounds = 10
-fraction-train = 1.0
-fraction-evaluate = 1.0
-local-epochs = 5
-batch-size = 32
-
-# Learning Rate Configuration
-lr = 0.0001
-lr-decay = 0.99
-
-# Knowledge Distillation Configuration
-distill-lr = 0.001
-distill-epochs = 2
-temperature = 3.0
+[tool.flwr.federations.local-simulation.options]
+num-supernodes = 3
 
 [tool.flwr.federations.remote-federation]
 address = "<SUPERLINK-ADDRESS>:<PORT>"
 insecure = true
 
-[tool.flwr.federations.local-simulation.options]
-num-supernodes = 3
-
 [tool.flwr.app.federations.default.options]
 num-supernodes = 3
 
 [tool.hatch.build.targets.wheel]
-packages = [ ".",]
+packages = ["."]

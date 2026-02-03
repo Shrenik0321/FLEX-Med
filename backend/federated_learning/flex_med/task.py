@@ -1685,6 +1685,19 @@ def save_round_training_metrics(
                 'consensus_weight': client_metrics.get('consensus_weight')
             }
 
+            # On Round 1, save data_heterogeneity (partition statistics)
+            # This is only computed once as the partition does not change across rounds
+            if round_num == 1 and 'data_heterogeneity' not in existing_metrics:
+                try:
+                    num_partitions = len(client_configs)
+                    partition_stats = get_partition_stats(client_idx, num_partitions)
+                    existing_metrics['data_heterogeneity'] = partition_stats
+                    print(f"[Round {round_num}] Client {client_idx}: Saved data heterogeneity stats "
+                          f"(samples={partition_stats['total_samples']}, "
+                          f"imbalance={partition_stats['imbalance_ratio']}:1)")
+                except Exception as stats_err:
+                    print(f"[Round {round_num}] Client {client_idx}: Could not compute partition stats: {stats_err}")
+
             # Save back to database
             SUPABASE_CLIENT.from_('client_simulation_metrics').update({
                 'metrics': existing_metrics
@@ -1698,7 +1711,6 @@ def save_round_training_metrics(
         print(f"[Round {round_num}] Error saving training metrics: {e}")
         import traceback
         traceback.print_exc()
-
 
 def save_round_validation_metrics(
     round_num: int,
