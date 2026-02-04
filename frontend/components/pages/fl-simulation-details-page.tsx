@@ -503,10 +503,13 @@ export default function FLSimulationDetailsPage({
     // Include baseline for smart scaling
     // For bounded metrics (accuracy, precision, recall, f1): 0.5 (random chance for binary classification)
     // For loss: ln(2) ≈ 0.693 (expected cross-entropy for random binary classifier)
+    // For loss: ln(2) ≈ 0.693 (expected cross-entropy for random binary classifier)
     if (metricKey === "loss") {
       allValues.push(Math.log(2)); // ~0.693 for random binary classifier
-    } else {
+    } else if (metricKey === "accuracy" || metricKey === "precision") {
       allValues.push(0.5); // 50% random chance baseline
+    } else {
+      allValues.push(0); // Recall and F1 start at 0
     }
 
     if (selectedClient === "all") {
@@ -570,14 +573,15 @@ export default function FLSimulationDetailsPage({
       const data: any[] = [];
 
       // Round 0: Baseline before FL training
-      // - Bounded metrics (accuracy, precision, recall, f1): 0.5 (random chance for binary classification)
-      // - Loss: ln(2) ≈ 0.693 (expected cross-entropy for random binary classifier)
+      // - Accuracy, Precision: 0.5 (random chance)
+      // - Recall, F1: 0 (start from zero)
+      // - Loss: ln(2) ≈ 0.693
       data.push({
         round: 0,
         accuracy: 0.5,
         precision: 0.5,
-        recall: 0.5,
-        f1: 0.5,
+        recall: 0,
+        f1: 0,
         loss: Math.log(2), // ~0.693 for random binary classifier baseline
       });
 
@@ -626,14 +630,15 @@ export default function FLSimulationDetailsPage({
       const data: any[] = [];
 
       // Round 0: Baseline before FL training
-      // - Bounded metrics (accuracy, precision, recall, f1): 0.5 (random chance for binary classification)
-      // - Loss: ln(2) ≈ 0.693 (expected cross-entropy for random binary classifier)
+      // - Accuracy, Precision: 0.5
+      // - Recall, F1: 0
+      // - Loss: ln(2) ≈ 0.693
       data.push({
         round: 0,
         accuracy: 0.5,
         precision: 0.5,
-        recall: 0.5,
-        f1: 0.5,
+        recall: 0,
+        f1: 0,
         loss: Math.log(2), // ~0.693 for random binary classifier baseline
       });
 
@@ -1484,142 +1489,146 @@ export default function FLSimulationDetailsPage({
           </div>
 
           {/* Data Heterogeneity Section */}
-          {selectedClientMetrics.data_heterogeneity && (
-            <div className="mt-8 border-t border-slate-100 pt-8">
-              <h3 className="text-lg font-bold text-slate-900 mb-6">
-                Data Heterogeneity (Partition Statistics)
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Sample Counts */}
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                  <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">
-                    Sample Distribution
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-slate-600">
-                        Total Samples
-                      </span>
-                      <span className="text-lg font-bold text-slate-900">
-                        {selectedClientMetrics.data_heterogeneity.total_samples.toLocaleString()}
-                      </span>
+          {selectedClientMetrics.data_heterogeneity &&
+            selectedClientMetrics.data_heterogeneity.total_samples !==
+              undefined && (
+              <div className="mt-8 border-t border-slate-100 pt-8">
+                <h3 className="text-lg font-bold text-slate-900 mb-6">
+                  Data Heterogeneity (Partition Statistics)
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Sample Counts */}
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">
+                      Sample Distribution
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-slate-600">
-                        Training Set
-                      </span>
-                      <span className="text-sm font-medium text-slate-700">
-                        {selectedClientMetrics.data_heterogeneity.train_samples.toLocaleString()}{" "}
-                        (85%)
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-slate-600">
-                        Validation Set
-                      </span>
-                      <span className="text-sm font-medium text-slate-700">
-                        {selectedClientMetrics.data_heterogeneity.val_samples.toLocaleString()}{" "}
-                        (15%)
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Class Distribution */}
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                  <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">
-                    Class Distribution
-                  </div>
-                  <div className="space-y-4">
-                    {/* Leukemia */}
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
                         <span className="text-sm text-slate-600">
-                          Leukemia (ALL)
+                          Total Samples
+                        </span>
+                        <span className="text-lg font-bold text-slate-900">
+                          {selectedClientMetrics.data_heterogeneity.total_samples.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-slate-600">
+                          Training Set
                         </span>
                         <span className="text-sm font-medium text-slate-700">
-                          {selectedClientMetrics.data_heterogeneity.class_distribution.leukemia.toLocaleString()}{" "}
-                          (
-                          {selectedClientMetrics.data_heterogeneity.class_distribution.leukemia_pct.toFixed(
-                            1,
-                          )}
-                          %)
+                          {selectedClientMetrics.data_heterogeneity.train_samples.toLocaleString()}{" "}
+                          (85%)
                         </span>
                       </div>
-                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-red-500 rounded-full transition-all"
-                          style={{
-                            width: `${selectedClientMetrics.data_heterogeneity.class_distribution.leukemia_pct}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                    {/* Healthy */}
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-sm text-slate-600">Healthy</span>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-slate-600">
+                          Validation Set
+                        </span>
                         <span className="text-sm font-medium text-slate-700">
-                          {selectedClientMetrics.data_heterogeneity.class_distribution.healthy.toLocaleString()}{" "}
-                          (
-                          {selectedClientMetrics.data_heterogeneity.class_distribution.healthy_pct.toFixed(
-                            1,
-                          )}
-                          %)
+                          {selectedClientMetrics.data_heterogeneity.val_samples.toLocaleString()}{" "}
+                          (15%)
                         </span>
-                      </div>
-                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-green-500 rounded-full transition-all"
-                          style={{
-                            width: `${selectedClientMetrics.data_heterogeneity.class_distribution.healthy_pct}%`,
-                          }}
-                        />
                       </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Imbalance Indicator */}
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                  <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">
-                    Imbalance Metrics
-                  </div>
-                  <div className="flex flex-col items-center justify-center h-24">
-                    <div className="text-3xl font-bold text-slate-900">
-                      {selectedClientMetrics.data_heterogeneity.imbalance_ratio.toFixed(
-                        2,
-                      )}
-                      :1
+                  {/* Class Distribution */}
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">
+                      Class Distribution
                     </div>
-                    <div
-                      className={`mt-2 px-3 py-1 rounded-full text-xs font-medium ${
-                        selectedClientMetrics.data_heterogeneity
+                    <div className="space-y-4">
+                      {/* Leukemia */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-sm text-slate-600">
+                            Leukemia (ALL)
+                          </span>
+                          <span className="text-sm font-medium text-slate-700">
+                            {selectedClientMetrics.data_heterogeneity.class_distribution.leukemia.toLocaleString()}{" "}
+                            (
+                            {selectedClientMetrics.data_heterogeneity.class_distribution.leukemia_pct.toFixed(
+                              1,
+                            )}
+                            %)
+                          </span>
+                        </div>
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-red-500 rounded-full transition-all"
+                            style={{
+                              width: `${selectedClientMetrics.data_heterogeneity.class_distribution.leukemia_pct}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                      {/* Healthy */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-sm text-slate-600">
+                            Healthy
+                          </span>
+                          <span className="text-sm font-medium text-slate-700">
+                            {selectedClientMetrics.data_heterogeneity.class_distribution.healthy.toLocaleString()}{" "}
+                            (
+                            {selectedClientMetrics.data_heterogeneity.class_distribution.healthy_pct.toFixed(
+                              1,
+                            )}
+                            %)
+                          </span>
+                        </div>
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-green-500 rounded-full transition-all"
+                            style={{
+                              width: `${selectedClientMetrics.data_heterogeneity.class_distribution.healthy_pct}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Imbalance Indicator */}
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">
+                      Imbalance Metrics
+                    </div>
+                    <div className="flex flex-col items-center justify-center h-24">
+                      <div className="text-3xl font-bold text-slate-900">
+                        {selectedClientMetrics.data_heterogeneity.imbalance_ratio.toFixed(
+                          2,
+                        )}
+                        :1
+                      </div>
+                      <div
+                        className={`mt-2 px-3 py-1 rounded-full text-xs font-medium ${
+                          selectedClientMetrics.data_heterogeneity
+                            .imbalance_ratio <= 1.5
+                            ? "bg-green-100 text-green-700"
+                            : selectedClientMetrics.data_heterogeneity
+                                  .imbalance_ratio <= 3
+                              ? "bg-yellow-100 text-yellow-700"
+                              : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {selectedClientMetrics.data_heterogeneity
                           .imbalance_ratio <= 1.5
-                          ? "bg-green-100 text-green-700"
+                          ? "Balanced"
                           : selectedClientMetrics.data_heterogeneity
                                 .imbalance_ratio <= 3
-                            ? "bg-yellow-100 text-yellow-700"
-                            : "bg-red-100 text-red-700"
-                      }`}
-                    >
-                      {selectedClientMetrics.data_heterogeneity
-                        .imbalance_ratio <= 1.5
-                        ? "Balanced"
-                        : selectedClientMetrics.data_heterogeneity
-                              .imbalance_ratio <= 3
-                          ? "Moderate Imbalance"
-                          : "High Imbalance"}
-                    </div>
-                    <div className="text-xs text-slate-400 mt-2">
-                      Partition #
-                      {selectedClientMetrics.data_heterogeneity.partition_id}
+                            ? "Moderate Imbalance"
+                            : "High Imbalance"}
+                      </div>
+                      <div className="text-xs text-slate-400 mt-2">
+                        Partition #
+                        {selectedClientMetrics.data_heterogeneity.partition_id}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Confusion Matrix Analysis */}
           <div className="mt-8 border-t border-slate-100 pt-8">

@@ -186,7 +186,7 @@ class Settings(BaseSettings):
     # FL Model Parameters
     num_classes: int = 2
     img_size: int = 224
-    consensus_momentum: float = 0.5
+    consensus_momentum: float = 0.15  # Reduced from 0.5 to limit bad consensus propagation
     train_loss_weight: float = 0.7
     distill_loss_weight: float = 0.3
 
