@@ -467,7 +467,7 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
     if model_type is not None:
         model = apply_freeze_strategy(model, model_type, server_round, total_rounds)
 
-    criterion = FocalLoss(alpha=0.25, gamma=4.0)  # Leukemia=0.25, Healthy=0.75, Gamma=4.0 for hard negative mining
+    criterion = FocalLoss(alpha=0.25, gamma=2.0)  # Leukemia=0.25, Healthy=0.75
 
     # Only optimize parameters that require gradients (respects freeze strategy)
     optimizer = torch.optim.AdamW(
@@ -763,24 +763,21 @@ def compute_consensus(
 
     new_consensus = np.average(logits_list, axis=0, weights=normalized_weights)
 
-    # Class-based reweighting: boost minority class predictions via logit shifting
+    # Class-based reweighting: boost minority class predictions
     consensus_probs = np.exp(new_consensus) / np.sum(np.exp(new_consensus), axis=1, keepdims=True)
     predicted_classes = np.argmax(consensus_probs, axis=1)
     unique_classes, class_counts = np.unique(predicted_classes, return_counts=True)
 
     total_samples = len(predicted_classes)
     class_weights = {cls: total_samples / (len(unique_classes) * count) for cls, count in zip(unique_classes, class_counts)}
-    
-    # Normalize weights so they center around 1.0 (log(1)=0)
-    # Actually, we just need relative shifts.
-    
+    weight_sum = sum(class_weights.values())
+    class_weights = {cls: w / weight_sum for cls, w in class_weights.items()}
+
     class_weighted_consensus = new_consensus.copy()
-    # Additive bias (logit shift) is more stable than multiplicative
-    for cls, weight in class_weights.items():
-        if weight > 1.0: # Only boost minority/under-represented classes
-             # Shift logits: z' = z + scale * log(weight)
-             class_weighted_consensus[:, int(cls)] += 0.5 * np.log(weight) 
-             
+    for i in range(len(new_consensus)):
+        pred_class = predicted_classes[i]
+        if pred_class in class_weights:
+            class_weighted_consensus[i, pred_class] *= (class_weights[pred_class] ** 0.8)  # Stronger than sqrt(0.5)
     new_consensus = class_weighted_consensus
 
     class_weighting_info = {
