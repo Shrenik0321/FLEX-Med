@@ -23,6 +23,7 @@ from flex_med.utils.config import (
     MODEL_CHECKPOINT_FILE_PATH, GRAPHS_OUTPUT_DIR, NUM_CLASSES, IMG_SIZE,
     TRAIN_LOSS_WEIGHT, DISTILL_LOSS_WEIGHT, CONSENSUS_MOMENTUM,
     DIRICHLET_ALPHA, DIRICHLET_SEED, DIRICHLET_MIN_PARTITION_SIZE,
+    FOCAL_ALPHA_PER_ARCH, FOCAL_ALPHA_DEFAULT, FOCAL_GAMMA,
 )
 
 from flex_med.utils.helpers import (
@@ -464,15 +465,23 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
     model.to(device)
 
     # Apply freeze/unfreeze strategy based on current round
+    lr_multiplier = 1.0
     if model_type is not None:
-        model = apply_freeze_strategy(model, model_type, server_round, total_rounds)
+        model, lr_multiplier = apply_freeze_strategy(model, model_type, server_round, total_rounds)
 
-    criterion = FocalLoss(alpha=0.25, gamma=2.0)  # Leukemia=0.25, Healthy=0.75
+    # Apply LR multiplier (reduced in Phase 3 for "polish" fine-tuning)
+    effective_lr = lr * lr_multiplier
+
+    # Get per-architecture focal alpha (configurable in app/config.py)
+    focal_alpha = FOCAL_ALPHA_DEFAULT
+    if model_type is not None:
+        focal_alpha = FOCAL_ALPHA_PER_ARCH.get(model_type.lower(), FOCAL_ALPHA_DEFAULT)
+    criterion = FocalLoss(alpha=focal_alpha, gamma=FOCAL_GAMMA)
 
     # Only optimize parameters that require gradients (respects freeze strategy)
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()),
-        lr=lr, betas=(0.9, 0.999), weight_decay=0.01
+        lr=effective_lr, betas=(0.9, 0.999), weight_decay=0.01
     )
     has_validation = valloader is not None
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -592,7 +601,7 @@ def test(model, testloader, device, return_detailed=False):
 def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr, temperature,
                       current_round=1, total_rounds=10, adaptive=True):
     """Distill consensus knowledge into local model using KL divergence with adaptive weighting."""
-    BASE_DISTILL_WEIGHT = 0.40  # Reduced from 0.60 to prevent biased consensus override
+    BASE_DISTILL_WEIGHT = 0.40
 
     if adaptive and total_rounds > 1:
         progress = (current_round - 1) / (total_rounds - 1)
@@ -773,11 +782,38 @@ def compute_consensus(
     weight_sum = sum(class_weights.values())
     class_weights = {cls: w / weight_sum for cls, w in class_weights.items()}
 
-    class_weighted_consensus = new_consensus.copy()
-    for i in range(len(new_consensus)):
-        pred_class = predicted_classes[i]
-        if pred_class in class_weights:
-            class_weighted_consensus[i, pred_class] *= (class_weights[pred_class] ** 0.8)  # Stronger than sqrt(0.5)
+    def reweight_consensus_probs(logits: np.ndarray, weights: dict) -> np.ndarray:
+        """Reweight consensus in probability space (mathematically correct).
+        
+        Args:
+            logits: Raw logits array of shape [num_samples, num_classes]
+            weights: Dict mapping class index to weight value
+            
+        Returns:
+            Reweighted logits with proper probability scaling
+        """
+        # Stable softmax: subtract max for numerical stability
+        logits_stable = logits - np.max(logits, axis=1, keepdims=True)
+        probs = np.exp(logits_stable)
+        probs = probs / probs.sum(axis=1, keepdims=True)
+        
+        # Build weight vector for all classes
+        num_classes = probs.shape[1]
+        weight_vector = np.ones(num_classes)
+        for cls, w in weights.items():
+            if 0 <= cls < num_classes:
+                weight_vector[cls] = w
+        
+        # Apply weights to probabilities
+        probs = probs * weight_vector
+        
+        # Renormalize to valid probability distribution
+        probs = probs / probs.sum(axis=1, keepdims=True)
+        
+        # Convert back to logits (with epsilon for numerical stability)
+        return np.log(probs + 1e-10)
+
+    class_weighted_consensus = reweight_consensus_probs(new_consensus, class_weights)
     new_consensus = class_weighted_consensus
 
     class_weighting_info = {
@@ -1082,8 +1118,9 @@ class FLEXMedStrategy(Strategy):
         )
         return ArrayRecord([consensus_logits]), metrics_aggregated, training_metrics_for_persistence
 
+    # Configure the training process for each client and passes it to each client as a message
     def configure_train(self, server_round: int, arrays: Optional[ArrayRecord],
-                        config: ConfigRecord, grid: Grid) -> Iterable[Message]:
+        config: ConfigRecord, grid: Grid) -> Iterable[Message]:
         messages = []
         for node_id in grid.get_node_ids():
             msg = Message(

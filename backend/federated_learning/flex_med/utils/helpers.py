@@ -15,7 +15,8 @@ from pathlib import Path
 from torch.utils.data import WeightedRandomSampler
 
 from flex_med.utils.config import (
-    LOCAL_TRAIN_DATASET_PATH, DIRICHLET_ALPHA, DIRICHLET_SEED, DIRICHLET_MIN_PARTITION_SIZE
+    LOCAL_TRAIN_DATASET_PATH, DIRICHLET_ALPHA, DIRICHLET_SEED, DIRICHLET_MIN_PARTITION_SIZE,
+    MINORITY_BOOST,
 )
 
 # ============================================================================
@@ -88,11 +89,13 @@ def sanitize_client_paths(clients: List[Dict]) -> List[Dict]:
 # ============================================================================
 
 def get_weighted_sampler(targets):
-    """Create WeightedRandomSampler to handle class imbalance."""
-    class_counts = Counter(targets)
-    minority_boost = 0.6 # Lenient towards minority classes slightly
+    """Create WeightedRandomSampler to handle class imbalance.
 
-    class_weights = {cls: 1.0 / (count ** minority_boost) for cls, count in class_counts.items()}
+    Uses MINORITY_BOOST from config (default: 0.55).
+    Lower values = less aggressive minority upsampling.
+    """
+    class_counts = Counter(targets)
+    class_weights = {cls: 1.0 / (count ** MINORITY_BOOST) for cls, count in class_counts.items()}
     sample_weights = [class_weights[t] for t in targets]
     return WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
 
@@ -286,9 +289,9 @@ def apply_freeze_strategy(model, model_type: str, server_round: int, total_round
     Apply appropriate freeze/unfreeze strategy based on current FL round.
 
     Strategy:
-        - Rounds 1-2: Freeze backbone, train only classifier (prevent feature corruption)
-        - Rounds 3-4: Unfreeze last block + classifier (gradual fine-tuning)
-        - Rounds 5+: Unfreeze all layers (full fine-tuning)
+        - Phase 1 (Rounds 1-2): Freeze backbone, train only classifier
+        - Phase 2 (Rounds 3-7): Unfreeze last block + classifier
+        - Phase 3 (Rounds 8-10): Unfreeze all layers with REDUCED LR (polish phase)
 
     Args:
         model: PyTorch model instance
@@ -297,35 +300,38 @@ def apply_freeze_strategy(model, model_type: str, server_round: int, total_round
         total_rounds: Total number of FL rounds
 
     Returns:
-        model with appropriate layers frozen/unfrozen
+        Tuple of (model, lr_multiplier) where lr_multiplier is applied to learning rate
     """
     from flwr.common import log
     from logging import INFO
 
-    # Calculate phase thresholds (roughly 20%, 40% of training)
-    phase1_end = max(2, int(total_rounds * 0.2))
-    phase2_end = max(4, int(total_rounds * 0.4))
+    # Calculate phase thresholds
+    phase1_end = max(2, int(total_rounds * 0.2))   # 20% = rounds 1-2
+    phase2_end = max(7, int(total_rounds * 0.7))   # 70% = rounds 3-7
 
     if server_round <= phase1_end:
         # Phase 1: Classifier only
         model = freeze_backbone(model, model_type)
+        lr_multiplier = 1.0
         trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        log(INFO, f"[Freeze] Round {server_round}: Backbone FROZEN, classifier only ({trainable:,} params)")
+        log(INFO, f"[Freeze] Round {server_round}: Backbone FROZEN, classifier only ({trainable:,} params), LR x1.0")
 
     elif server_round <= phase2_end:
         # Phase 2: Last block + classifier
         model = freeze_backbone(model, model_type)
         model = unfreeze_last_block(model, model_type)
+        lr_multiplier = 1.0
         trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        log(INFO, f"[Freeze] Round {server_round}: Last block + classifier ({trainable:,} params)")
+        log(INFO, f"[Freeze] Round {server_round}: Last block + classifier ({trainable:,} params), LR x1.0")
 
     else:
-        # Phase 3: Full fine-tuning
+        # Phase 3: Full fine-tuning with REDUCED LR (polish phase)
         model = unfreeze_all(model)
+        lr_multiplier = 0.1  # 10x reduction to prevent catastrophic forgetting
         trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        log(INFO, f"[Freeze] Round {server_round}: All layers UNFROZEN ({trainable:,} params)")
+        log(INFO, f"[Freeze] Round {server_round}: All layers UNFROZEN ({trainable:,} params), LR x0.1 (polish)")
 
-    return model
+    return model, lr_multiplier
 
 
 def get_trainable_params_count(model) -> int:

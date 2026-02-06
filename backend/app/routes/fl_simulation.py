@@ -138,8 +138,7 @@ async def start_fl(
                 configs[backend_key] = user_config[frontend_key]
 
         logger.info(f"Applied user config overrides: {user_config}")
-
-    # NOTE: pyproject.toml update happens on Colab (orchestrator) side
+        
     # The notebook's /start_fl endpoint updates its local pyproject.toml
     # based on the number of clients in the request payload
 

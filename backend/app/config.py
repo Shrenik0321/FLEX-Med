@@ -190,6 +190,21 @@ class Settings(BaseSettings):
     train_loss_weight: float = 0.7
     distill_loss_weight: float = 0.3
 
+    # Per-architecture Focal Loss alpha (class 0 = Leukemia weight)
+    # Higher alpha = more weight on Leukemia loss (reduces FN)
+    focal_alpha_per_arch: Dict[str, float] = {
+        'densenet121': 0.25,
+        'mobilenet_v2': 0.60,
+        'resnet50': 0.55,
+        'resnet18': 0.55,
+        'efficientnet_b0': 0.50,
+    }
+    focal_alpha_default: float = 0.50
+    focal_gamma: float = 2.0
+
+    # WeightedRandomSampler minority boost factor
+    minority_boost: float = 0.55
+
     # ------------------------------------------------------------------------
     # Dirichlet Partitioning Configuration (Runtime Data Heterogeneity)
     # ------------------------------------------------------------------------

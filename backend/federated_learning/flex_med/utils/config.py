@@ -67,3 +67,11 @@ CONSENSUS_MOMENTUM = _settings.consensus_momentum
 DIRICHLET_ALPHA = _settings.dirichlet_alpha
 DIRICHLET_SEED = _settings.dirichlet_seed
 DIRICHLET_MIN_PARTITION_SIZE = _settings.dirichlet_min_partition_size
+
+# Per-architecture Focal Loss configuration
+FOCAL_ALPHA_PER_ARCH = _settings.focal_alpha_per_arch
+FOCAL_ALPHA_DEFAULT = _settings.focal_alpha_default
+FOCAL_GAMMA = _settings.focal_gamma
+
+# WeightedRandomSampler configuration
+MINORITY_BOOST = _settings.minority_boost
