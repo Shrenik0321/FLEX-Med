@@ -4,7 +4,12 @@ import time
 import numpy as np
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
-from flex_med.utils.config import CLIENT_INFO_FILE_PATH
+import warnings
+
+# Suppress the specific Pillow deprecation warning heavily spamming the logs
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="torchvision.transforms._functional_pil")
+warnings.filterwarnings("ignore", message=".*'mode' parameter is deprecated.*")
+from flex_med.utils.config import CLIENT_INFO_FILE_PATH, FOCAL_ALPHA_DEFAULT
 from flex_med.task import (
     get_model_by_type, get_client_by_partition_id, load_private_dataset,
     load_public_dataset, get_public_logits, distill_knowledge,
@@ -12,6 +17,7 @@ from flex_med.task import (
     get_initial_dropout_rate, add_dropout_to_classifier,
     AdaptiveTrainingState, NUM_CLASSES
 )
+from flex_med.utils.helpers import apply_freeze_strategy
 
 app = ClientApp()
 
@@ -37,7 +43,6 @@ def save_model_checkpoint(model, model_path, model_type, client_id, round_num=No
     if scheduler_state is not None:
         checkpoint['scheduler_state'] = scheduler_state
     torch.save(checkpoint, model_path)
-
 
 def load_model_for_client(partition_id: int, config_path: str = CLIENT_INFO_FILE_PATH):
     """Load client config and create model architecture."""
@@ -113,6 +118,16 @@ def train(msg: Message, context: Context):
     model = add_dropout_to_classifier(model, model_type, adaptive_state.dropout_rate)
     model.to(device)
 
+    # Apply freeze strategy before any training (distillation + private training both respect it)
+    # Apply freeze strategy before any training (distillation + private training both respect it)
+    if model_type:
+        model, _ = apply_freeze_strategy(model, model_type, server_round, total_rounds)
+        # Log freeze status with client name
+        freeze_backbone = (server_round <= total_rounds // 2) # Rough approximation for logging, logic is in helper
+        phase = "Phase 1 - Backbone FROZEN" if freeze_backbone else "Phase 2 - Fine-tuning"
+        print(f"[{display_id}] [Freeze] Round {server_round}/{total_rounds}: {phase}")
+
+
     # Phase 1: Knowledge Distillation from Server Consensus
     distill_loss = 0.0
     if "arrays" in msg.content and msg.content["arrays"]:
@@ -120,10 +135,11 @@ def train(msg: Message, context: Context):
             consensus_logits = msg.content["arrays"]["0"].numpy()
             if np.any(consensus_logits != 0):
                 print(f"[{display_id}] Phase 1: Knowledge Distillation")
-                public_loader = load_public_dataset(batch_size=32, round_num=server_round, total_rounds=total_rounds)
+                public_loader = load_public_dataset(batch_size=context.run_config["batch-size"], round_num=server_round, total_rounds=total_rounds)
                 distill_loss = distill_knowledge(
                     model=model, public_loader=public_loader, consensus_logits=consensus_logits,
-                    device=device, epochs=2, lr=0.001, temperature=3.0,
+                    device=device, epochs=context.run_config["distill-epochs"], 
+                    lr=context.run_config["distill-lr"], temperature=context.run_config["temperature"],
                     current_round=server_round, total_rounds=total_rounds, adaptive=True
                 )
                 print(f"[{display_id}] Distillation Loss: {distill_loss:.4f}")
@@ -137,9 +153,25 @@ def train(msg: Message, context: Context):
     base_lr = msg.content["config"]["lr"]
     decayed_lr = base_lr * (lr_decay_factor ** (server_round - 1))
 
-    trainloader, valloader = load_private_dataset(partition_id, num_partitions, batch_size=64)
+    trainloader, valloader, class_counts = load_private_dataset(partition_id, num_partitions, batch_size=context.run_config["batch-size"])
     if trainloader is None:
         raise ValueError(f"[{display_id}] No training data available")
+
+    # Get client name for better logging
+    client_name = f"Client_{partition_id}"
+    try:
+        if 'client_config' in locals() and 'client_name' in client_config:
+             client_name = client_config['client_name']
+    except Exception:
+         pass
+
+    # Focal alpha = 0.5 (neutral). Class balance is handled by WeightedRandomSampler.
+    # Gamma=2.0 still focuses on hard examples, which is complementary to the sampler.
+    n_leukemia = class_counts.get(0, 0)
+    n_healthy = class_counts.get(1, 0)
+    focal_alpha = FOCAL_ALPHA_DEFAULT
+
+    print(f"[{display_id} | {client_name}] Focal Alpha: {focal_alpha:.4f} (L:{n_leukemia}, H:{n_healthy})")
 
     dataset_len = len(trainloader.dataset)
 
@@ -148,7 +180,8 @@ def train(msg: Message, context: Context):
         model=model, trainloader=trainloader, epochs=context.run_config["local-epochs"],
         lr=decayed_lr, device=device, model_type=model_type,
         valloader=valloader, adaptive_state=adaptive_state,
-        server_round=server_round, total_rounds=total_rounds
+        server_round=server_round, total_rounds=total_rounds,
+        focal_alpha=focal_alpha
     )
     training_time = time.time() - start_time
 
@@ -172,7 +205,7 @@ def train(msg: Message, context: Context):
         print(f"[{display_id}] Save failed: {e}")
 
     # Generate public logits for aggregation
-    public_loader = load_public_dataset(batch_size=32, round_num=server_round, total_rounds=total_rounds)
+    public_loader = load_public_dataset(batch_size=context.run_config["batch-size"], round_num=server_round, total_rounds=total_rounds)
     public_logits = get_public_logits(model, public_loader, device)
 
     print(f"[{display_id}] Round {server_round} Complete\n")
@@ -220,7 +253,7 @@ def evaluate(msg: Message, context: Context):
 
     model.to(device)
 
-    _, valloader = load_private_dataset(partition_id, num_partitions, batch_size=64)
+    _, valloader, _ = load_private_dataset(partition_id, num_partitions, batch_size=context.run_config["batch-size"])
     if valloader is None:
         raise ValueError(f"[{display_id}] No validation data available")
 

@@ -45,7 +45,12 @@ def main(grid: Grid, context: Context) -> None:
         initial_consensus = np.zeros((num_samples, NUM_CLASSES), dtype=np.float32)
 
     # Initialize strategy and execute FL
-    strategy = FLEXMedStrategy(config_path=CLIENT_INFO_FILE_PATH, checkpoint_dir=MODEL_CHECKPOINT_FILE_PATH)
+    batch_size = context.run_config.get("batch-size", 32)
+    strategy = FLEXMedStrategy(
+        config_path=CLIENT_INFO_FILE_PATH, 
+        checkpoint_dir=MODEL_CHECKPOINT_FILE_PATH,
+        batch_size=batch_size
+    )
 
     print(f"\n{'='*60}")
     print(f"[SERVER] Executing Federated Learning")

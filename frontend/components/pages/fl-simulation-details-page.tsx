@@ -11,11 +11,12 @@ import {
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
   Title,
   Tooltip as ChartTooltip,
   Legend as ChartLegend,
 } from "chart.js";
-import { Line } from "react-chartjs-2";
+import { Line, Bar } from "react-chartjs-2";
 import {
   Select,
   SelectContent,
@@ -23,19 +24,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import EvalCard from "@/components/ui/eval-card";
 import { Loading } from "../ui/loading";
 
-// Register Chart.js components
 ChartJS.register(
   CategoryScale,
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
   Title,
   ChartTooltip,
   ChartLegend,
 );
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface FLSimulationDetailsPageProps {
   simulationId: number;
@@ -52,7 +56,6 @@ interface Client {
 
 interface ClientMetrics {
   global: {
-    // pre_fl removed - use theoretical baseline (0.5 for accuracy, ln(2) for loss)
     post_fl: {
       loss: number;
       accuracy: number;
@@ -100,7 +103,7 @@ interface ClientMetrics {
     round: number;
     training?: {
       train_loss: number;
-      train_accuracy: number; // Training accuracy for combined charts
+      train_accuracy: number;
       val_loss?: number;
       distill_loss?: number;
       training_time?: number;
@@ -128,265 +131,245 @@ interface ConfusionMatrix {
   TN: number;
 }
 
-// Color palette for different clients
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
 const CLIENT_COLORS = [
-  "#B80028", // Primary red
-  "#3b82f6", // Blue
-  "#10b981", // Green
-  "#f59e0b", // Orange
-  "#8b5cf6", // Purple
-  "#ec4899", // Pink
-  "#14b8a6", // Teal
-  "#f97316", // Orange-red
+  "#B80028",
+  "#3b82f6",
+  "#10b981",
+  "#f59e0b",
+  "#8b5cf6",
+  "#ec4899",
+  "#14b8a6",
+  "#f97316",
 ];
 
-/**
- * CONFUSION MATRIX COMPONENT
- * ==========================
- *
- * Renders a 2x2 confusion matrix with TP, FN, FP, TN values.
- * Similar to the Python implementation in fl_evaluation.py.
- */
-interface ConfusionMatrixCardProps {
-  title: string;
-  confusionMatrix?: ConfusionMatrix;
-  accuracy?: number;
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function smartYLimit(
+  values: number[],
+  padding: number = 0.15,
+  allowNegative: boolean = false,
+): { min: number; max: number } {
+  const valid = (values ?? []).filter((v) => v != null && !isNaN(v));
+  if (valid.length === 0) return { min: 0, max: 1 };
+
+  const lo = Math.min(...valid);
+  const hi = Math.max(...valid);
+  const range = hi - lo;
+
+  if (range < 0.01) {
+    const c = (hi + lo) / 2;
+    return {
+      min: allowNegative ? c - 0.01 : Math.max(0, c - 0.01),
+      max: c + 0.01,
+    };
+  }
+
+  const pad = range * padding;
+  return {
+    min: allowNegative ? lo - pad : Math.max(0, lo - pad),
+    max: hi + pad,
+  };
 }
 
+function gapBadge(gap: number) {
+  if (gap <= 0.1)
+    return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (gap <= 0.2)
+    return "bg-amber-50 text-amber-700 border-amber-200";
+  return "bg-red-50 text-red-700 border-red-200";
+}
+
+function gapLabel(gap: number) {
+  if (gap <= 0.1) return "Balanced";
+  if (gap <= 0.2) return "Moderate";
+  return "High Gap";
+}
+
+function pct(v: number | undefined) {
+  return v != null ? `${(v * 100).toFixed(1)}%` : "—";
+}
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
 function ConfusionMatrixCard({
-  title,
   confusionMatrix,
   accuracy,
-}: ConfusionMatrixCardProps) {
+}: {
+  confusionMatrix?: ConfusionMatrix;
+  accuracy?: number;
+}) {
   if (!confusionMatrix) {
     return (
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-        <h3 className="text-lg font-semibold text-slate-900 mb-4">{title}</h3>
-        <div className="flex items-center justify-center h-48 text-slate-400">
-          No confusion matrix data available
-        </div>
+      <div className="flex items-center justify-center h-48 text-slate-400 text-sm">
+        No confusion matrix data
       </div>
     );
   }
 
   const { TP = 0, FN = 0, FP = 0, TN = 0 } = confusionMatrix;
   const maxVal = Math.max(TP, FN, FP, TN);
-
-  // Calculate color intensity based on value
-  const getColorIntensity = (value: number) => {
-    if (maxVal === 0) return 0;
-    return (value / maxVal) * 0.8 + 0.2; // 0.2 to 1.0 range
+  const intensity = (v: number) =>
+    maxVal === 0 ? 0 : (v / maxVal) * 0.8 + 0.2;
+  const bg = (v: number) => {
+    const l = 100 - intensity(v) * 50;
+    return `hsl(347, 91%, ${l}%)`;
   };
+  const fg = (v: number) =>
+    intensity(v) > 0.6 ? "text-white" : "text-slate-900";
 
-  const getCellColor = (value: number) => {
-    const intensity = getColorIntensity(value);
-    const lightness = 100 - intensity * 50; // 50% to 100% lightness
-    return `hsl(347, 91%, ${lightness}%)`;
-  };
-
-  const getTextColor = (value: number) => {
-    const intensity = getColorIntensity(value);
-    return intensity > 0.6 ? "text-white" : "text-slate-900";
-  };
+  const Cell = ({
+    value,
+    label,
+  }: {
+    value: number;
+    label: string;
+  }) => (
+    <div
+      className={`h-20 flex flex-col items-center justify-center rounded-lg border border-slate-200 ${fg(value)}`}
+      style={{ backgroundColor: bg(value) }}
+    >
+      <span className="text-2xl font-bold">{value}</span>
+      <span className="text-[10px] font-medium opacity-80">{label}</span>
+    </div>
+  );
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-      <h3 className="text-lg font-semibold text-slate-900 mb-4">{title}</h3>
+    <div>
+      {/* Column labels */}
+      <div className="grid grid-cols-2 gap-2 mb-1.5 ml-24">
+        <div className="text-center text-xs font-medium text-slate-500">
+          Pred Leukemia
+        </div>
+        <div className="text-center text-xs font-medium text-slate-500">
+          Pred Healthy
+        </div>
+      </div>
 
-      {/* Confusion Matrix Grid */}
-      <div className="relative">
-        {/* Column Labels */}
-        <div className="grid grid-cols-2 gap-2 mb-2 ml-32">
-          <div className="text-center text-sm font-medium text-slate-600">
-            Predicted
+      <div className="flex gap-2">
+        {/* Row labels */}
+        <div className="flex flex-col gap-2 justify-center w-20">
+          <div className="h-20 flex items-center justify-end pr-2 text-xs font-medium text-slate-500 text-right leading-tight">
+            Actual
             <br />
             Leukemia
           </div>
-          <div className="text-center text-sm font-medium text-slate-600">
-            Predicted
+          <div className="h-20 flex items-center justify-end pr-2 text-xs font-medium text-slate-500 text-right leading-tight">
+            Actual
             <br />
             Healthy
           </div>
         </div>
 
-        {/* Matrix with Row Labels */}
-        <div className="flex gap-2">
-          {/* Row Labels */}
-          <div className="flex flex-col gap-2 justify-center w-28">
-            <div className="h-24 flex items-center justify-end pr-3 text-sm font-medium text-slate-600 text-right">
-              Actual
-              <br />
-              Leukemia
-            </div>
-            <div className="h-24 flex items-center justify-end pr-3 text-sm font-medium text-slate-600 text-right">
-              Actual
-              <br />
-              Healthy
-            </div>
-          </div>
-
-          {/* Matrix Cells */}
-          <div className="grid grid-cols-2 gap-2 flex-1">
-            {/* TP */}
-            <div
-              className={`h-24 flex flex-col items-center justify-center rounded-lg border border-slate-300 ${getTextColor(TP)}`}
-              style={{ backgroundColor: getCellColor(TP) }}
-            >
-              <div className="text-3xl font-bold">{TP}</div>
-              <div className="text-xs font-medium opacity-80">
-                True Positive
-              </div>
-            </div>
-
-            {/* FN */}
-            <div
-              className={`h-24 flex flex-col items-center justify-center rounded-lg border border-slate-300 ${getTextColor(FN)}`}
-              style={{ backgroundColor: getCellColor(FN) }}
-            >
-              <div className="text-3xl font-bold">{FN}</div>
-              <div className="text-xs font-medium opacity-80">
-                False Negative
-              </div>
-            </div>
-
-            {/* FP */}
-            <div
-              className={`h-24 flex flex-col items-center justify-center rounded-lg border border-slate-300 ${getTextColor(FP)}`}
-              style={{ backgroundColor: getCellColor(FP) }}
-            >
-              <div className="text-3xl font-bold">{FP}</div>
-              <div className="text-xs font-medium opacity-80">
-                False Positive
-              </div>
-            </div>
-
-            {/* TN */}
-            <div
-              className={`h-24 flex flex-col items-center justify-center rounded-lg border border-slate-300 ${getTextColor(TN)}`}
-              style={{ backgroundColor: getCellColor(TN) }}
-            >
-              <div className="text-3xl font-bold">{TN}</div>
-              <div className="text-xs font-medium opacity-80">
-                True Negative
-              </div>
-            </div>
-          </div>
+        <div className="grid grid-cols-2 gap-2 flex-1">
+          <Cell value={TP} label="True Positive" />
+          <Cell value={FN} label="False Negative" />
+          <Cell value={FP} label="False Positive" />
+          <Cell value={TN} label="True Negative" />
         </div>
-
-        {/* Accuracy Display */}
-        {accuracy !== undefined && (
-          <div className="mt-4 text-center">
-            <span className="text-sm font-medium text-slate-600">
-              Accuracy:{" "}
-              <span className="text-slate-900 font-bold">
-                {(accuracy * 100).toFixed(1)}%
-              </span>
-            </span>
-          </div>
-        )}
       </div>
+
+      {accuracy != null && (
+        <div className="mt-3 text-center text-sm text-slate-500">
+          Accuracy:{" "}
+          <span className="font-semibold text-slate-900">{pct(accuracy)}</span>
+        </div>
+      )}
     </div>
   );
 }
 
-/**
- * SMART Y-AXIS SCALING IMPLEMENTATION
- * ====================================
- *
- * This implementation mirrors the Python fl_evaluation.py smart scaling logic:
- *
- * Key Features:
- * 1. Dynamic range adjustment based on actual data values
- * 2. 15% padding for visual clarity (configurable)
- * 3. Metric-specific optimization:
- *    - Bounded metrics (accuracy, precision, recall, f1): 0-1 range with intelligent scaling
- *    - Unbounded metrics (loss): Open range with padding
- * 4. Minimum range enforcement to prevent flat graphs
- * 5. Pre-FL baseline included as Round 0 (matches Python's extract_validation_series)
- *
- * Changes from original implementation:
- * - Fixed round labeling: Now shows "Round 0, Round 1, ..." instead of "Round -1, Round 0, ..."
- * - Added Pre-FL baseline as Round 0 for all metrics
- * - Replaced fixed y-axis (0-1) with smart dynamic scaling
- * - Per-metric chart options instead of one-size-fits-all
- *
- * Similar to Weights & Biases auto-scaling behavior.
- */
-
-// Smart y-axis scaling function (based on fl_evaluation.py)
-function smartYLimit(
-  values: number[],
-  metricType: "bounded" | "unbounded",
-  padding: number = 0.15,
-): { min: number; max: number } {
-  if (!values || values.length === 0) {
-    return { min: 0, max: 1 };
-  }
-
-  // Filter out null/undefined/NaN values
-  const validValues = values.filter((v) => v != null && !isNaN(v));
-  if (validValues.length === 0) {
-    return { min: 0, max: 1 };
-  }
-
-  const minVal = Math.min(...validValues);
-  const maxVal = Math.max(...validValues);
-  const valueRange = maxVal - minVal;
-
-  if (metricType === "bounded") {
-    // For metrics bounded between 0 and 1 (accuracy, precision, recall, f1)
-
-    // If range is very small, ensure minimum visibility
-    if (valueRange < 0.05) {
-      const center = (maxVal + minVal) / 2;
-      const yMin = Math.max(0, center - 0.05);
-      const yMax = Math.min(1.0, center + 0.05);
-      return { min: yMin, max: yMax };
-    }
-
-    // Add padding to the range
-    const padAmount = valueRange * padding;
-
-    // For high values (>0.6), we can start higher than 0
-    let yMin: number;
-    if (minVal > 0.6) {
-      yMin = Math.max(0, minVal - padAmount);
-    } else if (minVal > 0.3) {
-      yMin = Math.max(0, minVal - padAmount * 1.5);
-    } else {
-      yMin = 0;
-    }
-
-    // Cap at 1.0 but add padding
-    const yMax = Math.min(1.0, maxVal + padAmount);
-
-    // Ensure we have at least 10% range for clarity
-    if (yMax - yMin < 0.1) {
-      const center = (yMax + yMin) / 2;
-      return {
-        min: Math.max(0, center - 0.05),
-        max: Math.min(1.0, center + 0.05),
-      };
-    }
-
-    return { min: yMin, max: yMax };
-  } else {
-    // For unbounded metrics (loss)
-    if (valueRange < 0.01) {
-      const center = (maxVal + minVal) / 2;
-      return {
-        min: Math.max(0, center - 0.01),
-        max: center + 0.01,
-      };
-    }
-
-    const padAmount = valueRange * padding;
-    return {
-      min: Math.max(0, minVal - padAmount),
-      max: maxVal + padAmount,
-    };
-  }
+function MetricCard({
+  label,
+  value,
+  sub,
+  accent,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  accent?: string;
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-5">
+      <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+        {label}
+      </div>
+      <div className={`text-2xl font-bold ${accent ?? "text-slate-900"}`}>
+        {value}
+      </div>
+      {sub && (
+        <div className="text-xs text-slate-400 mt-1 font-medium">{sub}</div>
+      )}
+    </div>
+  );
 }
+
+// ---------------------------------------------------------------------------
+// Chart option builder
+// ---------------------------------------------------------------------------
+
+function makeLineOptions(
+  limits: { min: number; max: number },
+  isPercentage: boolean = false,
+) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: "index" as const, intersect: false },
+    plugins: {
+      legend: {
+        display: true,
+        position: "top" as const,
+        labels: { usePointStyle: true, padding: 16, font: { size: 11 } },
+      },
+      tooltip: {
+        backgroundColor: "rgba(255,255,255,0.95)",
+        titleColor: "#1e293b",
+        bodyColor: "#1e293b",
+        borderColor: "#e2e8f0",
+        borderWidth: 1,
+        padding: 10,
+        callbacks: {
+          label: (ctx: any) => {
+            const v = ctx.raw;
+            if (v == null) return "";
+            return isPercentage
+              ? `${ctx.dataset.label}: ${(v * 100).toFixed(1)}%`
+              : `${ctx.dataset.label}: ${v.toFixed(4)}`;
+          },
+        },
+      },
+    },
+    scales: {
+      y: {
+        min: limits.min,
+        max: limits.max,
+        grid: { color: "rgba(0,0,0,0.04)" },
+        ticks: {
+          font: { size: 11 },
+          callback: (v: any) =>
+            isPercentage ? `${(Number(v) * 100).toFixed(0)}%` : Number(v).toFixed(3),
+        },
+      },
+      x: {
+        grid: { color: "rgba(0,0,0,0.04)" },
+        ticks: { font: { size: 11 } },
+      },
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
 
 export default function FLSimulationDetailsPage({
   simulationId,
@@ -399,686 +382,422 @@ export default function FLSimulationDetailsPage({
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Fetch simulation and client data once
+  // ---- Fetch data ----
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
         setLoadError(null);
 
-        // Fetch simulation details
-        const simResponse = await fetch(
+        const simRes = await fetch(
           `${API_BASE_PATH}/fl_simulations/${simulationId}`,
         );
-        if (!simResponse.ok) throw new Error("Failed to fetch simulation");
-
-        const simData: FLSimulation = await simResponse.json();
+        if (!simRes.ok) throw new Error("Failed to fetch simulation");
+        const simData: FLSimulation = await simRes.json();
         setSimulation(simData);
 
-        // Only fetch client metrics if simulation is completed
         if (simData.status === "completed") {
-          await fetchClientMetrics();
+          const mRes = await fetch(
+            `${API_BASE_PATH}/client-simulation-metrics/simulation/${simulationId}`,
+          );
+          if (!mRes.ok) throw new Error("Failed to fetch client metrics");
+          const mData = await mRes.json();
+          setClients(
+            mData.map((r: any) => ({
+              id: r.client_id,
+              client_name: r.clients?.client_name || `Client ${r.client_id}`,
+              model_type: r.clients?.model_type || "unknown",
+              metrics: JSON.stringify(r.metrics),
+            })),
+          );
         }
 
         setIsLoading(false);
-      } catch (error) {
-        console.error("Error loading simulation:", error);
+      } catch (err) {
+        console.error(err);
         setLoadError("Failed to load simulation data");
         toast.error("Failed to load simulation data");
         setIsLoading(false);
       }
     };
-
-    const fetchClientMetrics = async () => {
-      try {
-        // Fetch client metrics from client_simulation_metrics table
-        const metricsResponse = await fetch(
-          `${API_BASE_PATH}/client-simulation-metrics/simulation/${simulationId}`,
-        );
-
-        if (!metricsResponse.ok) {
-          throw new Error("Failed to fetch client metrics");
-        }
-
-        const clientMetricsData = await metricsResponse.json();
-
-        // Transform data to match Client interface
-        const clientsData: Client[] = clientMetricsData.map((record: any) => ({
-          id: record.client_id,
-          client_name:
-            record.clients?.client_name || `Client ${record.client_id}`,
-          model_type: record.clients?.model_type || "unknown",
-          metrics: JSON.stringify(record.metrics),
-        }));
-
-        setClients(clientsData);
-      } catch (error) {
-        console.error("Error loading client metrics:", error);
-        toast.error("Failed to load client metrics");
-      }
-    };
-
     fetchData();
   }, [simulationId]);
 
-  // Parse simulation metrics
-  const simulationMetrics = simulation
-    ? parseMetrics(simulation.aggregate_metrics)
-    : null;
-
-  // Debug logging (can be removed in production)
-  useEffect(() => {
-    if (simulation) {
-      console.log("Simulation status:", simulation.status);
-      console.log("Raw aggregate_metrics:", simulation.aggregate_metrics);
-      console.log("Parsed simulationMetrics:", simulationMetrics);
-    }
-  }, [simulation, simulationMetrics]);
-
-  // (Conditional rendering moved to bottom to fix Rules of Hooks - see below)
-
-  // If we reach here, simulation is completed - continue with existing rendering logic
-  // Parse simulation metrics (already done above)
-
-  // Continue with the rest of the component for completed simulations...
-
-  // Parse client metrics
-  // Parse client metrics
-  const clientMetricsMap = new Map<number, ClientMetrics>();
-  clients.forEach((client) => {
-    try {
-      const metrics = JSON.parse(client.metrics) as ClientMetrics;
-      clientMetricsMap.set(client.id, metrics);
-    } catch (e) {
-      console.error(`Failed to parse metrics for client ${client.id}`);
-    }
-  });
-
-  // Helper function to collect all values for a metric (for smart scaling)
-  const collectAllValues = (
-    metricKey: "loss" | "accuracy" | "precision" | "recall" | "f1_score",
-  ): number[] => {
-    const allValues: number[] = [];
-
-    // Include baseline for smart scaling
-    // For bounded metrics (accuracy, precision, recall, f1): 0.5 (random chance for binary classification)
-    // For loss: ln(2) ≈ 0.693 (expected cross-entropy for random binary classifier)
-    // For loss: ln(2) ≈ 0.693 (expected cross-entropy for random binary classifier)
-    if (metricKey === "loss") {
-      allValues.push(Math.log(2)); // ~0.693 for random binary classifier
-    } else if (metricKey === "accuracy" || metricKey === "precision") {
-      allValues.push(0.5); // 50% random chance baseline
-    } else {
-      allValues.push(0); // Recall and F1 start at 0
-    }
-
-    if (selectedClient === "all") {
-      // Collect from all clients
-      clients.forEach((client) => {
-        const metrics = clientMetricsMap.get(client.id);
-        if (metrics) {
-          // Include validation rounds
-          metrics.rounds?.forEach((round) => {
-            const value = round.validation?.[metricKey];
-            if (value != null) {
-              allValues.push(value as number);
-            }
-          });
-
-          // Include post-FL
-          const postFl = metrics.global?.post_fl?.[metricKey];
-          if (postFl != null) {
-            allValues.push(postFl as number);
-          }
-        }
-      });
-    } else {
-      // Collect from selected client
-      const clientId = parseInt(selectedClient);
-      const metrics = clientMetricsMap.get(clientId);
-      if (metrics) {
-        // Include validation rounds
-        metrics.rounds?.forEach((round) => {
-          const value = round.validation?.[metricKey];
-          if (value != null) {
-            allValues.push(value as number);
-          }
-        });
-
-        const postFl = metrics.global?.post_fl?.[metricKey];
-        if (postFl != null) {
-          allValues.push(postFl as number);
-        }
-      }
-    }
-
-    return allValues;
-  };
-
-  // Prepare data for charts (includes Round 0 at 0.50 baseline - random chance for binary classification)
-  const prepareChartData = () => {
-    if (selectedClient === "all") {
-      // Calculate averaged metrics across all clients per round
-      if (clients.length === 0) return [];
-
-      // Find max rounds across all clients
-      let maxRounds = 0;
-      clients.forEach((client) => {
-        const metrics = clientMetricsMap.get(client.id);
-        if (metrics?.rounds) {
-          maxRounds = Math.max(maxRounds, metrics.rounds.length);
-        }
-      });
-
-      const data: any[] = [];
-
-      // Round 0: Baseline before FL training
-      // - Accuracy, Precision: 0.5 (random chance)
-      // - Recall, F1: 0 (start from zero)
-      // - Loss: ln(2) ≈ 0.693
-      data.push({
-        round: 0,
-        accuracy: 0.5,
-        precision: 0.5,
-        recall: 0,
-        f1: 0,
-        loss: Math.log(2), // ~0.693 for random binary classifier baseline
-      });
-
-      // Calculate averages for each round
-      for (let roundNum = 1; roundNum <= maxRounds; roundNum++) {
-        let sumAccuracy = 0,
-          sumLoss = 0,
-          sumPrecision = 0,
-          sumRecall = 0,
-          sumF1 = 0;
-        let count = 0;
-
-        clients.forEach((client) => {
-          const metrics = clientMetricsMap.get(client.id);
-          const roundData = metrics?.rounds?.find((r) => r.round === roundNum);
-
-          if (roundData?.validation) {
-            sumAccuracy += roundData.validation.accuracy || 0;
-            sumLoss += roundData.validation.loss || 0;
-            sumPrecision += roundData.validation.precision || 0;
-            sumRecall += roundData.validation.recall || 0;
-            sumF1 += roundData.validation.f1_score || 0;
-            count++;
-          }
-        });
-
-        if (count > 0) {
-          data.push({
-            round: roundNum,
-            accuracy: sumAccuracy / count,
-            precision: sumPrecision / count,
-            recall: sumRecall / count,
-            f1: sumF1 / count,
-            loss: sumLoss / count,
-          });
-        }
-      }
-
-      return data;
-    } else {
-      // Show individual client data
-      const clientId = parseInt(selectedClient);
-      const clientMetrics = clientMetricsMap.get(clientId);
-      if (!clientMetrics) return [];
-
-      const data: any[] = [];
-
-      // Round 0: Baseline before FL training
-      // - Accuracy, Precision: 0.5
-      // - Recall, F1: 0
-      // - Loss: ln(2) ≈ 0.693
-      data.push({
-        round: 0,
-        accuracy: 0.5,
-        precision: 0.5,
-        recall: 0,
-        f1: 0,
-        loss: Math.log(2), // ~0.693 for random binary classifier baseline
-      });
-
-      // Add validation rounds (starting from Round 1)
-      clientMetrics.rounds?.forEach((round) => {
-        const entry: any = {
-          round: round.round,
-        };
-
-        // Validation evaluation metrics
-        if (round.validation) {
-          entry.accuracy = round.validation.accuracy;
-          entry.precision = round.validation.precision;
-          entry.recall = round.validation.recall;
-          entry.f1 = round.validation.f1_score;
-          entry.loss = round.validation.loss;
-        }
-
-        data.push(entry);
-      });
-
-      return data;
-    }
-  };
-
-  const chartData = prepareChartData();
-
-  // Collect all values for smart scaling
-  const allAccuracyValues = collectAllValues("accuracy");
-  const allPrecisionValues = collectAllValues("precision");
-  const allRecallValues = collectAllValues("recall");
-  const allF1Values = collectAllValues("f1_score");
-  const allLossValues = collectAllValues("loss");
-
-  // Calculate smart y-axis limits
-  const accuracyLimits = smartYLimit(allAccuracyValues, "bounded");
-  const precisionLimits = smartYLimit(allPrecisionValues, "bounded");
-  const recallLimits = smartYLimit(allRecallValues, "bounded");
-  const f1Limits = smartYLimit(allF1Values, "bounded");
-  const lossLimits = smartYLimit(allLossValues, "unbounded");
-
-  // Calculate improvement values from baseline (Round 0 = 0.5)
-  const allImprovementValues: number[] = [];
-  const baselineAccuracy = 0.5; // Random chance baseline
-  chartData?.forEach((d: any) => {
-    const val = d.accuracy;
-    if (typeof val === "number") {
-      allImprovementValues.push(val - baselineAccuracy);
-    }
-  });
-  const improvementLimits = smartYLimit(allImprovementValues, "unbounded", 0.1);
-
-  // Calculate round-to-round delta values for smart scaling
-  const allRoundDeltaValues: number[] = [];
-  if (chartData) {
-    chartData.forEach((d: any, index: number) => {
-      const currentAcc = d.accuracy;
-      if (typeof currentAcc !== "number") return;
-
-      if (index === 0) {
-        // Round 0: baseline, delta is 0
-        allRoundDeltaValues.push(0);
-      } else {
-        // Round N vs Round N-1
-        const prevAcc = chartData[index - 1].accuracy;
-        if (typeof prevAcc === "number") {
-          allRoundDeltaValues.push(currentAcc - prevAcc);
-        }
+  // ---- Parse client metrics ----
+  const clientMetricsMap = useMemo(() => {
+    const map = new Map<number, ClientMetrics>();
+    clients.forEach((c) => {
+      try {
+        map.set(c.id, JSON.parse(c.metrics) as ClientMetrics);
+      } catch {
+        /* skip */
       }
     });
-  }
+    return map;
+  }, [clients]);
 
-  // Calculate limits allowing negative values (for deltas)
-  const roundDeltaLimits = (() => {
-    if (allRoundDeltaValues.length === 0) {
-      return { min: -0.1, max: 0.1 };
-    }
+  // ---- Training convergence data (multi-client loss + consensus weights) ----
+  const maxRounds = useMemo(() => {
+    let m = 0;
+    clientMetricsMap.forEach((cm) => {
+      if (cm.rounds) m = Math.max(m, cm.rounds.length);
+    });
+    return m;
+  }, [clientMetricsMap]);
 
-    const minVal = Math.min(...allRoundDeltaValues);
-    const maxVal = Math.max(...allRoundDeltaValues);
-    const valueRange = maxVal - minVal;
+  const roundLabels = useMemo(
+    () => Array.from({ length: maxRounds }, (_, i) => `${i + 1}`),
+    [maxRounds],
+  );
 
-    if (valueRange < 0.01) {
-      const center = (maxVal + minVal) / 2;
+  // Loss chart
+  const lossChartData = useMemo(() => {
+    if (selectedClient === "all") {
+      const avgData = roundLabels.map((_, ri) => {
+        const vals: number[] = [];
+        clients.forEach((c) => {
+          const v = clientMetricsMap.get(c.id)?.rounds?.[ri]?.training?.val_loss;
+          if (v != null) vals.push(v);
+        });
+        return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+      });
       return {
-        min: center - 0.05,
-        max: center + 0.05,
+        labels: roundLabels,
+        datasets: [
+          {
+            label: "Avg Validation Loss",
+            data: avgData,
+            borderColor: CLIENT_COLORS[0],
+            backgroundColor: "rgba(184, 0, 40, 0.08)",
+            tension: 0.3,
+            pointRadius: 4,
+            borderWidth: 2.5,
+            fill: true,
+            spanGaps: true,
+          },
+        ],
+      };
+    } else {
+      const cm = clientMetricsMap.get(parseInt(selectedClient));
+      const rounds = cm?.rounds ?? [];
+      const labels = rounds.map((r) => `${r.round}`);
+      return {
+        labels,
+        datasets: [
+          {
+            label: "Train Loss",
+            data: rounds.map((r) => r.training?.train_loss ?? null),
+            borderColor: CLIENT_COLORS[0],
+            backgroundColor: CLIENT_COLORS[0],
+            tension: 0.3,
+            pointRadius: 3,
+            borderWidth: 2,
+            spanGaps: true,
+          },
+          {
+            label: "Val Loss",
+            data: rounds.map((r) => r.training?.val_loss ?? null),
+            borderColor: CLIENT_COLORS[1],
+            backgroundColor: CLIENT_COLORS[1],
+            borderDash: [6, 3],
+            tension: 0.3,
+            pointRadius: 3,
+            borderWidth: 2,
+            spanGaps: true,
+          },
+        ],
       };
     }
+  }, [clients, clientMetricsMap, roundLabels, selectedClient]);
 
-    const padding = 0.1;
-    const padAmount = valueRange * padding;
-    return {
-      min: minVal - padAmount, // Allow negative values
-      max: maxVal + padAmount,
-    };
-  })();
+  const lossValues = useMemo(() => {
+    const vals: number[] = [];
+    lossChartData.datasets.forEach((ds) =>
+      ds.data.forEach((v) => {
+        if (v != null) vals.push(v);
+      }),
+    );
+    return vals;
+  }, [lossChartData]);
 
-  // Charts configuration (with smart scaling dependencies)
-  const accuracyChartConfig = useMemo(
-    () => ({
-      labels: (chartData || []).map((d: any) => `Round ${d.round}`),
-      datasets: [
-        {
-          label: selectedClient === "all" ? "Avg Accuracy" : "Accuracy",
-          data: (chartData || []).map((d: any) => d.accuracy),
-          borderColor: "#B80028",
-          backgroundColor: "#B80028",
-          tension: 0.3,
-          pointRadius: 4,
-          borderWidth: 2,
-        },
-      ],
-    }),
-    [chartData, selectedClient],
+  const lossOptions = useMemo(
+    () => makeLineOptions(smartYLimit(lossValues)),
+    [lossValues],
   );
 
-  const lossChartConfig = useMemo(
-    () => ({
-      labels: (chartData || []).map((d: any) => `Round ${d.round}`),
-      datasets: [
-        {
-          label: selectedClient === "all" ? "Avg Loss" : "Loss",
-          data: (chartData || []).map((d: any) => d.loss),
-          borderColor: "#3b82f6",
-          backgroundColor: "rgba(59, 130, 246, 0.1)",
-          tension: 0.3,
-          fill: true,
-          pointRadius: 4,
-          borderWidth: 2,
-        },
-      ],
-    }),
-    [chartData, selectedClient],
+  // Accuracy chart
+  const accChartData = useMemo(() => {
+    if (selectedClient === "all") {
+      const avgData = roundLabels.map((_, ri) => {
+        const vals: number[] = [];
+        clients.forEach((c) => {
+          const rd = clientMetricsMap.get(c.id)?.rounds?.[ri];
+          const v = rd?.validation?.accuracy ?? rd?.training?.train_accuracy;
+          if (v != null) vals.push(v);
+        });
+        return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+      });
+      return {
+        labels: roundLabels,
+        datasets: [
+          {
+            label: "Avg Validation Accuracy",
+            data: avgData,
+            borderColor: CLIENT_COLORS[1],
+            backgroundColor: "rgba(59, 130, 246, 0.08)",
+            tension: 0.3,
+            pointRadius: 4,
+            borderWidth: 2.5,
+            fill: true,
+            spanGaps: true,
+          },
+        ],
+      };
+    } else {
+      const cm = clientMetricsMap.get(parseInt(selectedClient));
+      const rounds = cm?.rounds ?? [];
+      const labels = rounds.map((r) => `${r.round}`);
+      const cInfo = clients.find((c) => c.id === parseInt(selectedClient));
+      return {
+        labels,
+        datasets: [
+          {
+            label: cInfo?.client_name ?? "Val Accuracy",
+            data: rounds.map((r) => r.validation?.accuracy ?? null),
+            borderColor: CLIENT_COLORS[1],
+            backgroundColor: "rgba(59, 130, 246, 0.08)",
+            tension: 0.3,
+            pointRadius: 4,
+            borderWidth: 2.5,
+            fill: true,
+            spanGaps: true,
+          },
+        ],
+      };
+    }
+  }, [clients, clientMetricsMap, roundLabels, selectedClient]);
+
+  const accValues = useMemo(() => {
+    const vals: number[] = [];
+    accChartData.datasets.forEach((ds) =>
+      ds.data.forEach((v) => {
+        if (v != null) vals.push(v as number);
+      }),
+    );
+    return vals;
+  }, [accChartData]);
+
+  const accOptions = useMemo(
+    () => makeLineOptions(smartYLimit(accValues, 0.15), true),
+    [accValues],
   );
 
-  const precisionChartConfig = useMemo(
-    () => ({
-      labels: (chartData || []).map((d: any) => `Round ${d.round}`),
-      datasets: [
-        {
-          label: selectedClient === "all" ? "Avg Precision" : "Precision",
-          data: (chartData || []).map((d: any) => d.precision),
-          borderColor: "#10b981",
-          backgroundColor: "#10b981",
-          tension: 0.3,
-          pointRadius: 4,
-          borderWidth: 2,
-        },
-      ],
-    }),
-    [chartData, selectedClient],
+  // Accuracy difference (round-to-round delta) chart
+  const accDeltaChartData = useMemo(() => {
+    if (selectedClient === "all") {
+      // Compute average accuracy per round first, then delta
+      const avgAccs = roundLabels.map((_, ri) => {
+        const vals: number[] = [];
+        clients.forEach((c) => {
+          const rd = clientMetricsMap.get(c.id)?.rounds?.[ri];
+          const v = rd?.validation?.accuracy ?? rd?.training?.train_accuracy;
+          if (v != null) vals.push(v);
+        });
+        return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+      });
+      const deltas = avgAccs.slice(1).map((v, i) => {
+        const prev = avgAccs[i];
+        return v != null && prev != null ? v - prev : null;
+      });
+      return {
+        labels: roundLabels.slice(1),
+        datasets: [
+          {
+            label: "Avg Accuracy Delta",
+            data: deltas,
+            borderColor: CLIENT_COLORS[2],
+            backgroundColor: "rgba(16, 185, 129, 0.08)",
+            tension: 0.3,
+            pointRadius: 4,
+            borderWidth: 2.5,
+            fill: true,
+            spanGaps: true,
+          },
+        ],
+      };
+    } else {
+      const cm = clientMetricsMap.get(parseInt(selectedClient));
+      const rounds = cm?.rounds ?? [];
+      const labels = rounds.slice(1).map((r) => `${r.round}`);
+      const valAccs = rounds.map(
+        (r) => r.validation?.accuracy ?? r.training?.train_accuracy ?? null,
+      );
+      const deltas = valAccs.slice(1).map((v, i) => {
+        const prev = valAccs[i];
+        return v != null && prev != null ? v - prev : null;
+      });
+      const cInfo = clients.find((c) => c.id === parseInt(selectedClient));
+      return {
+        labels,
+        datasets: [
+          {
+            label: cInfo?.client_name ?? "Client",
+            data: deltas,
+            borderColor: CLIENT_COLORS[0],
+            backgroundColor: CLIENT_COLORS[0],
+            tension: 0.3,
+            pointRadius: 3,
+            borderWidth: 2,
+            spanGaps: true,
+          },
+        ],
+      };
+    }
+  }, [clients, clientMetricsMap, roundLabels, selectedClient]);
+
+  const accDeltaValues = useMemo(() => {
+    const vals: number[] = [];
+    accDeltaChartData.datasets.forEach((ds) =>
+      ds.data.forEach((v) => {
+        if (v != null) vals.push(v as number);
+      }),
+    );
+    return vals;
+  }, [accDeltaChartData]);
+
+  const accDeltaOptions = useMemo(
+    () => makeLineOptions(smartYLimit(accDeltaValues, 0.25, true), true),
+    [accDeltaValues],
   );
 
-  const recallChartConfig = useMemo(
-    () => ({
-      labels: (chartData || []).map((d: any) => `Round ${d.round}`),
-      datasets: [
-        {
-          label: selectedClient === "all" ? "Avg Recall" : "Recall",
-          data: (chartData || []).map((d: any) => d.recall),
-          borderColor: "#f59e0b",
-          backgroundColor: "#f59e0b",
-          tension: 0.3,
-          pointRadius: 4,
-          borderWidth: 2,
-        },
-      ],
-    }),
-    [chartData, selectedClient],
-  );
+  // ---- Post-FL aggregate stats ----
+  const postFlStats = useMemo(() => {
+    const accs: number[] = [];
+    const gaps: number[] = [];
+    const f1s: number[] = [];
+    let worst = { name: "", acc: 1 };
 
-  const f1ChartConfig = useMemo(
-    () => ({
-      labels: (chartData || []).map((d: any) => `Round ${d.round}`),
-      datasets: [
-        {
-          label: selectedClient === "all" ? "Avg F1 Score" : "F1 Score",
-          data: (chartData || []).map((d: any) => d.f1),
-          borderColor: "#8b5cf6",
-          backgroundColor: "#8b5cf6",
-          tension: 0.3,
-          pointRadius: 4,
-          borderWidth: 2,
-        },
-      ],
-    }),
-    [chartData, selectedClient],
-  );
-
-  // Round-to-Round Improvement Chart (Delta from Previous Round)
-  const roundDeltaChartConfig = useMemo(() => {
-    if (!chartData || chartData.length < 2) return null;
-
-    // Skip Round 0 (baseline) - start from Round 1
-    const roundsData = chartData.slice(1);
-
-    // Calculate round-to-round deltas (starting from Round 1)
-    // Round 1 compares to 0.50 baseline
-    const deltas = roundsData.map((d: any, index: number) => {
-      const currentAcc = d.accuracy;
-      if (typeof currentAcc !== "number") return null;
-
-      if (index === 0) {
-        // Round 1 - compare to 0.50 baseline
-        return currentAcc - 0.5;
-      } else {
-        // Round 2+ - compare to previous round
-        const prevAcc = roundsData[index - 1].accuracy;
-        if (typeof prevAcc !== "number") return null;
-        return currentAcc - prevAcc;
-      }
+    clients.forEach((c) => {
+      const cm = clientMetricsMap.get(c.id);
+      const pf = cm?.global?.post_fl;
+      if (!pf) return;
+      accs.push(pf.accuracy);
+      gaps.push(pf.class_gap ?? 0);
+      f1s.push(pf.f1_score);
+      if (pf.accuracy < worst.acc)
+        worst = { name: c.client_name, acc: pf.accuracy };
     });
 
+    const avg = (arr: number[]) =>
+      arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+
     return {
-      labels: roundsData.map((d: any) => `Round ${d.round}`),
+      avgAcc: avg(accs),
+      avgGap: avg(gaps),
+      avgF1: avg(f1s),
+      worst,
+    };
+  }, [clients, clientMetricsMap]);
+
+  // ---- Data heterogeneity chart ----
+  const dataHetChart = useMemo(() => {
+    const items: { name: string; leukemia: number; healthy: number }[] = [];
+    clients.forEach((c) => {
+      const cm = clientMetricsMap.get(c.id);
+      const dh = cm?.data_heterogeneity;
+      if (dh)
+        items.push({
+          name: c.client_name,
+          leukemia: dh.class_distribution?.leukemia ?? 0,
+          healthy: dh.class_distribution?.healthy ?? 0,
+        });
+    });
+    if (items.length === 0) return null;
+    return {
+      labels: items.map((i) => i.name),
       datasets: [
         {
-          label: "Round-to-Round Improvement",
-          data: deltas,
-          borderColor: "#3b82f6", // Blue for delta
-          backgroundColor: "rgba(59, 130, 246, 0.1)",
-          tension: 0.3,
-          fill: true,
-          pointRadius: 4,
-          borderWidth: 2,
+          label: "ALL (Leukemia)",
+          data: items.map((i) => i.leukemia),
+          backgroundColor: "rgba(220, 38, 38, 0.75)",
+          borderColor: "rgb(220, 38, 38)",
+          borderWidth: 1,
+        },
+        {
+          label: "Healthy",
+          data: items.map((i) => i.healthy),
+          backgroundColor: "rgba(34, 197, 94, 0.75)",
+          borderColor: "rgb(34, 197, 94)",
+          borderWidth: 1,
         },
       ],
     };
-  }, [chartData, selectedClient]);
+  }, [clients, clientMetricsMap]);
 
-  // Get selected client metrics for individual view
-  const selectedClientMetrics =
+  const dataHetOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: true,
+          position: "top" as const,
+          labels: { usePointStyle: true, padding: 16, font: { size: 11 } },
+        },
+        tooltip: {
+          backgroundColor: "rgba(255,255,255,0.95)",
+          titleColor: "#1e293b",
+          bodyColor: "#1e293b",
+          borderColor: "#e2e8f0",
+          borderWidth: 1,
+          padding: 10,
+          callbacks: {
+            label: (ctx: any) => {
+              const v = ctx.raw;
+              const di = ctx.dataIndex;
+              const t =
+                (dataHetChart?.datasets[0]?.data[di] ?? 0) +
+                (dataHetChart?.datasets[1]?.data[di] ?? 0);
+              const p = t > 0 ? ((v / t) * 100).toFixed(1) : "0";
+              return `${ctx.dataset.label}: ${v.toLocaleString()} (${p}%)`;
+            },
+          },
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          stacked: true,
+          grid: { color: "rgba(0,0,0,0.04)" },
+          title: {
+            display: true,
+            text: "Samples",
+            font: { weight: "bold" as const, size: 11 },
+          },
+        },
+        x: {
+          stacked: true,
+          grid: { display: false },
+        },
+      },
+    }),
+    [dataHetChart],
+  );
+
+  // ---- Selected client helpers ----
+  const selectedCM =
     selectedClient !== "all"
       ? clientMetricsMap.get(parseInt(selectedClient))
       : null;
-
-  // Get selected client info
-  const selectedClientInfo =
+  const selectedInfo =
     selectedClient !== "all"
       ? clients.find((c) => c.id === parseInt(selectedClient))
       : null;
 
-  // Base chart options
-  const getChartOptions = (
-    metricLimits: { min: number; max: number },
-    isPercentage: boolean = false,
-    isRoundBased: boolean = true,
-  ) => ({
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: true,
-        position: "top" as const,
-        labels: {
-          usePointStyle: true,
-          padding: 20,
-          font: { size: 11 },
-        },
-      },
-      tooltip: {
-        backgroundColor: "rgba(255, 255, 255, 0.9)",
-        titleColor: "#1e293b",
-        bodyColor: "#1e293b",
-        borderColor: "#e2e8f0",
-        borderWidth: 1,
-        padding: 12,
-        boxPadding: 4,
-        callbacks: {
-          label: (context: any) => {
-            const label = context.dataset.label || "";
-            const value = context.raw;
-            if (value == null) return label;
-            if (isPercentage) {
-              return `${label}: ${(value * 100).toFixed(1)}%`;
-            }
-            return `${label}: ${value.toFixed(4)}`;
-          },
-          title: (context: any) => {
-            const roundNum = context[0]?.label || "";
-            // Add context for round 0
-            if (roundNum === "Round 0") {
-              return `${roundNum} (Pre-FL Baseline)`;
-            }
-            return roundNum;
-          },
-        },
-      },
-      annotation: {
-        annotations:
-          selectedClient !== "all" && selectedClientMetrics?.global?.post_fl
-            ? {
-                preFlLine: {
-                  type: "line",
-                  yMin: 0,
-                  yMax: 0,
-                  borderColor: "#1e293b",
-                  borderWidth: 2.5,
-                  borderDash: [5, 5],
-                  label: {
-                    display: true,
-                    content: "Pre-FL",
-                    position: "start",
-                  },
-                },
-              }
-            : {},
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: false,
-        min: metricLimits.min,
-        max: metricLimits.max,
-        grid: {
-          display: true,
-          color: (context: any) =>
-            Math.abs(context.tick.value) < 0.0001
-              ? "rgba(30, 41, 59, 1)"
-              : "rgba(0,0,0,0.05)",
-          lineWidth: (context: any) =>
-            Math.abs(context.tick.value) < 0.0001 ? 2 : 1,
-        },
-        ticks: {
-          font: { size: 11 },
-          callback: (v: any) => {
-            if (isPercentage) {
-              if (Math.abs(Number(v) - 1) < 0.0001) return "100%";
-              return Number(v).toFixed(2);
-            }
-            return Number(v).toFixed(3);
-          },
-        },
-      },
-      x: {
-        offset: false,
-        grid: {
-          display: isRoundBased, // Show vertical grid lines for round-based charts
-          color: "rgba(0,0,0,0.05)",
-        },
-        ticks: {
-          font: { size: 11 },
-          // Custom ticking for rounds: 0, 2, 4, ...
-          callback: isRoundBased
-            ? function (this: any, val: any, index: any) {
-                const label = this.getLabelForValue(val) as string;
-                const roundNum = parseInt(label.replace("Round ", ""));
+  // ===========================================================================
+  // Conditional rendering for loading / running / failed states
+  // ===========================================================================
 
-                if (!isNaN(roundNum)) {
-                  return roundNum; // Show every round number
-                }
-                return label; // Fallback for other labels
-              }
-            : undefined,
-        },
-      },
-    },
-  });
-
-  // Metric-specific chart options with smart scaling
-  const accuracyChartOptions = getChartOptions(accuracyLimits, true);
-  const precisionChartOptions = getChartOptions(precisionLimits, true);
-  const recallChartOptions = getChartOptions(recallLimits, true);
-  const f1ChartOptions = getChartOptions(f1Limits, true);
-  const lossChartOptions = getChartOptions(lossLimits, false);
-
-  // Improvement chart options with baseline reference line
-  const improvementChartOptions = useMemo(() => {
-    const baseOptions = getChartOptions(improvementLimits, true, true);
-    return {
-      ...baseOptions,
-      plugins: {
-        ...baseOptions.plugins,
-        annotation: {
-          annotations: {
-            baselineLine: {
-              type: "line" as const,
-              yMin: 0,
-              yMax: 0,
-              borderColor: "#1e293b",
-              borderWidth: 2.5,
-              borderDash: [8, 4],
-              label: {
-                display: true,
-                content: "Pre-FL Baseline (0% improvement)",
-                position: "end" as const,
-                backgroundColor: "#1e293b",
-                color: "white",
-                font: {
-                  size: 10,
-                  weight: "bold" as const,
-                },
-              },
-            },
-          },
-        },
-      },
-    };
-  }, [improvementLimits]);
-
-  // Round-to-Round Delta chart options with zero reference line
-  const roundDeltaChartOptions = useMemo(() => {
-    const baseOptions = getChartOptions(roundDeltaLimits, true, true);
-    return {
-      ...baseOptions,
-      plugins: {
-        ...baseOptions.plugins,
-        annotation: {
-          annotations: {
-            zeroLine: {
-              type: "line" as const,
-              yMin: 0,
-              yMax: 0,
-              borderColor: "#1e293b",
-              borderWidth: 2.5,
-              borderDash: [8, 4],
-              label: {
-                display: true,
-                content: "No Change (0% delta)",
-                position: "end" as const,
-                backgroundColor: "#1e293b",
-                color: "white",
-                font: {
-                  size: 10,
-                  weight: "bold" as const,
-                },
-              },
-            },
-          },
-        },
-      },
-    };
-  }, [roundDeltaLimits]);
-
-  // =====================================================================================
-  // CONDITIONAL RENDERING (Moved here to ensure all Hooks run before early returns)
-  // =====================================================================================
-
-  // Render loading/running state
   if (isLoading && !simulation) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px]">
@@ -1097,7 +816,6 @@ export default function FLSimulationDetailsPage({
     );
   }
 
-  // Render running/pending status
   if (
     simulation &&
     (simulation.status === "running" || simulation.status === "pending")
@@ -1115,50 +833,30 @@ export default function FLSimulationDetailsPage({
           </h2>
           <p className="mt-2 text-center text-gray-600 max-w-md">
             {simulation.status === "pending"
-              ? "The federated learning simulation is being initialized. This may take a moment..."
-              : "The federated learning simulation is currently running. This may take several minutes depending on the configuration."}
+              ? "Initializing the federated learning simulation..."
+              : "The simulation is currently running. This may take several minutes."}
           </p>
-
-          <div className="mt-6 rounded-lg bg-blue-50 border border-blue-200 p-4 max-w-lg">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-              <div className="text-sm text-blue-800">
-                <p className="font-medium">
-                  Metrics will be available once training completes
-                </p>
-                <p className="mt-1 text-blue-700">
-                  Please refresh this page after the simulation finishes to view
-                  the results. The simulation runs in the background and may
-                  take 10-30 minutes depending on your configuration.
-                </p>
-              </div>
-            </div>
-          </div>
-
           {simulation.configs && (
-            <div className="mt-8 w-full max-w-md">
-              <h3 className="text-sm font-medium text-gray-700">
-                Configuration:
-              </h3>
-              <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+            <div className="mt-6 w-full max-w-xs">
+              <dl className="grid grid-cols-2 gap-2 text-sm">
                 <div>
-                  <dt className="text-gray-500">Rounds:</dt>
+                  <dt className="text-gray-500">Rounds</dt>
                   <dd className="font-medium">
                     {simulation.configs.num_server_rounds}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-gray-500">Local Epochs:</dt>
+                  <dt className="text-gray-500">Local Epochs</dt>
                   <dd className="font-medium">
                     {simulation.configs.local_epochs}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-gray-500">Learning Rate:</dt>
+                  <dt className="text-gray-500">LR</dt>
                   <dd className="font-medium">{simulation.configs.lr}</dd>
                 </div>
                 <div>
-                  <dt className="text-gray-500">Batch Size:</dt>
+                  <dt className="text-gray-500">Batch Size</dt>
                   <dd className="font-medium">
                     {simulation.configs.batch_size}
                   </dd>
@@ -1171,7 +869,6 @@ export default function FLSimulationDetailsPage({
     );
   }
 
-  // Render failed status
   if (simulation && simulation.status === "failed") {
     return (
       <div className="p-8">
@@ -1180,15 +877,10 @@ export default function FLSimulationDetailsPage({
           <h2 className="mt-6 text-2xl font-semibold text-gray-900">
             Simulation Failed
           </h2>
-          <p className="mt-2 text-center text-gray-600 max-w-md">
-            The federated learning simulation encountered an error and could not
-            complete.
-          </p>
           {simulation.error_message && (
-            <div className="mt-4 max-w-md rounded bg-white p-4 text-sm text-gray-700">
-              <p className="font-medium">Error details:</p>
-              <p className="mt-1">{simulation.error_message}</p>
-            </div>
+            <p className="mt-4 max-w-md text-sm text-gray-700 bg-white rounded p-4">
+              {simulation.error_message}
+            </p>
           )}
         </div>
       </div>
@@ -1201,60 +893,42 @@ export default function FLSimulationDetailsPage({
 
   if (!simulation) {
     return (
-      <div className="p-8">
-        <div className="text-center text-muted-foreground">
-          Simulation not found
-        </div>
+      <div className="p-8 text-center text-muted-foreground">
+        Simulation not found
       </div>
     );
   }
 
+  // ===========================================================================
+  // Completed simulation — main render
+  // ===========================================================================
+
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-start justify-between">
-        <div>
-          <p className="text-slate-500 text-sm">
-            Simulation ID:{" "}
-            <span className="font-mono text-slate-700 bg-slate-100 px-1 py-0.5 rounded">
-              {simulationId}
-            </span>{" "}
-            •{" "}
-            <span className="font-medium text-slate-700">{clients.length}</span>{" "}
-            Clients •{" "}
-            <span
-              className={`font-medium ${simulation?.status === "completed" ? "text-green-600" : "text-slate-700"}`}
-            >
-              {simulation?.status
-                ? simulation.status.charAt(0).toUpperCase() +
-                  simulation.status.slice(1)
-                : "Unknown"}
-            </span>
-          </p>
+    <div className="p-8 max-w-7xl mx-auto space-y-10">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-slate-500">
+          <span className="font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
+            #{simulationId}
+          </span>{" "}
+          &middot;{" "}
+          <span className="font-medium text-slate-700">
+            {clients.length} Clients
+          </span>{" "}
+          &middot;{" "}
+          <span className="font-medium text-emerald-600">Completed</span>
         </div>
 
-        {/* Client Selector */}
-        <div className="flex items-center gap-3">
-          <Users size={18} className="text-muted-foreground" />
+        <div className="flex items-center gap-2">
+          <Users size={16} className="text-slate-400" />
           <Select value={selectedClient} onValueChange={setSelectedClient}>
-            <SelectTrigger className="w-[280px] h-10 font-medium">
+            <SelectTrigger className="w-[260px] h-9 text-sm font-medium">
               <SelectValue placeholder="Select client" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all" className="font-medium">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-500"></div>
-                  <span>All Clients (Multi-Line View)</span>
-                </div>
-              </SelectItem>
-              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Individual Clients
-              </div>
-              {clients.map((client, idx) => (
-                <SelectItem
-                  key={client.id}
-                  value={client.id.toString()}
-                  className="pl-6"
-                >
+              <SelectItem value="all">All Clients (Overview)</SelectItem>
+              {clients.map((c, idx) => (
+                <SelectItem key={c.id} value={c.id.toString()}>
                   <div className="flex items-center gap-2">
                     <div
                       className="w-2 h-2 rounded-full"
@@ -1262,12 +936,10 @@ export default function FLSimulationDetailsPage({
                         backgroundColor:
                           CLIENT_COLORS[idx % CLIENT_COLORS.length],
                       }}
-                    ></div>
-                    <span>
-                      {client.client_name}{" "}
-                      <span className="text-xs text-muted-foreground">
-                        ({client.model_type})
-                      </span>
+                    />
+                    {c.client_name}{" "}
+                    <span className="text-xs text-slate-400">
+                      ({c.model_type})
                     </span>
                   </div>
                 </SelectItem>
@@ -1277,501 +949,460 @@ export default function FLSimulationDetailsPage({
         </div>
       </div>
 
-      {/* Individual Client Summary (when specific client selected) */}
-      {selectedClient !== "all" && selectedClientMetrics && (
-        <div className="mb-12">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
-              Client Performance Summary
+      {/* ── Section: Data Heterogeneity (all clients view) ── */}
+      {selectedClient === "all" && dataHetChart && (
+        <section>
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-xl font-bold text-slate-900">
+              Data Heterogeneity
             </h2>
-            <div className="px-4 py-1.5 bg-slate-100 rounded-full text-sm font-medium text-slate-600">
-              {selectedClientInfo?.client_name}{" "}
-              <span className="text-slate-400">|</span>{" "}
-              <span className="text-slate-500">
-                {selectedClientInfo?.model_type}
-              </span>
-            </div>
+            <span className="text-xs font-medium bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-200">
+              Dirichlet &alpha; ={" "}
+              {simulation?.configs?.dirichlet_alpha ?? "1.0"}
+            </span>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
-            {/* Baseline Accuracy */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Baseline (Random)
-              </div>
-              <div className="text-3xl font-bold text-slate-700">
-                50.0
-                <span className="text-lg text-slate-400 ml-1">%</span>
-              </div>
-              <div className="text-sm text-slate-400 mt-2 font-medium">
-                Random Chance
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Bar chart */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200">
+              <h3 className="text-sm font-semibold text-slate-700 mb-3">
+                Class Distribution per Client
+              </h3>
+              <div className="h-72">
+                <Bar data={dataHetChart} options={dataHetOptions} />
               </div>
             </div>
 
-            {/* Post-FL Accuracy */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow ring-1 ring-green-100">
-              <div className="text-xs font-semibold text-green-600 uppercase tracking-wider mb-2">
-                Post-FL Result
-              </div>
-              <div className="text-3xl font-bold text-slate-900">
-                {(
-                  (selectedClientMetrics.global?.post_fl?.accuracy || 0) * 100
-                ).toFixed(1)}
-                <span className="text-lg text-slate-400 ml-1">%</span>
-              </div>
-              <div className="text-sm text-green-600 mt-2 font-medium">
-                Final Accuracy
-              </div>
-            </div>
-
-            {/* Best Round */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Peak Performance
-              </div>
-              <div className="text-3xl font-bold text-purple-600">
-                Round{" "}
-                {selectedClientMetrics.rounds?.reduce(
-                  (best, round) =>
-                    (round.validation?.accuracy || 0) >
-                    (best?.validation?.accuracy || 0)
-                      ? round
-                      : best,
-                  selectedClientMetrics.rounds[0],
-                )?.round || "N/A"}
-              </div>
-              <div className="text-sm text-slate-400 mt-2 font-medium">
-                {(
-                  (selectedClientMetrics.rounds?.reduce(
-                    (best, round) =>
-                      (round.validation?.accuracy || 0) >
-                      (best?.validation?.accuracy || 0)
-                        ? round
-                        : best,
-                    selectedClientMetrics.rounds[0],
-                  )?.validation?.accuracy || 0) * 100
-                ).toFixed(1)}
-                % Accuracy
-              </div>
-            </div>
-
-            {/* Total Rounds */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                Duration
-              </div>
-              <div className="text-3xl font-bold text-slate-700">
-                {selectedClientMetrics.rounds?.length || 0}
-              </div>
-              <div className="text-sm text-slate-400 mt-2 font-medium">
-                Rounds Completed
-              </div>
-            </div>
-          </div>
-
-          {/* Additional Metrics Row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-6">
-            <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 flex items-center justify-between">
-              <div>
-                <div className="text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">
-                  F1 Score
-                </div>
-                <div className="text-xl font-bold text-slate-900">
-                  {(
-                    selectedClientMetrics.global?.post_fl?.f1_score || 0
-                  ).toFixed(3)}
-                </div>
-              </div>
-              <div
-                className={`text-xs font-medium px-2 py-1 rounded-full ${
-                  (selectedClientMetrics.global?.improvement?.f1_score || 0) >=
-                  0
-                    ? "bg-green-100 text-green-700"
-                    : "bg-red-100 text-red-700"
-                }`}
-              >
-                {(selectedClientMetrics.global?.improvement?.f1_score || 0) >= 0
-                  ? "+"
-                  : ""}
-                {(
-                  (selectedClientMetrics.global?.improvement?.f1_score || 0) *
-                  100
-                ).toFixed(1)}
-                %
-              </div>
-            </div>
-
-            <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 flex items-center justify-between">
-              <div>
-                <div className="text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">
-                  Precision
-                </div>
-                <div className="text-xl font-bold text-slate-900">
-                  {(
-                    (selectedClientMetrics.global?.post_fl?.precision || 0) *
-                    100
-                  ).toFixed(1)}
-                  %
-                </div>
-              </div>
-              <div
-                className={`text-xs font-medium px-2 py-1 rounded-full ${
-                  (selectedClientMetrics.global?.improvement?.precision || 0) >=
-                  0
-                    ? "bg-green-100 text-green-700"
-                    : "bg-red-100 text-red-700"
-                }`}
-              >
-                {(selectedClientMetrics.global?.improvement?.precision || 0) >=
-                0
-                  ? "+"
-                  : ""}
-                {(
-                  (selectedClientMetrics.global?.improvement?.precision || 0) *
-                  100
-                ).toFixed(1)}
-                %
-              </div>
-            </div>
-
-            <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 flex items-center justify-between">
-              <div>
-                <div className="text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">
-                  Recall
-                </div>
-                <div className="text-xl font-bold text-slate-900">
-                  {(
-                    (selectedClientMetrics.global?.post_fl?.recall || 0) * 100
-                  ).toFixed(1)}
-                  %
-                </div>
-              </div>
-              <div
-                className={`text-xs font-medium px-2 py-1 rounded-full ${
-                  (selectedClientMetrics.global?.improvement?.recall || 0) >= 0
-                    ? "bg-green-100 text-green-700"
-                    : "bg-red-100 text-red-700"
-                }`}
-              >
-                {(selectedClientMetrics.global?.improvement?.recall || 0) >= 0
-                  ? "+"
-                  : ""}
-                {(
-                  (selectedClientMetrics.global?.improvement?.recall || 0) * 100
-                ).toFixed(1)}
-                %
-              </div>
-            </div>
-
-            <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 flex items-center justify-between">
-              <div>
-                <div className="text-xs font-semibold text-slate-500 mb-1 uppercase tracking-wide">
-                  Loss
-                </div>
-                <div className="text-xl font-bold text-slate-900">
-                  {(selectedClientMetrics.global?.post_fl?.loss || 0).toFixed(
-                    4,
-                  )}
-                </div>
-              </div>
-              <div
-                className={`text-xs font-medium px-2 py-1 rounded-full ${
-                  (selectedClientMetrics.global?.improvement?.loss || 0) <= 0
-                    ? "bg-green-100 text-green-700"
-                    : "bg-red-100 text-red-700"
-                }`}
-              >
-                {(selectedClientMetrics.global?.improvement?.loss || 0).toFixed(
-                  4,
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Data Heterogeneity Section */}
-          {selectedClientMetrics.data_heterogeneity &&
-            selectedClientMetrics.data_heterogeneity.total_samples !==
-              undefined && (
-              <div className="mt-8 border-t border-slate-100 pt-8">
-                <h3 className="text-lg font-bold text-slate-900 mb-6">
-                  Data Heterogeneity (Partition Statistics)
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Sample Counts */}
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">
-                      Sample Distribution
-                    </div>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-slate-600">
-                          Total Samples
-                        </span>
-                        <span className="text-lg font-bold text-slate-900">
-                          {selectedClientMetrics.data_heterogeneity.total_samples.toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-slate-600">
-                          Training Set
-                        </span>
-                        <span className="text-sm font-medium text-slate-700">
-                          {selectedClientMetrics.data_heterogeneity.train_samples.toLocaleString()}{" "}
-                          (85%)
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-slate-600">
-                          Validation Set
-                        </span>
-                        <span className="text-sm font-medium text-slate-700">
-                          {selectedClientMetrics.data_heterogeneity.val_samples.toLocaleString()}{" "}
-                          (15%)
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Class Distribution */}
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">
-                      Class Distribution
-                    </div>
-                    <div className="space-y-4">
-                      {/* Leukemia */}
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-sm text-slate-600">
-                            Leukemia (ALL)
-                          </span>
-                          <span className="text-sm font-medium text-slate-700">
-                            {selectedClientMetrics.data_heterogeneity.class_distribution.leukemia.toLocaleString()}{" "}
-                            (
-                            {selectedClientMetrics.data_heterogeneity.class_distribution.leukemia_pct.toFixed(
-                              1,
-                            )}
-                            %)
-                          </span>
-                        </div>
-                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-red-500 rounded-full transition-all"
-                            style={{
-                              width: `${selectedClientMetrics.data_heterogeneity.class_distribution.leukemia_pct}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                      {/* Healthy */}
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-sm text-slate-600">
-                            Healthy
-                          </span>
-                          <span className="text-sm font-medium text-slate-700">
-                            {selectedClientMetrics.data_heterogeneity.class_distribution.healthy.toLocaleString()}{" "}
-                            (
-                            {selectedClientMetrics.data_heterogeneity.class_distribution.healthy_pct.toFixed(
-                              1,
-                            )}
-                            %)
-                          </span>
-                        </div>
-                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-green-500 rounded-full transition-all"
-                            style={{
-                              width: `${selectedClientMetrics.data_heterogeneity.class_distribution.healthy_pct}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Imbalance Indicator */}
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">
-                      Imbalance Metrics
-                    </div>
-                    <div className="flex flex-col items-center justify-center h-24">
-                      <div className="text-3xl font-bold text-slate-900">
-                        {selectedClientMetrics.data_heterogeneity.imbalance_ratio.toFixed(
-                          2,
-                        )}
-                        :1
-                      </div>
-                      <div
-                        className={`mt-2 px-3 py-1 rounded-full text-xs font-medium ${
-                          selectedClientMetrics.data_heterogeneity
-                            .imbalance_ratio <= 1.5
-                            ? "bg-green-100 text-green-700"
-                            : selectedClientMetrics.data_heterogeneity
-                                  .imbalance_ratio <= 3
-                              ? "bg-yellow-100 text-yellow-700"
-                              : "bg-red-100 text-red-700"
-                        }`}
+            {/* Table */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-200">
+              <h3 className="text-sm font-semibold text-slate-700 mb-3">
+                Client Breakdown
+              </h3>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left">
+                    <th className="py-2.5 font-semibold text-slate-600">
+                      Client
+                    </th>
+                    <th className="py-2.5 font-semibold text-slate-600">
+                      Model
+                    </th>
+                    <th className="py-2.5 font-semibold text-slate-600 text-right">
+                      Samples
+                    </th>
+                    <th className="py-2.5 font-semibold text-slate-600 text-right">
+                      Ratio
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clients.map((c, idx) => {
+                    const cm = clientMetricsMap.get(c.id);
+                    const dh = cm?.data_heterogeneity;
+                    return (
+                      <tr
+                        key={c.id}
+                        className="border-b border-slate-100 hover:bg-slate-50"
                       >
-                        {selectedClientMetrics.data_heterogeneity
-                          .imbalance_ratio <= 1.5
-                          ? "Balanced"
-                          : selectedClientMetrics.data_heterogeneity
-                                .imbalance_ratio <= 3
-                            ? "Moderate Imbalance"
-                            : "High Imbalance"}
+                        <td className="py-2.5 font-medium text-slate-900 flex items-center gap-2">
+                          <div
+                            className="w-2 h-2 rounded-full"
+                            style={{
+                              backgroundColor:
+                                CLIENT_COLORS[idx % CLIENT_COLORS.length],
+                            }}
+                          />
+                          {c.client_name}
+                        </td>
+                        <td className="py-2.5 text-slate-500">
+                          {c.model_type}
+                        </td>
+                        <td className="py-2.5 text-right text-slate-700">
+                          {dh?.total_samples?.toLocaleString() ?? "—"}
+                        </td>
+                        <td className="py-2.5 text-right">
+                          {dh ? (
+                            <span
+                              className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+                                dh.imbalance_ratio <= 1.5
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : dh.imbalance_ratio <= 5
+                                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                                    : "bg-red-50 text-red-700 border-red-200"
+                              }`}
+                            >
+                              {dh.imbalance_ratio.toFixed(1)}:1
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ── Section: Training Convergence ── */}
+      <section>
+        <h2 className="text-xl font-bold text-slate-900 mb-5">
+          Training Convergence
+        </h2>
+        <div className="flex flex-wrap items-start gap-6">
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 w-full lg:w-[calc(33.333%-1rem)]">
+            <h3 className="text-sm font-semibold text-slate-700 mb-1">
+              {selectedClient === "all"
+                ? "Avg Validation Loss"
+                : "Train vs Validation Loss"}
+            </h3>
+            <p className="text-xs text-slate-400 mb-3">
+              {selectedClient === "all"
+                ? "Average validation loss across all clients"
+                : "Overfitting gap: rising val loss with falling train loss = overfitting"}
+            </p>
+            <div className="h-72">
+              <Line data={lossChartData} options={lossOptions} />
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 w-full lg:w-[calc(33.333%-1rem)]">
+            <h3 className="text-sm font-semibold text-slate-700 mb-1">
+              {selectedClient === "all"
+                ? "Avg Validation Accuracy"
+                : "Validation Accuracy"}
+            </h3>
+            <p className="text-xs text-slate-400 mb-3">
+              {selectedClient === "all"
+                ? "Average validation accuracy across all clients"
+                : "Validation accuracy each round"}
+            </p>
+            <div className="h-72">
+              <Line data={accChartData} options={accOptions} />
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 w-full lg:w-[calc(33.333%-1rem)]">
+            <h3 className="text-sm font-semibold text-slate-700 mb-1">
+              {selectedClient === "all"
+                ? "Avg Accuracy Delta"
+                : "Accuracy Delta"}
+            </h3>
+            <p className="text-xs text-slate-400 mb-3">
+              Round-to-round accuracy change (positive = improving)
+            </p>
+            <div className="h-72">
+              <Line data={accDeltaChartData} options={accDeltaOptions} />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Section: Post-FL Results — Overall (all clients view) ── */}
+      {selectedClient === "all" && (
+        <section>
+          <h2 className="text-xl font-bold text-slate-900 mb-5">
+            Post-FL Evaluation
+            <span className="text-xs font-normal text-slate-400 ml-2">
+              on balanced test set (50/50)
+            </span>
+          </h2>
+
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <MetricCard
+              label="Avg Accuracy"
+              value={pct(postFlStats.avgAcc)}
+              accent="text-slate-900"
+            />
+            <MetricCard
+              label="Avg Class Gap"
+              value={pct(postFlStats.avgGap)}
+              sub={gapLabel(postFlStats.avgGap)}
+              accent={
+                postFlStats.avgGap <= 0.1
+                  ? "text-emerald-700"
+                  : postFlStats.avgGap <= 0.2
+                    ? "text-amber-700"
+                    : "text-red-700"
+              }
+            />
+            <MetricCard
+              label="Avg F1 Score"
+              value={postFlStats.avgF1.toFixed(3)}
+            />
+            <MetricCard
+              label="Weakest Client"
+              value={pct(postFlStats.worst.acc)}
+              sub={postFlStats.worst.name}
+            />
+          </div>
+
+          {/* Comparison table */}
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="py-3 px-4 text-left font-semibold text-slate-600">
+                    Client
+                  </th>
+                  <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                    Accuracy
+                  </th>
+                  <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                    Class Gap
+                  </th>
+                  <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                    Leukemia Acc
+                  </th>
+                  <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                    Healthy Acc
+                  </th>
+                  <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                    F1
+                  </th>
+                  <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                    Precision
+                  </th>
+                  <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                    Recall
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {clients.map((c, idx) => {
+                  const pf = clientMetricsMap.get(c.id)?.global?.post_fl;
+                  if (!pf) return null;
+                  const gap = pf.class_gap ?? 0;
+                  return (
+                    <tr
+                      key={c.id}
+                      className="border-b border-slate-100 hover:bg-slate-50"
+                    >
+                      <td className="py-3 px-4 font-medium text-slate-900 flex items-center gap-2">
+                        <div
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{
+                            backgroundColor:
+                              CLIENT_COLORS[idx % CLIENT_COLORS.length],
+                          }}
+                        />
+                        <span>{c.client_name}</span>
+                        <span className="text-xs text-slate-400">
+                          {c.model_type}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right font-semibold text-slate-900">
+                        {pct(pf.accuracy)}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <span
+                          className={`text-xs font-medium px-2 py-0.5 rounded-full border ${gapBadge(gap)}`}
+                        >
+                          {pct(gap)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right text-slate-700">
+                        {pct(pf.leukemia_accuracy)}
+                      </td>
+                      <td className="py-3 px-4 text-right text-slate-700">
+                        {pct(pf.healthy_accuracy)}
+                      </td>
+                      <td className="py-3 px-4 text-right text-slate-700">
+                        {pf.f1_score.toFixed(3)}
+                      </td>
+                      <td className="py-3 px-4 text-right text-slate-700">
+                        {pct(pf.precision)}
+                      </td>
+                      <td className="py-3 px-4 text-right text-slate-700">
+                        {pct(pf.recall)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* ── Section: Individual Client Detail ── */}
+      {selectedClient !== "all" && selectedCM && (
+        <section>
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-xl font-bold text-slate-900">
+              Post-FL Evaluation
+              <span className="text-xs font-normal text-slate-400 ml-2">
+                on balanced test set (50/50)
+              </span>
+            </h2>
+            <span className="text-sm font-medium text-slate-500">
+              {selectedInfo?.client_name}{" "}
+              <span className="text-slate-400">|</span>{" "}
+              {selectedInfo?.model_type}
+            </span>
+          </div>
+
+          {/* Metric cards — row 1 */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <MetricCard
+              label="Accuracy"
+              value={pct(selectedCM.global.post_fl.accuracy)}
+              accent="text-slate-900"
+            />
+            <MetricCard
+              label="Class Gap"
+              value={pct(selectedCM.global.post_fl.class_gap ?? 0)}
+              sub={gapLabel(selectedCM.global.post_fl.class_gap ?? 0)}
+              accent={
+                (selectedCM.global.post_fl.class_gap ?? 0) <= 0.1
+                  ? "text-emerald-700"
+                  : (selectedCM.global.post_fl.class_gap ?? 0) <= 0.2
+                    ? "text-amber-700"
+                    : "text-red-700"
+              }
+            />
+            <MetricCard
+              label="Leukemia Accuracy"
+              value={pct(selectedCM.global.post_fl.leukemia_accuracy)}
+              sub="Sensitivity"
+            />
+            <MetricCard
+              label="Healthy Accuracy"
+              value={pct(selectedCM.global.post_fl.healthy_accuracy)}
+              sub="Specificity"
+            />
+          </div>
+
+          {/* Metric cards — row 2 */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <MetricCard
+              label="Precision"
+              value={pct(selectedCM.global.post_fl.precision)}
+            />
+            <MetricCard
+              label="Recall"
+              value={pct(selectedCM.global.post_fl.recall)}
+            />
+            <MetricCard
+              label="F1 Score"
+              value={selectedCM.global.post_fl.f1_score.toFixed(3)}
+            />
+          </div>
+
+          {/* Confusion matrix + data heterogeneity */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200">
+              <h3 className="text-sm font-semibold text-slate-700 mb-4">
+                Confusion Matrix
+              </h3>
+              <ConfusionMatrixCard
+                confusionMatrix={
+                  selectedCM.global.post_fl.confusion_matrix
+                }
+                accuracy={selectedCM.global.post_fl.accuracy}
+              />
+            </div>
+
+            {selectedCM.data_heterogeneity && (
+              <div className="bg-white p-6 rounded-2xl border border-slate-200">
+                <h3 className="text-sm font-semibold text-slate-700 mb-4">
+                  Data Partition
+                </h3>
+                <div className="space-y-4">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">Total Samples</span>
+                    <span className="font-semibold text-slate-900">
+                      {selectedCM.data_heterogeneity.total_samples.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">Train / Val</span>
+                    <span className="text-slate-700">
+                      {selectedCM.data_heterogeneity.train_samples.toLocaleString()}{" "}
+                      /{" "}
+                      {selectedCM.data_heterogeneity.val_samples.toLocaleString()}
+                    </span>
+                  </div>
+
+                  {/* Class bars */}
+                  <div className="pt-2 space-y-3">
+                    <div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-red-600 font-medium">
+                          Leukemia (ALL)
+                        </span>
+                        <span className="text-slate-500">
+                          {selectedCM.data_heterogeneity.class_distribution.leukemia.toLocaleString()}{" "}
+                          (
+                          {selectedCM.data_heterogeneity.class_distribution.leukemia_pct.toFixed(
+                            1,
+                          )}
+                          %)
+                        </span>
                       </div>
-                      <div className="text-xs text-slate-400 mt-2">
-                        Partition #
-                        {selectedClientMetrics.data_heterogeneity.partition_id}
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-red-500 rounded-full"
+                          style={{
+                            width: `${selectedCM.data_heterogeneity.class_distribution.leukemia_pct}%`,
+                          }}
+                        />
                       </div>
                     </div>
+                    <div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-emerald-600 font-medium">
+                          Healthy
+                        </span>
+                        <span className="text-slate-500">
+                          {selectedCM.data_heterogeneity.class_distribution.healthy.toLocaleString()}{" "}
+                          (
+                          {selectedCM.data_heterogeneity.class_distribution.healthy_pct.toFixed(
+                            1,
+                          )}
+                          %)
+                        </span>
+                      </div>
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500 rounded-full"
+                          style={{
+                            width: `${selectedCM.data_heterogeneity.class_distribution.healthy_pct}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                    <span className="text-sm text-slate-500">
+                      Imbalance Ratio
+                    </span>
+                    <span
+                      className={`text-xs font-medium px-2.5 py-0.5 rounded-full border ${
+                        selectedCM.data_heterogeneity.imbalance_ratio <= 1.5
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          : selectedCM.data_heterogeneity.imbalance_ratio <= 5
+                            ? "bg-amber-50 text-amber-700 border-amber-200"
+                            : "bg-red-50 text-red-700 border-red-200"
+                      }`}
+                    >
+                      {selectedCM.data_heterogeneity.imbalance_ratio.toFixed(
+                        1,
+                      )}
+                      :1
+                    </span>
                   </div>
                 </div>
               </div>
             )}
-
-          {/* Confusion Matrix Analysis */}
-          <div className="mt-8 border-t border-slate-100 pt-8">
-            <h3 className="text-lg font-bold text-slate-900 mb-6">
-              Confusion Matrix Analysis
-            </h3>
-            <div className="max-w-md">
-              <ConfusionMatrixCard
-                title="Post-FL Result"
-                confusionMatrix={
-                  selectedClientMetrics.global?.post_fl?.confusion_matrix
-                }
-                accuracy={selectedClientMetrics.global?.post_fl?.accuracy}
-              />
-            </div>
           </div>
-        </div>
+        </section>
       )}
-
-      {/* View Mode Indicator */}
-      <div className="mb-4 flex items-center gap-2 text-sm text-slate-500">
-        {selectedClient === "all" ? (
-          <>
-            <div className="w-2 h-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-500"></div>
-            <span>
-              Viewing{" "}
-              <strong className="text-slate-900 font-semibold">
-                averaged metrics
-              </strong>{" "}
-              across all {clients.length} clients
-              {" • "}Round 0 = 50% Baseline
-            </span>
-          </>
-        ) : (
-          <>
-            <div
-              className="w-2 h-2 rounded-full"
-              style={{
-                backgroundColor:
-                  CLIENT_COLORS[
-                    clients.findIndex(
-                      (c) => c.id === parseInt(selectedClient),
-                    ) % CLIENT_COLORS.length
-                  ],
-              }}
-            ></div>
-            <span>
-              Viewing{" "}
-              <strong className="text-slate-900 font-semibold">
-                {selectedClientInfo?.client_name}
-              </strong>{" "}
-              individual performance
-              {" • "}Round 0 = 50% Baseline
-            </span>
-          </>
-        )}
-      </div>
-
-      {/* Statistics Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-6">
-        {/* Accuracy Progression Chart */}
-        <EvalCard
-          title="Accuracy (Validation)"
-          description={
-            selectedClient === "all"
-              ? "Averaged accuracy across clients (Round 0 = 50% Baseline)"
-              : `${selectedClientInfo?.client_name} accuracy over time`
-          }
-          content={
-            <Line data={accuracyChartConfig} options={accuracyChartOptions} />
-          }
-        />
-
-        {/* Loss Progression Chart */}
-        <EvalCard
-          title="Loss (Validation)"
-          description={
-            selectedClient === "all"
-              ? "Averaged loss across clients (Round 0 = ln(2) Baseline)"
-              : `${selectedClientInfo?.client_name} loss convergence`
-          }
-          content={<Line data={lossChartConfig} options={lossChartOptions} />}
-        />
-
-        {/* Precision Chart */}
-        <EvalCard
-          title="Precision"
-          description={
-            selectedClient === "all"
-              ? "Averaged precision across clients (Round 0 = 50% Baseline)"
-              : `${selectedClientInfo?.client_name} precision progression`
-          }
-          content={
-            <Line data={precisionChartConfig} options={precisionChartOptions} />
-          }
-        />
-
-        {/* Recall Chart */}
-        <EvalCard
-          title="Recall"
-          description={
-            selectedClient === "all"
-              ? "Averaged recall across clients (Round 0 = 50% Baseline)"
-              : `${selectedClientInfo?.client_name} recall progression`
-          }
-          content={
-            <Line data={recallChartConfig} options={recallChartOptions} />
-          }
-        />
-
-        {/* F1 Score Chart */}
-        <EvalCard
-          title="F1 Score"
-          description={
-            selectedClient === "all"
-              ? "Averaged F1 score across clients (Round 0 = 50% Baseline)"
-              : `${selectedClientInfo?.client_name} F1 score progression`
-          }
-          content={<Line data={f1ChartConfig} options={f1ChartOptions} />}
-        />
-
-        {/* Round-to-Round Improvement Delta */}
-        <EvalCard
-          title="Round-to-Round Improvement"
-          description={
-            selectedClient === "all"
-              ? "Averaged accuracy gain from previous round (shows diminishing returns)"
-              : `${selectedClientInfo?.client_name} accuracy gain from previous round`
-          }
-          content={
-            roundDeltaChartConfig ? (
-              <Line
-                data={roundDeltaChartConfig}
-                options={roundDeltaChartOptions}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-48 text-slate-400">
-                No delta data available
-              </div>
-            )
-          }
-        />
-      </div>
     </div>
   );
 }

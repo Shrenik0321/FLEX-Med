@@ -186,40 +186,29 @@ class Settings(BaseSettings):
     # FL Model Parameters
     num_classes: int = 2
     img_size: int = 224
-    consensus_momentum: float = 0.15  # Reduced from 0.5 to limit bad consensus propagation
-    train_loss_weight: float = 0.7
+    consensus_momentum: float = 0.20
+    train_loss_weight: float = 0.70
     distill_loss_weight: float = 0.3
 
-    # Per-architecture Focal Loss alpha (class 0 = Leukemia weight)
-    # Higher alpha = more weight on Leukemia loss (reduces FN)
-    focal_alpha_per_arch: Dict[str, float] = {
-        'densenet121': 0.25,
-        'mobilenet_v2': 0.60,
-        'resnet50': 0.55,
-        'resnet18': 0.55,
-        'efficientnet_b0': 0.50,
-    }
+    # Per-architecture Focal Loss alpha is now computed dynamically per client
+    # fohcal_alpha_per_arch removed in favor of data-driven approach
     focal_alpha_default: float = 0.50
     focal_gamma: float = 2.0
+    
+    # Minority Class Boost (for Focal Loss clamping/adjustment)
+    minority_boost: float = 0.70
 
-    # WeightedRandomSampler minority boost factor
-    minority_boost: float = 0.55
+    # Knowledge distillation configuration
+    # Lowered to 0.45 so clients learn more from local data while still benefiting from consensus
+    distill_weight_base: float = float(os.getenv("FLEX_MED_DISTILL_WEIGHT", "0.45"))
+    distill_decay_rate: float = float(os.getenv("FLEX_MED_DISTILL_DECAY", "0.2"))  # Slower decay
 
     # ------------------------------------------------------------------------
     # Dirichlet Partitioning Configuration (Runtime Data Heterogeneity)
     # ------------------------------------------------------------------------
-    dirichlet_alpha: float = float(os.getenv("FLEX_MED_DIRICHLET_ALPHA", "5.0"))
+    dirichlet_alpha: float = float(os.getenv("FLEX_MED_DIRICHLET_ALPHA", "2.5"))
     dirichlet_seed: int = int(os.getenv("FLEX_MED_DIRICHLET_SEED", "42"))
     dirichlet_min_partition_size: int = int(os.getenv("FLEX_MED_DIRICHLET_MIN_PARTITION_SIZE", "400"))  # Minimum samples per client partition
-
-    # ------------------------------------------------------------------------
-    # xAI Configuration
-    # ------------------------------------------------------------------------
-    xai_lime_num_samples: int = int(os.getenv("XAI_LIME_NUM_SAMPLES", "1000"))
-    xai_lime_num_features: int = int(os.getenv("XAI_LIME_NUM_FEATURES", "5"))
-    xai_lime_random_seed: int = int(os.getenv("XAI_LIME_RANDOM_SEED", "42"))
-    xai_gradcam_eigen_smooth: bool = os.getenv("XAI_GRADCAM_EIGEN_SMOOTH", "true").lower() == "true"
-    xai_min_confidence: float = float(os.getenv("XAI_MIN_CONFIDENCE", "0.70"))
 
     # Normalization statistics (must match training in task.py)
     img_norm_mean: List[float] = [
@@ -228,8 +217,6 @@ class Settings(BaseSettings):
     img_norm_std: List[float] = [
         float(x) for x in os.getenv("IMG_NORM_STD", "0.229,0.224,0.225").split(",")
     ]
-    
-
 
     model_config = {
         "env_file": ".env",

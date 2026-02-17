@@ -12,12 +12,9 @@ from collections import Counter
 from datetime import datetime
 from typing import Dict, List, Optional
 from pathlib import Path
-from torch.utils.data import WeightedRandomSampler
 
 from flex_med.utils.config import (
-    LOCAL_TRAIN_DATASET_PATH, DIRICHLET_ALPHA, DIRICHLET_SEED, DIRICHLET_MIN_PARTITION_SIZE,
-    MINORITY_BOOST,
-)
+    LOCAL_TRAIN_DATASET_PATH, DIRICHLET_ALPHA, DIRICHLET_SEED, DIRICHLET_MIN_PARTITION_SIZE)
 
 # ============================================================================
 # SUPABASE CLIENT
@@ -28,7 +25,6 @@ try:
     SUPABASE_AVAILABLE = True
 except ImportError:
     SUPABASE_AVAILABLE = False
-
 
 def get_supabase_client() -> Optional['Client']:
     """Initialize Supabase client from environment variables."""
@@ -88,51 +84,121 @@ def sanitize_client_paths(clients: List[Dict]) -> List[Dict]:
 # DATA UTILITIES
 # ============================================================================
 
-def get_weighted_sampler(targets):
-    """Create WeightedRandomSampler to handle class imbalance.
-
-    Uses MINORITY_BOOST from config (default: 0.55).
-    Lower values = less aggressive minority upsampling.
-    """
-    class_counts = Counter(targets)
-    class_weights = {cls: 1.0 / (count ** MINORITY_BOOST) for cls, count in class_counts.items()}
-    sample_weights = [class_weights[t] for t in targets]
-    return WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
-
-
 def get_partition_stats(partition_id: int, num_partitions: int, partitioner_cache: dict) -> Dict:
     """Get data heterogeneity statistics for a client's partition."""
+    from flwr.common import log
+    from logging import INFO, WARNING
+    
     cache_key = (LOCAL_TRAIN_DATASET_PATH, num_partitions, DIRICHLET_ALPHA, DIRICHLET_SEED)
 
-    if cache_key not in partitioner_cache:
+    # Try to find the partitioner in cache
+    partitioner = None
+    if cache_key in partitioner_cache:
+        partitioner, _ = partitioner_cache[cache_key]
+    else:
+        # Try to find any matching cache entry (path might differ slightly)
+        log(INFO, f"[DATA_HET] Exact cache key not found. Looking for alternatives...")
+        log(INFO, f"[DATA_HET] Expected key: {cache_key}")
+        log(INFO, f"[DATA_HET] Available keys: {list(partitioner_cache.keys())}")
+        for key in partitioner_cache:
+            if key[1] == num_partitions:  # Match by num_partitions
+                partitioner, _ = partitioner_cache[key]
+                log(INFO, f"[DATA_HET] Using fallback cache key: {key}")
+                break
+    
+    if partitioner is None:
+        log(WARNING, f"[DATA_HET] Partitioner not found in cache for {num_partitions} partitions")
         return {"error": "Partitioner not initialized"}
 
-    partitioner, _ = partitioner_cache[cache_key]
-    partition_dataset = partitioner.load_partition(partition_id)
-    partition_labels = partition_dataset["label"]
+    try:
+        partition_dataset = partitioner.load_partition(partition_id)
+        partition_labels = partition_dataset["label"]
 
-    total_samples = len(partition_labels)
-    leukemia_count = sum(l == 0 for l in partition_labels)
-    healthy_count = sum(l == 1 for l in partition_labels)
+        total_samples = len(partition_labels)
+        leukemia_count = sum(l == 0 for l in partition_labels)
+        healthy_count = sum(l == 1 for l in partition_labels)
 
-    leukemia_pct = leukemia_count / total_samples * 100 if total_samples > 0 else 0
-    healthy_pct = healthy_count / total_samples * 100 if total_samples > 0 else 0
+        leukemia_pct = leukemia_count / total_samples * 100 if total_samples > 0 else 0
+        healthy_pct = healthy_count / total_samples * 100 if total_samples > 0 else 0
 
-    max_class, min_class = max(leukemia_count, healthy_count), min(leukemia_count, healthy_count)
-    imbalance_ratio = max_class / min_class if min_class > 0 else float('inf')
+        max_class, min_class = max(leukemia_count, healthy_count), min(leukemia_count, healthy_count)
+        imbalance_ratio = max_class / min_class if min_class > 0 else float('inf')
 
-    return {
-        "total_samples": total_samples,
-        "train_samples": int(total_samples * 0.85),
-        "val_samples": total_samples - int(total_samples * 0.85),
-        "class_distribution": {
-            "leukemia": leukemia_count, "healthy": healthy_count,
-            "leukemia_pct": round(leukemia_pct, 1), "healthy_pct": round(healthy_pct, 1)
-        },
-        "imbalance_ratio": round(imbalance_ratio, 2),
-        "partition_id": partition_id
-    }
+        log(INFO, f"[DATA_HET] Client {partition_id}: {total_samples} samples (L:{leukemia_count}, H:{healthy_count})")
+        
+        return {
+            "total_samples": total_samples,
+            "train_samples": int(total_samples * 0.85),
+            "val_samples": total_samples - int(total_samples * 0.85),
+            "class_distribution": {
+                "leukemia": leukemia_count, "healthy": healthy_count,
+                "leukemia_pct": round(leukemia_pct, 1), "healthy_pct": round(healthy_pct, 1)
+            },
+            "imbalance_ratio": round(imbalance_ratio, 2),
+            "partition_id": partition_id
+        }
+    except Exception as e:
+        log(WARNING, f"[DATA_HET] Error loading partition {partition_id}: {e}")
+        return {"error": str(e)}
 
+def save_all_clients_data_heterogeneity(client_configs: List[Dict], partitioner_cache: dict):
+    """
+    Save data heterogeneity statistics for all clients to the database.
+    
+    This function should be called at FL start to ensure data partitioning
+    information is captured for visualization in the frontend.
+    """
+    from flwr.common import log
+    from logging import INFO, WARNING
+    
+    if SUPABASE_CLIENT is None or SIMULATION_ID is None:
+        log(WARNING, "[DATA_HET] Cannot save data heterogeneity: Supabase not initialized")
+        return
+    
+    log(INFO, f"[DATA_HET] Saving data heterogeneity for {len(client_configs)} clients...")
+    
+    saved_count = 0
+    for client_idx, config in enumerate(client_configs):
+        db_client_id = config.get('id')
+        if db_client_id is None:
+            log(WARNING, f"[DATA_HET] Client {client_idx} has no database ID")
+            continue
+        
+        try:
+            # Get partition stats for this client
+            stats = get_partition_stats(client_idx, len(client_configs), partitioner_cache)
+            
+            if "error" in stats:
+                log(WARNING, f"[DATA_HET] Failed to get stats for client {client_idx}: {stats['error']}")
+                continue
+            
+            # Fetch existing metrics
+            response = SUPABASE_CLIENT.from_('client_simulation_metrics').select('metrics') \
+                .eq('simulation_id', SIMULATION_ID).eq('client_id', db_client_id).execute()
+            
+            if not response.data:
+                log(WARNING, f"[DATA_HET] No metrics record found for client {db_client_id}")
+                continue
+            
+            existing_metrics = response.data[0].get('metrics', {})
+            
+            # Only update if data_heterogeneity not already present
+            if 'data_heterogeneity' not in existing_metrics:
+                existing_metrics['data_heterogeneity'] = stats
+                
+                SUPABASE_CLIENT.from_('client_simulation_metrics').update({'metrics': existing_metrics}) \
+                    .eq('simulation_id', SIMULATION_ID).eq('client_id', db_client_id).execute()
+                
+                saved_count += 1
+                log(INFO, f"[DATA_HET] Saved for client {client_idx}: {stats['total_samples']} samples "
+                          f"(L:{stats['class_distribution']['leukemia']}, H:{stats['class_distribution']['healthy']})")
+            else:
+                log(INFO, f"[DATA_HET] Client {client_idx} already has data_heterogeneity")
+                
+        except Exception as e:
+            log(WARNING, f"[DATA_HET] Error saving data heterogeneity for client {client_idx}: {e}")
+    
+    log(INFO, f"[DATA_HET] Saved data heterogeneity for {saved_count}/{len(client_configs)} clients")
 
 def print_client_data_distribution_summary(client_configs: List[Dict], partitioner_cache: dict):
     """Print data distribution summary across all clients."""
@@ -288,10 +354,12 @@ def apply_freeze_strategy(model, model_type: str, server_round: int, total_round
     """
     Apply appropriate freeze/unfreeze strategy based on current FL round.
 
-    Strategy:
-        - Phase 1 (Rounds 1-2): Freeze backbone, train only classifier
-        - Phase 2 (Rounds 3-7): Unfreeze last block + classifier
-        - Phase 3 (Rounds 8-10): Unfreeze all layers with REDUCED LR (polish phase)
+    Strategy (Optimized for Heterogeneity):
+        - Phase 1 (20%): Freeze backbone, train only classifier - fast initial learning
+        - Phase 2 (80%): Unfreeze last block + classifier - distillation-friendly
+        - Removed Phase 3 (Unfreeze All) to prevent catastrophic forgetting of generic features.
+
+    For 10 rounds: Phase 1 = 1-2, Phase 2 = 3-10
 
     Args:
         model: PyTorch model instance
@@ -306,30 +374,25 @@ def apply_freeze_strategy(model, model_type: str, server_round: int, total_round
     from logging import INFO
 
     # Calculate phase thresholds
-    phase1_end = max(2, int(total_rounds * 0.2))   # 20% = rounds 1-2
-    phase2_end = max(7, int(total_rounds * 0.7))   # 70% = rounds 3-7
+    # Phase 1: 20% - classifier only (minimum 2 rounds)
+    phase1_end = max(2, int(total_rounds * 0.20))
 
     if server_round <= phase1_end:
-        # Phase 1: Classifier only
+        # Phase 1: Classifier only - fast initial adaptation
         model = freeze_backbone(model, model_type)
         lr_multiplier = 1.0
         trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        log(INFO, f"[Freeze] Round {server_round}: Backbone FROZEN, classifier only ({trainable:,} params), LR x1.0")
+        log(INFO, f"[Freeze] Round {server_round}/{total_rounds}: Phase 1 - Backbone FROZEN, classifier only ({trainable:,} params), LR x1.0")
 
-    elif server_round <= phase2_end:
-        # Phase 2: Last block + classifier
+    else:
+        # Phase 2: Last block + classifier - Main training phase
+        # We keep the early backbone frozen to preserve ImageNet features and prevent
+        # overfitting to the highly heterogeneous local data.
         model = freeze_backbone(model, model_type)
         model = unfreeze_last_block(model, model_type)
         lr_multiplier = 1.0
         trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        log(INFO, f"[Freeze] Round {server_round}: Last block + classifier ({trainable:,} params), LR x1.0")
-
-    else:
-        # Phase 3: Full fine-tuning with REDUCED LR (polish phase)
-        model = unfreeze_all(model)
-        lr_multiplier = 0.1  # 10x reduction to prevent catastrophic forgetting
-        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        log(INFO, f"[Freeze] Round {server_round}: All layers UNFROZEN ({trainable:,} params), LR x0.1 (polish)")
+        log(INFO, f"[Freeze] Round {server_round}/{total_rounds}: Phase 2 - Last block + classifier ({trainable:,} params), LR x1.0")
 
     return model, lr_multiplier
 
@@ -420,7 +483,7 @@ def evaluate_all_clients_on_validation(client_configs: List[Dict], device: torch
                 except Exception:
                     pass
             model.to(device)
-            _, valloader = load_private_dataset_fn(i, num_partitions, batch_size=64)
+            _, valloader, _ = load_private_dataset_fn(i, num_partitions, batch_size=64)
 
             if valloader is not None:
                 dataset_type = 'validation'
@@ -654,17 +717,25 @@ def save_round_training_metrics(round_num: int, training_metrics: Dict, client_c
             }
 
             if round_num == 1 and 'data_heterogeneity' not in existing_metrics:
+                from flwr.common import log
+                from logging import INFO, WARNING
+                log(INFO, f"[DATA_HET] Attempting to save data_heterogeneity for client_idx={client_idx}")
                 try:
                     stats = get_partition_stats(client_idx, len(client_configs), partitioner_cache)
                     if "error" not in stats:
                         existing_metrics['data_heterogeneity'] = stats
-                except Exception:
-                    pass
+                        log(INFO, f"[DATA_HET] Successfully added data_heterogeneity for client {client_idx}")
+                    else:
+                        log(WARNING, f"[DATA_HET] get_partition_stats returned error: {stats}")
+                except Exception as e:
+                    log(WARNING, f"[DATA_HET] Exception while getting partition stats: {e}")
 
             SUPABASE_CLIENT.from_('client_simulation_metrics').update({'metrics': existing_metrics}) \
                 .eq('simulation_id', SIMULATION_ID).eq('client_id', db_client_id).execute()
-    except Exception:
-        pass
+    except Exception as e:
+        from flwr.common import log
+        from logging import WARNING
+        log(WARNING, f"[METRICS] Error saving round training metrics: {e}")
 
 
 def save_round_validation_metrics(round_num: int, metrics: Dict, client_configs: List[Dict]):
@@ -713,10 +784,37 @@ def check_for_degradation_warnings(current_metrics: Dict, round_num: int, client
     for client_id, history in client_history.items():
         if len(history) >= 3:
             last_3 = history[-3:]
-            accs = [r['metrics'].get('accuracy', 0) for r in last_3]
-            if accs[-1] < accs[-2] < accs[-3]:
-                log(WARNING, f"Client {client_id}: Accuracy declining for 2 consecutive rounds")
+            # Handle possible None values if validation failed
+            accs = []
+            for r in last_3:
+                val = r['metrics'].get('accuracy')
+                # Ensure we convert None to float, and handle any other edge cases
+                if val is None or not isinstance(val, (int, float)):
+                    accs.append(0.0)
+                else:
+                    accs.append(float(val))
 
-            losses = [r['metrics'].get('loss', 999) for r in last_3]
-            if losses[-1] > losses[-2] > losses[-3]:
-                log(WARNING, f"Client {client_id}: Loss increasing for 2 consecutive rounds (overfitting)")
+            # Only compare if all values are valid (not None)
+            if all(a is not None for a in accs):
+                try:
+                    if accs[-1] < accs[-2] < accs[-3]:
+                        log(WARNING, f"Client {client_id}: Accuracy declining for 2 consecutive rounds")
+                except TypeError:
+                    pass  # Skip comparison if there are still type issues
+
+            losses = []
+            for r in last_3:
+                val = r['metrics'].get('loss')
+                # Ensure we convert None to float, and handle any other edge cases
+                if val is None or not isinstance(val, (int, float)):
+                    losses.append(999.0)
+                else:
+                    losses.append(float(val))
+
+            # Only compare if all values are valid (not None)
+            if all(l is not None for l in losses):
+                try:
+                    if losses[-1] > losses[-2] > losses[-3]:
+                        log(WARNING, f"Client {client_id}: Loss increasing for 2 consecutive rounds (overfitting)")
+                except TypeError:
+                    pass  # Skip comparison if there are still type issues

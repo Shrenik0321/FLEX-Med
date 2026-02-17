@@ -1,4 +1,4 @@
-"""Unified inference endpoint with prediction and explainable AI (xAI)."""
+"""Unified inference endpoint with prediction."""
 import io
 import logging
 import torch
@@ -11,12 +11,6 @@ from app.config import get_settings, get_supabase_client, Settings
 from app.services.model_service import (
     load_model,
     COMMON_TRANSFORM,
-    get_gradcam_target_layers,
-)
-from app.services.xai_service import (
-    generate_gradcam_base64,
-    generate_lime_base64,
-    validate_model_quality,
 )
 
 router = APIRouter(prefix="/inference", tags=["inference"])
@@ -31,20 +25,18 @@ async def inference(
     settings: Settings = Depends(get_settings)
 ):
     """
-    Unified inference endpoint: Prediction + Grad-CAM + LIME explanations.
+    Unified inference endpoint: Prediction.
 
     Processes an uploaded blood cell microscopy image and returns:
     - Prediction (Healthy vs ALL/Leukemia)
     - Confidence score
     - All class probabilities
-    - Grad-CAM visualization (base64 encoded PNG)
-    - LIME visualization (base64 encoded PNG)
 
     Args:
         file: Uploaded blood cell microscopy image (JPEG/PNG)
 
     Returns:
-        JSON response with prediction and xAI visualizations
+        JSON response with prediction
 
     Example Response:
         {
@@ -57,15 +49,7 @@ async def inference(
             },
             "model": "MobileNetV2",
             "model_path": "/path/to/model.pt",
-            "device": "cpu",
-            "xai": {
-                "gradcam": {
-                    "image_base64": "iVBORw0KGgoAAAANS..."
-                },
-                "lime": {
-                    "image_base64": "iVBORw0KGgoAAAANS..."
-                }
-            }
+            "device": "cpu"
         }
     """
     try:
@@ -122,71 +106,7 @@ async def inference(
                 detail=f"Prediction failed: {str(e)}"
             ) from e
 
-        # 3.5. Validate model quality before generating xAI
-        quality_check = validate_model_quality(
-            model=bundle.model,
-            confidence=confidence,
-            min_confidence=settings.xai_min_confidence,
-        )
-
-        # Log warnings if model quality is questionable
-        if quality_check["warnings"]:
-            for warning in quality_check["warnings"]:
-                logger.warning(f"xAI Quality Warning: {warning}")
-        if quality_check["issues"]:
-            for issue in quality_check["issues"]:
-                logger.warning(f"xAI Quality Issue: {issue}")
-            logger.warning(f"Recommendation: {quality_check['recommendation']}")
-
-        # 4. Prepare input tensor for xAI
-        try:
-            input_tensor = COMMON_TRANSFORM(image).unsqueeze(0).to(bundle.device)
-        except Exception as e:
-            logger.error(f"Tensor transformation failed: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to prepare image tensor: {str(e)}"
-            ) from e
-
-        # 5. Generate Grad-CAM
-        try:
-            target_layers = get_gradcam_target_layers(bundle.model, bundle.model_name)
-            gradcam_base64 = generate_gradcam_base64(
-                model=bundle.model,
-                input_tensor=input_tensor,
-                target_layers=target_layers,
-                class_idx=class_idx,
-                eigen_smooth=settings.xai_gradcam_eigen_smooth,
-                aug_smooth=True,
-            )
-            logger.info("Grad-CAM generated successfully")
-        except Exception as e:
-            logger.error(f"Grad-CAM generation failed: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Grad-CAM generation failed: {str(e)}"
-            ) from e
-
-        # 6. Generate LIME
-        try:
-            lime_base64 = generate_lime_base64(
-                model=bundle.model,
-                input_tensor=input_tensor,
-                class_idx=class_idx,
-                device=bundle.device,
-                num_samples=settings.xai_lime_num_samples,
-                random_seed=settings.xai_lime_random_seed,
-                num_features=settings.xai_lime_num_features,
-            )
-            logger.info("LIME generated successfully")
-        except Exception as e:
-            logger.error(f"LIME generation failed: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"LIME generation failed: {str(e)}"
-            ) from e
-
-        # 7. Return unified response
+        # 4. Return unified response
         return JSONResponse(
             status_code=200,
             content={
@@ -197,15 +117,7 @@ async def inference(
                 "client_id": client_id,
                 "model": bundle.model_name,
                 "model_path": str(client_model_path),
-                "device": str(bundle.device),
-                "xai": {
-                    "gradcam": {
-                        "image_base64": gradcam_base64
-                    },
-                    "lime": {
-                        "image_base64": lime_base64
-                    }
-                }
+                "device": str(bundle.device)
             },
         )
 

@@ -1,786 +1,821 @@
 Client 1
-
 {
   "global": {
     "post_fl": {
-      "loss": 0.538501,
-      "recall": 0.463259,
-      "roc_auc": 0.120079,
-      "accuracy": 0.696486,
-      "f1_score": 0.604167,
-      "class_gap": 0.466454,
-      "precision": 0.868263,
+      "loss": 0.608674,
+      "recall": 0.92492,
+      "roc_auc": 0.212024,
+      "accuracy": 0.695687,
+      "f1_score": 0.752437,
+      "class_gap": 0.458466,
+      "precision": 0.634173,
       "num_samples": 1252,
-      "specificity": 0.929712,
+      "specificity": 0.466454,
       "confusion_matrix": {
-        "FN": 336,
-        "FP": 44,
-        "TN": 582,
-        "TP": 290
+        "FN": 47,
+        "FP": 334,
+        "TN": 292,
+        "TP": 579
       },
-      "healthy_accuracy": 0.929712,
-      "leukemia_accuracy": 0.463259,
+      "healthy_accuracy": 0.466454,
+      "leukemia_accuracy": 0.92492,
       "num_healthy_samples": 626,
       "num_leukemia_samples": 626
     },
     "improvement": {
-      "loss": -0.15449899999999994,
-      "recall": 0.463259,
-      "roc_auc": -0.379921,
-      "accuracy": 0.19648600000000005,
-      "f1_score": 0.604167,
-      "class_gap": -0.5335460000000001,
-      "precision": 0.368263,
-      "specificity": 0.429712,
-      "healthy_accuracy": 0.429712,
-      "leukemia_accuracy": -0.036741000000000024
+      "loss": -0.0843259999999999,
+      "recall": 0.92492,
+      "roc_auc": -0.287976,
+      "accuracy": 0.19568700000000006,
+      "f1_score": 0.752437,
+      "class_gap": -0.541534,
+      "precision": 0.134173,
+      "specificity": -0.03354600000000002,
+      "healthy_accuracy": -0.03354600000000002,
+      "leukemia_accuracy": 0.42491999999999996
     }
   },
   "rounds": [
     {
       "round": 1,
       "training": {
-        "val_loss": 0.040290795749536264,
-        "train_loss": 0.05300864474712939,
+        "val_loss": 0.05832045508596378,
+        "train_loss": 0.05069288708593534,
         "distill_loss": 0,
-        "num_examples": 2941,
-        "training_time": 1148.2136535644531,
-        "train_accuracy": 0.7191431485889154,
-        "consensus_weight": 0.5826344061452946
+        "num_examples": 2179,
+        "training_time": 578.2838253974915,
+        "train_accuracy": 0.8396818112283922,
+        "consensus_weight": 0.40136924435433824
       },
       "validation": {
-        "loss": 0.638839430343814,
-        "recall": 0.7634408602150538,
-        "accuracy": 0.6829268292682927,
-        "f1_score": 0.5220588235294118,
-        "class_gap": 0.10413486652420201,
-        "precision": 0.39664804469273746,
-        "healthy_accuracy": 0.7634408602150538,
-        "leukemia_accuracy": 0.6593059936908517
+        "loss": 0.4150346864353527,
+        "recall": 0.2,
+        "accuracy": 0.8883116883116883,
+        "f1_score": 0.31746031746031744,
+        "class_gap": 0.791044776119403,
+        "precision": 0.7692307692307693,
+        "healthy_accuracy": 0.2,
+        "leukemia_accuracy": 0.991044776119403
       }
     },
     {
       "round": 2,
       "training": {
-        "val_loss": 0.037262360737831506,
-        "train_loss": 0.042352448163581066,
-        "distill_loss": 0.004151592352368598,
-        "num_examples": 2941,
-        "training_time": 362.7936770915985,
-        "train_accuracy": 0.8165023234727417,
-        "consensus_weight": 0.5944205747336199
+        "val_loss": 0.06625397485465957,
+        "train_loss": 0.04962080363004248,
+        "distill_loss": 0.011428457814492757,
+        "num_examples": 2179,
+        "training_time": 459.37770342826843,
+        "train_accuracy": 0.8454948753250726,
+        "consensus_weight": 0.3957526573194119
       },
       "validation": {
-        "loss": 0.7251039903338362,
-        "recall": 0.967741935483871,
-        "accuracy": 0.3048780487804878,
-        "f1_score": 0.3870967741935484,
-        "class_gap": 0.857331840846647,
-        "precision": 0.24193548387096775,
-        "healthy_accuracy": 0.967741935483871,
-        "leukemia_accuracy": 0.11041009463722397
+        "loss": 0.4225365663503672,
+        "recall": 0.22,
+        "accuracy": 0.8857142857142857,
+        "f1_score": 0.3333333333333333,
+        "class_gap": 0.7650746268656716,
+        "precision": 0.6875,
+        "healthy_accuracy": 0.22,
+        "leukemia_accuracy": 0.9850746268656716
       }
     },
     {
       "round": 3,
       "training": {
-        "val_loss": 0.03587031447225147,
-        "train_loss": 0.03899081323997698,
-        "distill_loss": 0.002636485210328092,
-        "num_examples": 2941,
-        "training_time": 399.08498311042786,
-        "train_accuracy": 0.8353167856738071,
-        "consensus_weight": 0.43382504358061785
+        "val_loss": 0.04909081160066984,
+        "train_loss": 0.0439873658084639,
+        "distill_loss": 0.004504648665995789,
+        "num_examples": 2179,
+        "training_time": 500.9370379447937,
+        "train_accuracy": 0.8675233287440722,
+        "consensus_weight": 0.2910363952186754
       },
       "validation": {
-        "loss": 0.5524299008090322,
-        "recall": 0.6344086021505376,
-        "accuracy": 0.7975609756097561,
-        "f1_score": 0.5870646766169154,
-        "class_gap": 0.21101726535734877,
-        "precision": 0.5462962962962963,
-        "healthy_accuracy": 0.6344086021505376,
-        "leukemia_accuracy": 0.8454258675078864
+        "loss": 0.33897789360640884,
+        "recall": 0.44,
+        "accuracy": 0.9012987012987013,
+        "f1_score": 0.5365853658536586,
+        "class_gap": 0.5301492537313433,
+        "precision": 0.6875,
+        "healthy_accuracy": 0.44,
+        "leukemia_accuracy": 0.9701492537313433
       }
     },
     {
       "round": 4,
       "training": {
-        "val_loss": 0.044406856454554056,
-        "train_loss": 0.04625218746562799,
-        "distill_loss": 0.0028217653224474597,
-        "num_examples": 2200,
-        "training_time": 324.5708463191986,
-        "train_accuracy": 0.7772727272727272,
-        "consensus_weight": 0.4227156651326852
+        "val_loss": 0.07313713284495932,
+        "train_loss": 0.039708647301087634,
+        "distill_loss": 0.009041098016215967,
+        "num_examples": 2179,
+        "training_time": 494.2492878437042,
+        "train_accuracy": 0.8878690530824537,
+        "consensus_weight": 0.29168084271730244
       },
       "validation": {
-        "loss": 0.707749947105966,
-        "recall": 0.8817204301075269,
-        "accuracy": 0.3463414634146341,
-        "f1_score": 0.37962962962962965,
-        "class_gap": 0.692445982158,
-        "precision": 0.24188790560471976,
-        "healthy_accuracy": 0.8817204301075269,
-        "leukemia_accuracy": 0.1892744479495268
+        "loss": 0.4363655557880154,
+        "recall": 0.76,
+        "accuracy": 0.8883116883116883,
+        "f1_score": 0.6386554621848739,
+        "class_gap": 0.14746268656716421,
+        "precision": 0.5507246376811594,
+        "healthy_accuracy": 0.76,
+        "leukemia_accuracy": 0.9074626865671642
       }
     },
     {
       "round": 5,
       "training": {
-        "val_loss": 0.041276171093895316,
-        "train_loss": 0.04588899933511303,
-        "distill_loss": 0.0024945485185318968,
-        "num_examples": 2200,
-        "training_time": 312.18739128112793,
-        "train_accuracy": 0.7786363636363637,
-        "consensus_weight": 0.4226809086049878
+        "val_loss": 0.07906877900211091,
+        "train_loss": 0.03547506258206595,
+        "distill_loss": 0.008389636159497255,
+        "num_examples": 2179,
+        "training_time": 494.54008650779724,
+        "train_accuracy": 0.8916934373565856,
+        "consensus_weight": 0.2911322175872046
       },
       "validation": {
-        "loss": 0.7239267436469473,
-        "recall": 0.9247311827956989,
-        "accuracy": 0.40487804878048783,
-        "f1_score": 0.41346153846153844,
-        "class_gap": 0.6723652521963298,
-        "precision": 0.26625386996904027,
-        "healthy_accuracy": 0.9247311827956989,
-        "leukemia_accuracy": 0.25236593059936907
+        "loss": 0.33311798293869216,
+        "recall": 0.38,
+        "accuracy": 0.9116883116883117,
+        "f1_score": 0.5277777777777778,
+        "class_gap": 0.611044776119403,
+        "precision": 0.8636363636363636,
+        "healthy_accuracy": 0.38,
+        "leukemia_accuracy": 0.991044776119403
       }
     },
     {
       "round": 6,
       "training": {
-        "val_loss": 0.04383741106305803,
-        "train_loss": 0.045190858486152834,
-        "distill_loss": 0.0026448489210267752,
-        "num_examples": 2200,
-        "training_time": 318.3647270202637,
-        "train_accuracy": 0.7787878787878788,
-        "consensus_weight": 0.4200682140673241
+        "val_loss": 0.06100397277623415,
+        "train_loss": 0.03363230726614162,
+        "distill_loss": 0.007891085175679454,
+        "num_examples": 2179,
+        "training_time": 541.1597621440887,
+        "train_accuracy": 0.8994951812758146,
+        "consensus_weight": 0.290822607094939
       },
       "validation": {
-        "loss": 0.7087468920684442,
-        "recall": 0.9032258064516129,
-        "accuracy": 0.4292682926829268,
-        "f1_score": 0.417910447761194,
-        "class_gap": 0.6130049862623383,
-        "precision": 0.27184466019417475,
-        "healthy_accuracy": 0.9032258064516129,
-        "leukemia_accuracy": 0.2902208201892745
+        "loss": 0.3755322097183822,
+        "recall": 0.74,
+        "accuracy": 0.8597402597402597,
+        "f1_score": 0.578125,
+        "class_gap": 0.13761194029850743,
+        "precision": 0.47435897435897434,
+        "healthy_accuracy": 0.74,
+        "leukemia_accuracy": 0.8776119402985074
       }
     },
     {
       "round": 7,
       "training": {
-        "val_loss": 0.03472976372749717,
-        "train_loss": 0.03871529086398474,
-        "distill_loss": 0.002098640742346267,
-        "num_examples": 2941,
-        "training_time": 408.6120285987854,
-        "train_accuracy": 0.838150289017341,
-        "consensus_weight": 0.5853806400951017
+        "val_loss": 0.06862946897625732,
+        "train_loss": 0.034420104413900685,
+        "distill_loss": 0.009586411762593573,
+        "num_examples": 2179,
+        "training_time": 555.3379430770874,
+        "train_accuracy": 0.899189230533884,
+        "consensus_weight": 0.28936667164662067
       },
       "validation": {
-        "loss": 0.6817068073807693,
-        "recall": 0.7204301075268817,
-        "accuracy": 0.5585365853658537,
-        "f1_score": 0.4253968253968254,
-        "class_gap": 0.2093890980631593,
-        "precision": 0.30180180180180183,
-        "healthy_accuracy": 0.7204301075268817,
-        "leukemia_accuracy": 0.5110410094637224
+        "loss": 0.3086927708093222,
+        "recall": 0.52,
+        "accuracy": 0.9194805194805195,
+        "f1_score": 0.6265060240963856,
+        "class_gap": 0.4591044776119403,
+        "precision": 0.7878787878787878,
+        "healthy_accuracy": 0.52,
+        "leukemia_accuracy": 0.9791044776119403
       }
     },
     {
       "round": 8,
       "training": {
-        "val_loss": 0.03170141905408214,
-        "train_loss": 0.03760580506607674,
-        "distill_loss": 0.0018868165199727386,
-        "num_examples": 2941,
-        "training_time": 1167.2916707992554,
-        "train_accuracy": 0.8507310438626318,
-        "consensus_weight": 0.4186432644516958
+        "val_loss": 0.07400297938296811,
+        "train_loss": 0.033339552914246846,
+        "distill_loss": 0.010211217348789993,
+        "num_examples": 2179,
+        "training_time": 548.9292824268341,
+        "train_accuracy": 0.9005660088725715,
+        "consensus_weight": 0.288694211127012
       },
       "validation": {
-        "loss": 0.5868637603957478,
-        "recall": 0.6774193548387096,
-        "accuracy": 0.7414634146341463,
-        "f1_score": 0.5431034482758621,
-        "class_gap": 0.08283301109188979,
-        "precision": 0.45323741007194246,
-        "healthy_accuracy": 0.6774193548387096,
-        "leukemia_accuracy": 0.7602523659305994
+        "loss": 0.3219591744534381,
+        "recall": 0.54,
+        "accuracy": 0.9116883116883117,
+        "f1_score": 0.6136363636363636,
+        "class_gap": 0.42716417910447757,
+        "precision": 0.7105263157894737,
+        "healthy_accuracy": 0.54,
+        "leukemia_accuracy": 0.9671641791044776
       }
     },
     {
       "round": 9,
       "training": {
-        "val_loss": 0.050127065784874414,
-        "train_loss": 0.067726326888209,
-        "distill_loss": 0.0014752100737208406,
-        "num_examples": 2314,
-        "training_time": 898.5114827156067,
-        "train_accuracy": 0.6642178046672429,
-        "consensus_weight": 0.2789449437661596
+        "val_loss": 0.07125866048945448,
+        "train_loss": 0.03231362946295508,
+        "distill_loss": 0.009567276568776822,
+        "num_examples": 2179,
+        "training_time": 534.9253544807434,
+        "train_accuracy": 0.899189230533884,
+        "consensus_weight": 0.2882092365142959
       },
       "validation": {
-        "loss": 0.5997343415167273,
-        "recall": 0.7419354838709677,
-        "accuracy": 0.724390243902439,
-        "f1_score": 0.549800796812749,
-        "class_gap": 0.022692581662765887,
-        "precision": 0.43670886075949367,
-        "healthy_accuracy": 0.7419354838709677,
-        "leukemia_accuracy": 0.7192429022082019
+        "loss": 0.34482304771225175,
+        "recall": 0.64,
+        "accuracy": 0.8571428571428571,
+        "f1_score": 0.5378151260504201,
+        "class_gap": 0.2495522388059701,
+        "precision": 0.463768115942029,
+        "healthy_accuracy": 0.64,
+        "leukemia_accuracy": 0.8895522388059701
       }
     },
     {
       "round": 10,
       "training": {
-        "val_loss": 0.04947775965999989,
-        "train_loss": 0.06907107076934867,
-        "distill_loss": 0.0016458708118010736,
-        "num_examples": 2314,
-        "training_time": 901.763242483139,
-        "train_accuracy": 0.6927398444252377,
-        "consensus_weight": 0.2836448152068863
+        "val_loss": 0.0799303937655611,
+        "train_loss": 0.03259175155617765,
+        "distill_loss": 0.008511156851685122,
+        "num_examples": 2179,
+        "training_time": 515.8428862094879,
+        "train_accuracy": 0.9062260975982867,
+        "consensus_weight": 0.2892428042155981
       },
       "validation": {
-        "loss": 0.635635868950588,
-        "recall": 0.7419354838709677,
-        "accuracy": 0.6560975609756098,
-        "f1_score": 0.4946236559139785,
-        "class_gap": 0.11102065737254507,
-        "precision": 0.3709677419354839,
-        "healthy_accuracy": 0.7419354838709677,
-        "leukemia_accuracy": 0.6309148264984227
+        "loss": 0.3213307321845711,
+        "recall": 0.64,
+        "accuracy": 0.9142857142857143,
+        "f1_score": 0.6597938144329897,
+        "class_gap": 0.3152238805970149,
+        "precision": 0.6808510638297872,
+        "healthy_accuracy": 0.64,
+        "leukemia_accuracy": 0.9552238805970149
       }
     }
-  ]
+  ],
+  "data_heterogeneity": {
+    "val_samples": 385,
+    "partition_id": 0,
+    "total_samples": 2564,
+    "train_samples": 2179,
+    "imbalance_ratio": 6.72,
+    "class_distribution": {
+      "healthy": 332,
+      "leukemia": 2232,
+      "healthy_pct": 12.9,
+      "leukemia_pct": 87.1
+    }
+  }
 }
-
-
 
 Client 2
 {
   "global": {
     "post_fl": {
-      "loss": 0.540853,
-      "recall": 0.447284,
-      "roc_auc": 0.113156,
-      "accuracy": 0.698083,
-      "f1_score": 0.597015,
-      "class_gap": 0.501597,
-      "precision": 0.897436,
+      "loss": 0.852538,
+      "recall": 0.971246,
+      "roc_auc": 0.196912,
+      "accuracy": 0.677316,
+      "f1_score": 0.750617,
+      "class_gap": 0.587859,
+      "precision": 0.61167,
       "num_samples": 1252,
-      "specificity": 0.948882,
+      "specificity": 0.383387,
       "confusion_matrix": {
-        "FN": 346,
-        "FP": 32,
-        "TN": 594,
-        "TP": 280
+        "FN": 18,
+        "FP": 386,
+        "TN": 240,
+        "TP": 608
       },
-      "healthy_accuracy": 0.948882,
-      "leukemia_accuracy": 0.447284,
+      "healthy_accuracy": 0.383387,
+      "leukemia_accuracy": 0.971246,
       "num_healthy_samples": 626,
       "num_leukemia_samples": 626
     },
     "improvement": {
-      "loss": -0.15214699999999992,
-      "recall": 0.447284,
-      "roc_auc": -0.38684399999999997,
-      "accuracy": 0.198083,
-      "f1_score": 0.597015,
-      "class_gap": -0.49840300000000004,
-      "precision": 0.397436,
-      "specificity": 0.448882,
-      "healthy_accuracy": 0.448882,
-      "leukemia_accuracy": -0.052715999999999985
+      "loss": 0.15953800000000007,
+      "recall": 0.971246,
+      "roc_auc": -0.303088,
+      "accuracy": 0.17731600000000003,
+      "f1_score": 0.750617,
+      "class_gap": -0.412141,
+      "precision": 0.11167000000000005,
+      "specificity": -0.11661300000000002,
+      "healthy_accuracy": -0.11661300000000002,
+      "leukemia_accuracy": 0.47124600000000005
     }
   },
   "rounds": [
     {
       "round": 1,
       "training": {
-        "val_loss": 0.06037317482488496,
-        "train_loss": 0.06609233925202945,
+        "val_loss": 0.01556549332753727,
+        "train_loss": 0.019069403712764953,
         "distill_loss": 0,
-        "num_examples": 2314,
-        "training_time": 1421.729463815689,
-        "train_accuracy": 0.541774704696053,
-        "consensus_weight": 0.4173655938547054
+        "num_examples": 1928,
+        "training_time": 1101.2257132530212,
+        "train_accuracy": 0.9470954356846473,
+        "consensus_weight": 0.5986307556456618
       },
       "validation": {
-        "loss": 0.5565535210646115,
-        "recall": 0.8970588235294118,
-        "accuracy": 0.7480769230769231,
-        "f1_score": 0.6506666666666666,
-        "class_gap": 0.2017463235294118,
-        "precision": 0.5104602510460251,
-        "healthy_accuracy": 0.8970588235294118,
-        "leukemia_accuracy": 0.6953125
+        "loss": 0.3598731730067939,
+        "recall": 0.9375,
+        "accuracy": 0.9444444444444444,
+        "f1_score": 0.6122448979591837,
+        "class_gap": 0.007285276073619618,
+        "precision": 0.45454545454545453,
+        "healthy_accuracy": 0.9375,
+        "leukemia_accuracy": 0.9447852760736196
       }
     },
     {
       "round": 2,
       "training": {
-        "val_loss": 0.04774451326756251,
-        "train_loss": 0.05422539320730028,
-        "distill_loss": 0.007077536971567646,
-        "num_examples": 2200,
-        "training_time": 639.2513465881348,
-        "train_accuracy": 0.7037878787878787,
-        "consensus_weight": 0.4055794252663802
+        "val_loss": 0.013062824212917776,
+        "train_loss": 0.016303413406350328,
+        "distill_loss": 0.00730973099484128,
+        "num_examples": 1928,
+        "training_time": 975.7084765434265,
+        "train_accuracy": 0.9439834024896265,
+        "consensus_weight": 0.6042473426805881
       },
       "validation": {
-        "loss": 0.541163902099316,
-        "recall": 0.8897058823529411,
-        "accuracy": 0.8,
-        "f1_score": 0.6994219653179191,
-        "class_gap": 0.1214767156862745,
-        "precision": 0.5761904761904761,
-        "healthy_accuracy": 0.8897058823529411,
-        "leukemia_accuracy": 0.7682291666666666
+        "loss": 0.40191440676387985,
+        "recall": 1,
+        "accuracy": 0.8859649122807017,
+        "f1_score": 0.4507042253521127,
+        "class_gap": 0.11963190184049077,
+        "precision": 0.2909090909090909,
+        "healthy_accuracy": 1,
+        "leukemia_accuracy": 0.8803680981595092
       }
     },
     {
       "round": 3,
       "training": {
-        "val_loss": 0.049329866078637895,
-        "train_loss": 0.05425542674603916,
-        "distill_loss": 0.004247764140202464,
-        "num_examples": 2200,
-        "training_time": 724.233793258667,
-        "train_accuracy": 0.7040909090909091,
-        "consensus_weight": 0.291469957335881
+        "val_loss": 0.007932540128063976,
+        "train_loss": 0.015391236663505923,
+        "distill_loss": 0.003885053723504303,
+        "num_examples": 1928,
+        "training_time": 1065.377247095108,
+        "train_accuracy": 0.9439834024896265,
+        "consensus_weight": 0.273905253981386
       },
       "validation": {
-        "loss": 0.46830286979675295,
-        "recall": 0.8897058823529411,
-        "accuracy": 0.8288461538461539,
-        "f1_score": 0.7311178247734139,
-        "class_gap": 0.0824142156862745,
-        "precision": 0.6205128205128205,
-        "healthy_accuracy": 0.8897058823529411,
-        "leukemia_accuracy": 0.8072916666666666
+        "loss": 0.1847643187345817,
+        "recall": 0.9375,
+        "accuracy": 0.9619883040935673,
+        "f1_score": 0.6976744186046512,
+        "class_gap": 0.025690184049079745,
+        "precision": 0.5555555555555556,
+        "healthy_accuracy": 0.9375,
+        "leukemia_accuracy": 0.9631901840490797
       }
     },
     {
       "round": 4,
       "training": {
-        "val_loss": 0.060100893711759924,
-        "train_loss": 0.06595026856070166,
-        "distill_loss": 0.0034843336962475852,
-        "num_examples": 2314,
-        "training_time": 886.44664311409,
-        "train_accuracy": 0.5151253241140882,
-        "consensus_weight": 0.5772843348673147
+        "val_loss": 0.00818454890483708,
+        "train_loss": 0.010998134992067586,
+        "distill_loss": 0.006064245285012441,
+        "num_examples": 1928,
+        "training_time": 1050.2914135456085,
+        "train_accuracy": 0.9581604426002767,
+        "consensus_weight": 0.27361706458550095
       },
       "validation": {
-        "loss": 0.5816043560321514,
-        "recall": 0.9338235294117647,
-        "accuracy": 0.698076923076923,
-        "f1_score": 0.6180048661800487,
-        "class_gap": 0.31924019607843135,
-        "precision": 0.4618181818181818,
-        "healthy_accuracy": 0.9338235294117647,
-        "leukemia_accuracy": 0.6145833333333334
+        "loss": 0.1393137964588857,
+        "recall": 0.9375,
+        "accuracy": 0.9678362573099415,
+        "f1_score": 0.7317073170731707,
+        "class_gap": 0.031825153374233084,
+        "precision": 0.6,
+        "healthy_accuracy": 0.9375,
+        "leukemia_accuracy": 0.9693251533742331
       }
     },
     {
       "round": 5,
       "training": {
-        "val_loss": 0.037566000457715104,
-        "train_loss": 0.04278838913887739,
-        "distill_loss": 0.004926276502650396,
-        "num_examples": 2941,
-        "training_time": 965.7562074661255,
-        "train_accuracy": 0.80550833049983,
-        "consensus_weight": 0.5773190913950123
+        "val_loss": 0.006881213849269305,
+        "train_loss": 0.009706895715109189,
+        "distill_loss": 0.009025679429195318,
+        "num_examples": 1928,
+        "training_time": 1031.206913948059,
+        "train_accuracy": 0.9628284923928078,
+        "consensus_weight": 0.27312447572638715
       },
       "validation": {
-        "loss": 0.558289734675334,
-        "recall": 0.9264705882352942,
-        "accuracy": 0.7346153846153847,
-        "f1_score": 0.6461538461538462,
-        "class_gap": 0.2598039215686275,
-        "precision": 0.49606299212598426,
-        "healthy_accuracy": 0.9264705882352942,
-        "leukemia_accuracy": 0.6666666666666666
+        "loss": 0.14472828596307521,
+        "recall": 0.9375,
+        "accuracy": 0.9853801169590644,
+        "f1_score": 0.8571428571428571,
+        "class_gap": 0.05023006134969321,
+        "precision": 0.7894736842105263,
+        "healthy_accuracy": 0.9375,
+        "leukemia_accuracy": 0.9877300613496932
       }
     },
     {
       "round": 6,
       "training": {
-        "val_loss": 0.03556062884766747,
-        "train_loss": 0.04102043740019418,
-        "distill_loss": 0.005494698939573822,
-        "num_examples": 2941,
-        "training_time": 973.3672513961792,
-        "train_accuracy": 0.8193358268162756,
-        "consensus_weight": 0.5799317859326759
+        "val_loss": 0.004697027838450264,
+        "train_loss": 0.008666024728146347,
+        "distill_loss": 0.009919221925093372,
+        "num_examples": 1928,
+        "training_time": 1178.6674280166626,
+        "train_accuracy": 0.9642116182572614,
+        "consensus_weight": 0.27144339737488393
       },
       "validation": {
-        "loss": 0.584140842465254,
-        "recall": 0.9558823529411765,
-        "accuracy": 0.6519230769230769,
-        "f1_score": 0.5895691609977324,
-        "class_gap": 0.41161151960784315,
-        "precision": 0.4262295081967213,
-        "healthy_accuracy": 0.9558823529411765,
-        "leukemia_accuracy": 0.5442708333333334
+        "loss": 0.13790888352352276,
+        "recall": 1,
+        "accuracy": 0.97953216374269,
+        "f1_score": 0.8205128205128205,
+        "class_gap": 0.021472392638036797,
+        "precision": 0.6956521739130435,
+        "healthy_accuracy": 1,
+        "leukemia_accuracy": 0.9785276073619632
       }
     },
     {
       "round": 7,
       "training": {
-        "val_loss": 0.06035469401450385,
-        "train_loss": 0.06754159293061979,
-        "distill_loss": 0.004484405926033807,
-        "num_examples": 2314,
-        "training_time": 908.1895439624786,
-        "train_accuracy": 0.515701526937482,
-        "consensus_weight": 0.4146193599048984
+        "val_loss": 0.005348819357371239,
+        "train_loss": 0.00901755646934804,
+        "distill_loss": 0.008434400905045497,
+        "num_examples": 1928,
+        "training_time": 1188.7259805202484,
+        "train_accuracy": 0.9664591977869986,
+        "consensus_weight": 0.27072275970293824
       },
       "validation": {
-        "loss": 0.48849335129444416,
-        "recall": 0.8602941176470589,
-        "accuracy": 0.8538461538461538,
-        "f1_score": 0.7548387096774194,
-        "class_gap": 0.008731617647058876,
-        "precision": 0.6724137931034483,
-        "healthy_accuracy": 0.8602941176470589,
-        "leukemia_accuracy": 0.8515625
+        "loss": 0.15260276825804459,
+        "recall": 1,
+        "accuracy": 0.9649122807017544,
+        "f1_score": 0.7272727272727273,
+        "class_gap": 0.036809815950920255,
+        "precision": 0.5714285714285714,
+        "healthy_accuracy": 1,
+        "leukemia_accuracy": 0.9631901840490797
       }
     },
     {
       "round": 8,
       "training": {
-        "val_loss": 0.050078335794664565,
-        "train_loss": 0.0634520941556574,
-        "distill_loss": 0.004979935825781755,
-        "num_examples": 2314,
-        "training_time": 1761.6426739692688,
-        "train_accuracy": 0.6404494382022472,
-        "consensus_weight": 0.2756166685366924
+        "val_loss": 0.006677807682673588,
+        "train_loss": 0.00803657289679656,
+        "distill_loss": 0.009190073931876586,
+        "num_examples": 1928,
+        "training_time": 1135.7577106952667,
+        "train_accuracy": 0.9713001383125864,
+        "consensus_weight": 0.2707062962263902
       },
       "validation": {
-        "loss": 0.47593933985783504,
-        "recall": 0.8676470588235294,
-        "accuracy": 0.8461538461538461,
-        "f1_score": 0.7468354430379747,
-        "class_gap": 0.029105392156862808,
-        "precision": 0.6555555555555556,
-        "healthy_accuracy": 0.8676470588235294,
-        "leukemia_accuracy": 0.8385416666666666
+        "loss": 0.12931975103609744,
+        "recall": 0.875,
+        "accuracy": 0.9736842105263158,
+        "f1_score": 0.7567567567567568,
+        "class_gap": 0.1035276073619632,
+        "precision": 0.6666666666666666,
+        "healthy_accuracy": 0.875,
+        "leukemia_accuracy": 0.9785276073619632
       }
     },
     {
       "round": 9,
       "training": {
-        "val_loss": 0.03095870258079635,
-        "train_loss": 0.036201127723831196,
-        "distill_loss": 0.004267134996207691,
-        "num_examples": 2941,
-        "training_time": 2459.451583623886,
-        "train_accuracy": 0.8539045676073898,
-        "consensus_weight": 0.41645450617796576
+        "val_loss": 0.005462034700692377,
+        "train_loss": 0.006910512776971576,
+        "distill_loss": 0.009221216085080041,
+        "num_examples": 1928,
+        "training_time": 1127.8015713691711,
+        "train_accuracy": 0.9700899031811895,
+        "consensus_weight": 0.2702804495388468
       },
       "validation": {
-        "loss": 0.6141701785417704,
-        "recall": 0.9338235294117647,
-        "accuracy": 0.65,
-        "f1_score": 0.5825688073394495,
-        "class_gap": 0.3843443627450981,
-        "precision": 0.42333333333333334,
-        "healthy_accuracy": 0.9338235294117647,
-        "leukemia_accuracy": 0.5494791666666666
+        "loss": 0.20942865216244033,
+        "recall": 1,
+        "accuracy": 0.9385964912280702,
+        "f1_score": 0.6037735849056604,
+        "class_gap": 0.06441717791411039,
+        "precision": 0.43243243243243246,
+        "healthy_accuracy": 1,
+        "leukemia_accuracy": 0.9355828220858896
       }
     },
     {
       "round": 10,
       "training": {
-        "val_loss": 0.02967448194545728,
-        "train_loss": 0.036818190234834736,
-        "distill_loss": 0.0035370983486579543,
-        "num_examples": 2941,
-        "training_time": 2522.5066764354706,
-        "train_accuracy": 0.8481242207865806,
-        "consensus_weight": 0.4117281676666307
+        "val_loss": 0.005139873130246997,
+        "train_loss": 0.006846205221649381,
+        "distill_loss": 0.011251966480778742,
+        "num_examples": 1928,
+        "training_time": 1027.2154808044434,
+        "train_accuracy": 0.9714730290456431,
+        "consensus_weight": 0.27005510405805266
       },
       "validation": {
-        "loss": 0.5657221798713391,
-        "recall": 0.9485294117647058,
-        "accuracy": 0.7519230769230769,
-        "f1_score": 0.6666666666666666,
-        "class_gap": 0.2662377450980392,
-        "precision": 0.5139442231075697,
-        "healthy_accuracy": 0.9485294117647058,
-        "leukemia_accuracy": 0.6822916666666666
+        "loss": 0.09146043980679316,
+        "recall": 1,
+        "accuracy": 0.9941520467836257,
+        "f1_score": 0.9411764705882353,
+        "class_gap": 0.006134969325153339,
+        "precision": 0.8888888888888888,
+        "healthy_accuracy": 1,
+        "leukemia_accuracy": 0.9938650306748467
       }
     }
-  ]
+  ],
+  "data_heterogeneity": {
+    "val_samples": 341,
+    "partition_id": 1,
+    "total_samples": 2270,
+    "train_samples": 1929,
+    "imbalance_ratio": 21.25,
+    "class_distribution": {
+      "healthy": 102,
+      "leukemia": 2168,
+      "healthy_pct": 4.5,
+      "leukemia_pct": 95.5
+    }
+  }
 }
-
 
 Client 3
 {
   "global": {
     "post_fl": {
-      "loss": 0.487777,
-      "recall": 0.78115,
-      "roc_auc": 0.132756,
-      "accuracy": 0.782748,
-      "f1_score": 0.7824,
-      "class_gap": 0.003195,
-      "precision": 0.783654,
+      "loss": 0.412024,
+      "recall": 0.833866,
+      "roc_auc": 0.106434,
+      "accuracy": 0.810703,
+      "f1_score": 0.814988,
+      "class_gap": 0.046326,
+      "precision": 0.796947,
       "num_samples": 1252,
-      "specificity": 0.784345,
+      "specificity": 0.78754,
       "confusion_matrix": {
-        "FN": 137,
-        "FP": 135,
-        "TN": 491,
-        "TP": 489
+        "FN": 104,
+        "FP": 133,
+        "TN": 493,
+        "TP": 522
       },
-      "healthy_accuracy": 0.784345,
-      "leukemia_accuracy": 0.78115,
+      "healthy_accuracy": 0.78754,
+      "leukemia_accuracy": 0.833866,
       "num_healthy_samples": 626,
       "num_leukemia_samples": 626
     },
     "improvement": {
-      "loss": -0.20522299999999993,
-      "recall": 0.78115,
-      "roc_auc": -0.367244,
-      "accuracy": 0.282748,
-      "f1_score": 0.7824,
-      "class_gap": -0.996805,
-      "precision": 0.28365399999999996,
-      "specificity": 0.28434499999999996,
-      "healthy_accuracy": 0.28434499999999996,
-      "leukemia_accuracy": 0.28115
+      "loss": -0.28097599999999995,
+      "recall": 0.833866,
+      "roc_auc": -0.39356599999999997,
+      "accuracy": 0.31070299999999995,
+      "f1_score": 0.814988,
+      "class_gap": -0.953674,
+      "precision": 0.29694699999999996,
+      "specificity": 0.28754,
+      "healthy_accuracy": 0.28754,
+      "leukemia_accuracy": 0.333866
     }
   },
   "rounds": [
     {
       "round": 1,
       "training": {
-        "val_loss": 0.04515106860725652,
-        "train_loss": 0.06578534937330655,
+        "val_loss": 0.06793733646995144,
+        "train_loss": 0.07602625033921666,
         "distill_loss": 0,
-        "num_examples": 2200,
-        "training_time": 1451.7431988716125,
-        "train_accuracy": 0.6690909090909091,
+        "num_examples": 3348,
+        "training_time": 1677.6476171016693,
+        "train_accuracy": 0.7506969334926324,
         "consensus_weight": null
       },
       "validation": {
-        "loss": 0.5573685107929848,
-        "recall": 0.84375,
-        "accuracy": 0.7557840616966581,
-        "f1_score": 0.6303501945525292,
-        "class_gap": 0.116787542662116,
-        "precision": 0.5031055900621118,
-        "healthy_accuracy": 0.84375,
-        "leukemia_accuracy": 0.726962457337884
+        "loss": 0.5735478401184082,
+        "recall": 0.9343629343629344,
+        "accuracy": 0.6993243243243243,
+        "f1_score": 0.7311178247734139,
+        "class_gap": 0.41784641784641785,
+        "precision": 0.6004962779156328,
+        "healthy_accuracy": 0.9343629343629344,
+        "leukemia_accuracy": 0.5165165165165165
       }
     },
     {
       "round": 2,
       "training": {
-        "val_loss": 0.06057635162557875,
-        "train_loss": 0.06674787596807824,
-        "distill_loss": 0.004331171320297437,
-        "num_examples": 2314,
-        "training_time": 633.5491578578949,
-        "train_accuracy": 0.4783923941227312,
+        "val_loss": 0.06103323475179965,
+        "train_loss": 0.06483602994491183,
+        "distill_loss": 0.008101145017259451,
+        "num_examples": 3348,
+        "training_time": 1487.4079880714417,
+        "train_accuracy": 0.7814615690959777,
         "consensus_weight": null
       },
       "validation": {
-        "loss": 0.6201863884159716,
-        "recall": 0.875,
-        "accuracy": 0.6812339331619537,
-        "f1_score": 0.5753424657534246,
-        "class_gap": 0.2572525597269625,
-        "precision": 0.42857142857142855,
-        "healthy_accuracy": 0.875,
-        "leukemia_accuracy": 0.6177474402730375
+        "loss": 0.5098671880928246,
+        "recall": 0.6602316602316602,
+        "accuracy": 0.7905405405405406,
+        "f1_score": 0.7339055793991416,
+        "class_gap": 0.23166023166023164,
+        "precision": 0.8260869565217391,
+        "healthy_accuracy": 0.6602316602316602,
+        "leukemia_accuracy": 0.8918918918918919
       }
     },
     {
       "round": 3,
       "training": {
-        "val_loss": 0.06527693365656194,
-        "train_loss": 0.06276117765285948,
-        "distill_loss": 0.0035495401114738205,
-        "num_examples": 2314,
-        "training_time": 781.1877517700195,
-        "train_accuracy": 0.5811005473926822,
-        "consensus_weight": 0.27470499908350116
+        "val_loss": 0.06814315545846496,
+        "train_loss": 0.051777030728639116,
+        "distill_loss": 0.005803873051225133,
+        "num_examples": 3348,
+        "training_time": 1597.3662981987,
+        "train_accuracy": 0.8332337714058144,
+        "consensus_weight": 0.43505835079993854
       },
       "validation": {
-        "loss": 0.5255074476521548,
-        "recall": 0.8020833333333334,
-        "accuracy": 0.8226221079691517,
-        "f1_score": 0.6905829596412556,
-        "class_gap": 0.02726820250284412,
-        "precision": 0.6062992125984252,
-        "healthy_accuracy": 0.8020833333333334,
-        "leukemia_accuracy": 0.8293515358361775
+        "loss": 0.36612389619285995,
+        "recall": 0.7722007722007722,
+        "accuracy": 0.856418918918919,
+        "f1_score": 0.8247422680412371,
+        "class_gap": 0.1497211497211497,
+        "precision": 0.8849557522123894,
+        "healthy_accuracy": 0.7722007722007722,
+        "leukemia_accuracy": 0.9219219219219219
       }
     },
     {
       "round": 4,
       "training": {
-        "val_loss": 0.0375966998162093,
-        "train_loss": 0.04378050537375004,
-        "distill_loss": 0.005174859435757315,
-        "num_examples": 2941,
-        "training_time": 1162.2904698848724,
-        "train_accuracy": 0.8042615890286751,
-        "consensus_weight": null
+        "val_loss": 0.046383712244661236,
+        "train_loss": 0.047465917811034215,
+        "distill_loss": 0.00839361835335959,
+        "num_examples": 3348,
+        "training_time": 1583.4580039978027,
+        "train_accuracy": 0.8491636798088411,
+        "consensus_weight": 0.43470209269719673
       },
       "validation": {
-        "loss": 0.5073622163279811,
-        "recall": 0.6875,
-        "accuracy": 0.8329048843187661,
-        "f1_score": 0.6700507614213198,
-        "class_gap": 0.19304607508532423,
-        "precision": 0.6534653465346535,
-        "healthy_accuracy": 0.6875,
-        "leukemia_accuracy": 0.8805460750853242
+        "loss": 0.3876718693488353,
+        "recall": 0.8803088803088803,
+        "accuracy": 0.8648648648648649,
+        "f1_score": 0.8507462686567164,
+        "class_gap": 0.027456027456027488,
+        "precision": 0.8231046931407943,
+        "healthy_accuracy": 0.8803088803088803,
+        "leukemia_accuracy": 0.8528528528528528
       }
     },
     {
       "round": 5,
       "training": {
-        "val_loss": 0.060081203601190014,
-        "train_loss": 0.06568254077353992,
-        "distill_loss": 0.0033705186288909917,
-        "num_examples": 2314,
-        "training_time": 976.7997632026672,
-        "train_accuracy": 0.5195908959953903,
-        "consensus_weight": null
+        "val_loss": 0.04326846225089148,
+        "train_loss": 0.04346084763842916,
+        "distill_loss": 0.007953014378514502,
+        "num_examples": 3348,
+        "training_time": 1591.5983262062073,
+        "train_accuracy": 0.8592194344882517,
+        "consensus_weight": 0.4357433066864083
       },
       "validation": {
-        "loss": 0.46246958093042545,
-        "recall": 0.71875,
-        "accuracy": 0.8740359897172236,
-        "f1_score": 0.7379679144385026,
-        "class_gap": 0.20616467576791808,
-        "precision": 0.7582417582417582,
-        "healthy_accuracy": 0.71875,
-        "leukemia_accuracy": 0.9249146757679181
+        "loss": 0.3690531052447654,
+        "recall": 0.833976833976834,
+        "accuracy": 0.8733108108108109,
+        "f1_score": 0.8520710059171598,
+        "class_gap": 0.06992706992706987,
+        "precision": 0.8709677419354839,
+        "healthy_accuracy": 0.833976833976834,
+        "leukemia_accuracy": 0.9039039039039038
       }
     },
     {
       "round": 6,
       "training": {
-        "val_loss": 0.06129823075163932,
-        "train_loss": 0.0669931584113353,
-        "distill_loss": 0.0036466362785925214,
-        "num_examples": 2314,
-        "training_time": 975.438042640686,
-        "train_accuracy": 0.5252088735234802,
-        "consensus_weight": null
+        "val_loss": 0.052499260769732166,
+        "train_loss": 0.04010883858870892,
+        "distill_loss": 0.007937752663350433,
+        "num_examples": 3348,
+        "training_time": 1794.913932800293,
+        "train_accuracy": 0.8739545997610514,
+        "consensus_weight": 0.43773399553017706
       },
       "validation": {
-        "loss": 0.4960999946974237,
-        "recall": 0.71875,
-        "accuracy": 0.8303341902313625,
-        "f1_score": 0.6764705882352942,
-        "class_gap": 0.14814419795221845,
-        "precision": 0.6388888888888888,
-        "healthy_accuracy": 0.71875,
-        "leukemia_accuracy": 0.8668941979522184
+        "loss": 0.4165965483800785,
+        "recall": 0.9382239382239382,
+        "accuracy": 0.8158783783783784,
+        "f1_score": 0.8168067226890756,
+        "class_gap": 0.21750321750321755,
+        "precision": 0.7232142857142857,
+        "healthy_accuracy": 0.9382239382239382,
+        "leukemia_accuracy": 0.7207207207207207
       }
     },
     {
       "round": 7,
       "training": {
-        "val_loss": 0.044438688350575316,
-        "train_loss": 0.0466935754354511,
-        "distill_loss": 0.0031203853310516126,
-        "num_examples": 2200,
-        "training_time": 873.7006182670593,
-        "train_accuracy": 0.7706060606060606,
-        "consensus_weight": null
+        "val_loss": 0.04352333909717568,
+        "train_loss": 0.03794062611839128,
+        "distill_loss": 0.009368220765638766,
+        "num_examples": 3348,
+        "training_time": 1767.4429080486298,
+        "train_accuracy": 0.8860015929908402,
+        "consensus_weight": 0.43991056865044115
       },
       "validation": {
-        "loss": 0.671194455311047,
-        "recall": 0.9375,
-        "accuracy": 0.442159383033419,
-        "f1_score": 0.4534005037783375,
-        "class_gap": 0.6576365187713311,
-        "precision": 0.29900332225913623,
-        "healthy_accuracy": 0.9375,
-        "leukemia_accuracy": 0.27986348122866894
+        "loss": 0.3614802271933169,
+        "recall": 0.8803088803088803,
+        "accuracy": 0.8783783783783784,
+        "f1_score": 0.8636363636363636,
+        "class_gap": 0.00343200343200345,
+        "precision": 0.8475836431226765,
+        "healthy_accuracy": 0.8803088803088803,
+        "leukemia_accuracy": 0.8768768768768769
       }
     },
     {
       "round": 8,
       "training": {
-        "val_loss": 0.04048017545470169,
-        "train_loss": 0.04234704973087424,
-        "distill_loss": 0.002410795012801367,
-        "num_examples": 2200,
-        "training_time": 2187.834050178528,
-        "train_accuracy": 0.8209090909090909,
-        "consensus_weight": 0.3057400670116117
+        "val_loss": 0.047863218377818144,
+        "train_loss": 0.03576974810825454,
+        "distill_loss": 0.010526877685493244,
+        "num_examples": 3348,
+        "training_time": 1730.7552201747894,
+        "train_accuracy": 0.892373556352051,
+        "consensus_weight": 0.44059949264659776
       },
       "validation": {
-        "loss": 0.6177161346670901,
-        "recall": 0.8541666666666666,
-        "accuracy": 0.596401028277635,
-        "f1_score": 0.5109034267912772,
-        "class_gap": 0.3422212741751991,
-        "precision": 0.36444444444444446,
-        "healthy_accuracy": 0.8541666666666666,
-        "leukemia_accuracy": 0.5119453924914675
+        "loss": 0.3754050107421102,
+        "recall": 0.9073359073359073,
+        "accuracy": 0.8344594594594594,
+        "f1_score": 0.8274647887323944,
+        "class_gap": 0.1295581295581295,
+        "precision": 0.7605177993527508,
+        "healthy_accuracy": 0.9073359073359073,
+        "leukemia_accuracy": 0.7777777777777778
       }
     },
     {
       "round": 9,
       "training": {
-        "val_loss": 0.03935068517568566,
-        "train_loss": 0.04038591140082904,
-        "distill_loss": 0.0015722750251393623,
-        "num_examples": 2200,
-        "training_time": 2226.960958480835,
-        "train_accuracy": 0.8251515151515152,
-        "consensus_weight": 0.3046005500558746
+        "val_loss": 0.05401213280856609,
+        "train_loss": 0.034724412577611115,
+        "distill_loss": 0.010567466093753837,
+        "num_examples": 3348,
+        "training_time": 1690.7596929073334,
+        "train_accuracy": 0.8963560334528077,
+        "consensus_weight": 0.44151031394685736
       },
       "validation": {
-        "loss": 0.4754573217854095,
-        "recall": 0.7708333333333334,
-        "accuracy": 0.87146529562982,
-        "f1_score": 0.7474747474747475,
-        "class_gap": 0.13360352673492604,
-        "precision": 0.7254901960784313,
-        "healthy_accuracy": 0.7708333333333334,
-        "leukemia_accuracy": 0.9044368600682594
+        "loss": 0.38921016374149836,
+        "recall": 0.9575289575289575,
+        "accuracy": 0.8277027027027027,
+        "f1_score": 0.8294314381270903,
+        "class_gap": 0.23080223080223072,
+        "precision": 0.7315634218289085,
+        "healthy_accuracy": 0.9575289575289575,
+        "leukemia_accuracy": 0.7267267267267268
       }
     },
     {
       "round": 10,
       "training": {
-        "val_loss": 0.042994317199502675,
-        "train_loss": 0.042682318957079024,
-        "distill_loss": 0.0013570780106938055,
-        "num_examples": 2200,
-        "training_time": 2218.817138671875,
-        "train_accuracy": 0.8356060606060606,
-        "consensus_weight": 0.30462701712648294
+        "val_loss": 0.04353456035779233,
+        "train_loss": 0.03525022213007249,
+        "distill_loss": 0.012174526412228617,
+        "num_examples": 3348,
+        "training_time": 1585.8741354942322,
+        "train_accuracy": 0.8964555953803266,
+        "consensus_weight": 0.4407020917263493
       },
       "validation": {
-        "loss": 0.4692571341684974,
-        "recall": 0.78125,
-        "accuracy": 0.8894601542416453,
-        "f1_score": 0.7772020725388601,
-        "class_gap": 0.14366467576791808,
-        "precision": 0.7731958762886598,
-        "healthy_accuracy": 0.78125,
-        "leukemia_accuracy": 0.9249146757679181
+        "loss": 0.30410486137544784,
+        "recall": 0.8648648648648649,
+        "accuracy": 0.893581081081081,
+        "f1_score": 0.8767123287671232,
+        "class_gap": 0.05105105105105101,
+        "precision": 0.8888888888888888,
+        "healthy_accuracy": 0.8648648648648649,
+        "leukemia_accuracy": 0.9159159159159159
       }
     }
-  ]
+  ],
+  "data_heterogeneity": {
+    "val_samples": 591,
+    "partition_id": 2,
+    "total_samples": 3940,
+    "train_samples": 3349,
+    "imbalance_ratio": 1.28,
+    "class_distribution": {
+      "healthy": 1725,
+      "leukemia": 2215,
+      "healthy_pct": 43.8,
+      "leukemia_pct": 56.2
+    }
+  }
 }

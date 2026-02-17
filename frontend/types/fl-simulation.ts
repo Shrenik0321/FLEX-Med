@@ -13,6 +13,10 @@ export interface FLConfig {
   distill_epochs: number;
   temperature: number;
   batch_size: number;
+  // Dirichlet Partitioning Configuration
+  dirichlet_alpha?: number;
+  dirichlet_seed?: number;
+  dirichlet_min_partition_size?: number;
 }
 
 export interface RoundMetrics {

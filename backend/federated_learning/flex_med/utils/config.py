@@ -55,8 +55,6 @@ IMG_SIZE = _settings.img_size
 # Shell runner
 RUN_SIMULATION_SHELL_FILE_PATH = str(_settings.run_simulation_shell_file_path)
 
-
-
 # Loss weighting
 TRAIN_LOSS_WEIGHT = _settings.train_loss_weight
 DISTILL_LOSS_WEIGHT = _settings.distill_loss_weight
@@ -69,9 +67,10 @@ DIRICHLET_SEED = _settings.dirichlet_seed
 DIRICHLET_MIN_PARTITION_SIZE = _settings.dirichlet_min_partition_size
 
 # Per-architecture Focal Loss configuration
-FOCAL_ALPHA_PER_ARCH = _settings.focal_alpha_per_arch
 FOCAL_ALPHA_DEFAULT = _settings.focal_alpha_default
 FOCAL_GAMMA = _settings.focal_gamma
-
-# WeightedRandomSampler configuration
 MINORITY_BOOST = _settings.minority_boost
+
+# Knowledge distillation configuration (for extreme heterogeneity)
+DISTILL_WEIGHT_BASE = _settings.distill_weight_base
+DISTILL_DECAY_RATE = _settings.distill_decay_rate

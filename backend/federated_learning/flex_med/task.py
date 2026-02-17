@@ -6,14 +6,17 @@ import time
 import uuid
 import torch.nn as nn
 import torch.nn.functional as F
+from PIL import Image
 from torchvision import models, datasets, transforms
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchvision.transforms import Compose, ToTensor, Normalize
 from typing import Tuple, Optional, Iterable, Dict, List
 
-from flwr.common import Message, Metadata, RecordDict, ArrayRecord, ConfigRecord
-from flwr.server import Grid
+from flwr.common import Message, Metadata, RecordDict, ArrayRecord, ConfigRecord, log
+from logging import INFO, WARNING
 from flwr.serverapp.strategy import Strategy
+from flwr.server import Grid
 from flwr_datasets.partitioner import DirichletPartitioner
 from datasets import Dataset
 
@@ -23,16 +26,17 @@ from flex_med.utils.config import (
     MODEL_CHECKPOINT_FILE_PATH, GRAPHS_OUTPUT_DIR, NUM_CLASSES, IMG_SIZE,
     TRAIN_LOSS_WEIGHT, DISTILL_LOSS_WEIGHT, CONSENSUS_MOMENTUM,
     DIRICHLET_ALPHA, DIRICHLET_SEED, DIRICHLET_MIN_PARTITION_SIZE,
-    FOCAL_ALPHA_PER_ARCH, FOCAL_ALPHA_DEFAULT, FOCAL_GAMMA,
+    FOCAL_ALPHA_DEFAULT, FOCAL_GAMMA, MINORITY_BOOST,
+    DISTILL_WEIGHT_BASE, DISTILL_DECAY_RATE,
 )
 
 from flex_med.utils.helpers import (
-    sanitize_client_paths, get_weighted_sampler,
+    sanitize_client_paths,
     get_partition_stats, print_client_data_distribution_summary,
     extract_training_metrics_for_persistence, save_global_post_fl_metrics,
     save_round_training_metrics, save_round_validation_metrics,
     check_for_degradation_warnings, SUPABASE_CLIENT, SIMULATION_ID,
-    apply_freeze_strategy,
+    apply_freeze_strategy, save_all_clients_data_heterogeneity,
 )
 
 # <----------------------------- CONSTANTS & GLOBAL VARIABLES ----------------------------->
@@ -58,6 +62,37 @@ PRIVATE_TRAIN_TRANSFORM = Compose([
     Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 
+
+class TransformOverrideSubset(torch.utils.data.Dataset):
+    """Wraps a nested Subset to apply a different transform (e.g. no augmentation for val)."""
+
+    def __init__(self, subset, transform):
+        self.subset = subset
+        self.transform = transform
+        # Resolve the root ImageFolder through nested Subsets
+        ds = subset
+        self._index_chain = []
+        while isinstance(ds, torch.utils.data.Subset):
+            self._index_chain.append(ds.indices)
+            ds = ds.dataset
+        self._root_dataset = ds  # The ImageFolder
+
+    def _resolve_index(self, idx):
+        resolved = idx
+        for indices in self._index_chain:
+            resolved = indices[resolved]
+        return resolved
+
+    def __getitem__(self, idx):
+        root_idx = self._resolve_index(idx)
+        path, label = self._root_dataset.samples[root_idx]
+        img = Image.open(path).convert('RGB')
+        return self.transform(img), label
+
+    def __len__(self):
+        return len(self.subset)
+
+
 # <----------------------------- CLIENT CONFIGURATION ----------------------------->
 
 def load_client_config(config_path: str = CLIENT_INFO_FILE_PATH) -> List[Dict]:
@@ -67,6 +102,7 @@ def load_client_config(config_path: str = CLIENT_INFO_FILE_PATH) -> List[Dict]:
             response = SUPABASE_CLIENT.from_('client_simulation_metrics') \
                 .select('client_id, clients(*)') \
                 .eq('simulation_id', SIMULATION_ID) \
+                .order('client_id') \
                 .execute()
             if response.data:
                 clients = [r.get('clients') for r in response.data if r.get('clients')]
@@ -93,7 +129,11 @@ def get_client_by_partition_id(partition_id: int, config_path: str = CLIENT_INFO
     """Retrieve individual client config by partition ID."""
     clients = load_client_config(config_path)
     if partition_id >= len(clients):
-        raise ValueError(f"Partition ID {partition_id} exceeds number of clients ({len(clients)})")
+        # Fallback: Cycle through available clients using modulo
+        effective_id = partition_id % len(clients)
+        log(WARNING, f"[WARNING] Partition ID {partition_id} exceeds clients ({len(clients)}). "
+              f"Using client {effective_id} (Modulo fallback).")
+        return clients[effective_id]
     return clients[partition_id]
 
 
@@ -275,14 +315,35 @@ def load_private_dataset(partition_id: int, num_partitions: int, batch_size=64,
         val_indices.extend(shuffled[split:])
 
     train_ds = torch.utils.data.Subset(client_dataset, train_indices)
-    test_ds = torch.utils.data.Subset(client_dataset, val_indices)
+    test_ds = TransformOverrideSubset(
+        torch.utils.data.Subset(client_dataset, val_indices), COMMON_TRANSFORM
+    )
 
     train_targets = [full_dataset.targets[client_indices[i]] for i in train_indices]
-    train_sampler = get_weighted_sampler(train_targets)
-
-    trainloader = DataLoader(train_ds, batch_size=batch_size, sampler=train_sampler, shuffle=False, num_workers=2)
+    
+    # Calculate weights for WeightedRandomSampler
+    class_sample_counts = torch.bincount(torch.tensor(train_targets), minlength=2).float()
+    
+    # Identify minority class and apply boost
+    minority_class = torch.argmin(class_sample_counts).item()
+    class_weights = 1.0 / class_sample_counts.clamp(min=1)
+    
+    if MINORITY_BOOST != 1.0:
+        class_weights[minority_class] *= MINORITY_BOOST
+        
+    sample_weights = class_weights[torch.tensor(train_targets)]
+    
+    sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
+    trainloader = DataLoader(train_ds, batch_size=batch_size, sampler=sampler, num_workers=2)
     testloader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=2)
-    return trainloader, testloader
+    
+    # Calculate class counts for dynamic focal alpha
+    class_counts = {
+        0: train_targets.count(0),
+        1: train_targets.count(1)
+    }
+    
+    return trainloader, testloader, class_counts
 
 
 def load_public_test_dataset(batch_size=64):
@@ -412,13 +473,14 @@ class AdaptiveTrainingState:
 class FocalLoss(nn.Module):
     """Focal Loss: FL(pt) = -alpha * (1 - pt)^gamma * log(pt). Focuses on hard examples."""
 
-    def __init__(self, alpha: float = 0.35, gamma: float = 2.0):
+    def __init__(self, alpha: float = 0.35, gamma: float = 2.0, label_smoothing: float = 0.05):
         super().__init__()
         self.alpha = alpha
         self.gamma = gamma
+        self.label_smoothing = label_smoothing
 
     def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        ce_loss = F.cross_entropy(inputs, targets, reduction='none')
+        ce_loss = F.cross_entropy(inputs, targets, reduction='none', label_smoothing=self.label_smoothing)
         pt = torch.exp(-ce_loss)
         focal_term = (1 - pt) ** self.gamma
         alpha_t = torch.where(targets == 0, self.alpha, 1 - self.alpha)
@@ -441,7 +503,8 @@ def _validate_epoch(model, valloader, criterion, device):
 
 
 def train(model, trainloader, epochs, lr, device, model_type: str = None,
-          valloader=None, adaptive_state=None, server_round: int = 1, total_rounds: int = 10):
+          valloader=None, adaptive_state=None, server_round: int = 1, total_rounds: int = 10,
+          focal_alpha=None):
     """Train model with Focal Loss and gradual unfreeze strategy.
 
     Args:
@@ -455,6 +518,7 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
         adaptive_state: Optional adaptive training state
         server_round: Current FL round (1-indexed, for freeze strategy)
         total_rounds: Total number of FL rounds (for freeze strategy)
+        focal_alpha: Optional dynamic alpha for Focal Loss (overrides default)
 
     Returns:
         (avg_train_loss, avg_val_loss, train_accuracy, scheduler_state)
@@ -472,10 +536,10 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
     # Apply LR multiplier (reduced in Phase 3 for "polish" fine-tuning)
     effective_lr = lr * lr_multiplier
 
-    # Get per-architecture focal alpha (configurable in app/config.py)
-    focal_alpha = FOCAL_ALPHA_DEFAULT
-    if model_type is not None:
-        focal_alpha = FOCAL_ALPHA_PER_ARCH.get(model_type.lower(), FOCAL_ALPHA_DEFAULT)
+    # Use passed focal_alpha or default to balanced 0.50
+    if focal_alpha is None:
+        focal_alpha = FOCAL_ALPHA_DEFAULT
+        
     criterion = FocalLoss(alpha=focal_alpha, gamma=FOCAL_GAMMA)
 
     # Only optimize parameters that require gradients (respects freeze strategy)
@@ -483,10 +547,11 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=effective_lr, betas=(0.9, 0.999), weight_decay=0.01
     )
+    
+    # Cosine Annealing Scheduler for local epochs
+    scheduler = CosineAnnealingLR(optimizer, T_max=epochs)
+    
     has_validation = valloader is not None
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.5, patience=2, min_lr=1e-6
-    ) if has_validation else None
 
     total_train_loss, total_val_loss = 0.0, 0.0
     total_train_batches, total_val_epochs = 0, 0
@@ -521,12 +586,18 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
             epoch_val_loss = _validate_epoch(model, valloader, criterion, device)
             total_val_loss += epoch_val_loss
             total_val_epochs += 1
-            scheduler.step(epoch_val_loss)
+            
+        # Cosine Annealing per epoch
+        if scheduler:
+            scheduler.step()
 
     avg_train_loss = total_train_loss / total_train_batches if total_train_batches > 0 else 0.0
     avg_val_loss = total_val_loss / total_val_epochs if total_val_epochs > 0 else 0.0
     train_accuracy = total_train_correct / total_train_samples if total_train_samples > 0 else 0.0
-    return avg_train_loss, avg_val_loss, train_accuracy, scheduler.state_dict() if scheduler else {}
+    
+    # Return empty dict for scheduler_state as it's no longer used
+    return avg_train_loss, avg_val_loss, train_accuracy, {}
+
 
 
 def test(model, testloader, device, return_detailed=False):
@@ -600,20 +671,28 @@ def test(model, testloader, device, return_detailed=False):
 
 def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr, temperature,
                       current_round=1, total_rounds=10, adaptive=True):
-    """Distill consensus knowledge into local model using KL divergence with adaptive weighting."""
-    BASE_DISTILL_WEIGHT = 0.40
+    """Distill consensus knowledge into local model using KL divergence with adaptive weighting.
+
+    Uses configurable DISTILL_WEIGHT_BASE and DISTILL_DECAY_RATE from config.
+    Higher weights and slower decay help combat extreme data heterogeneity.
+    """
+    # Use configurable distillation parameters (default: 0.60 base, 0.3 decay)
+    base_weight = DISTILL_WEIGHT_BASE  # Was hardcoded 0.40
+    decay_rate = DISTILL_DECAY_RATE    # Was hardcoded 0.5
 
     if adaptive and total_rounds > 1:
         progress = (current_round - 1) / (total_rounds - 1)
-        decay_rate = 0.5
         adaptive_factor = np.exp(-decay_rate * progress)
-        DISTILL_WEIGHT = max(0.15, min(0.50, BASE_DISTILL_WEIGHT * adaptive_factor))
+        DISTILL_WEIGHT = max(0.20, min(0.65, base_weight * adaptive_factor))
     else:
-        DISTILL_WEIGHT = BASE_DISTILL_WEIGHT
+        DISTILL_WEIGHT = base_weight
 
     model.to(device)
     model.train()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, betas=(0.9, 0.999), weight_decay=0.01)
+    optimizer = torch.optim.AdamW(
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=lr, betas=(0.9, 0.999), weight_decay=0.02
+    )
     consensus_tensor = torch.from_numpy(consensus_logits).float()
 
     total_loss, idx = 0.0, 0
@@ -701,14 +780,14 @@ def compute_consensus(
                 "prediction_gap": pred_gap,
                 "reasons": exclusion_reasons
             })
-            print(f"[Consensus] EXCLUDED {client_name}: {', '.join(exclusion_reasons)}")
+            log(INFO, f"[Consensus] EXCLUDED {client_name}: {', '.join(exclusion_reasons)}")
         else:
             qualified_indices.append(i)
-            print(f"[Consensus] QUALIFIED {client_name}: acc={accuracy:.2%}, gap={pred_gap:.2%}")
+            log(INFO, f"[Consensus] QUALIFIED {client_name}: acc={accuracy:.2%}, gap={pred_gap:.2%}")
 
     # Fallback: If all clients excluded, use the best one
     if not qualified_indices:
-        print("[Consensus] WARNING: All clients excluded! Falling back to best client.")
+        log(WARNING, "[Consensus] WARNING: All clients excluded! Falling back to best client.")
         # Score = accuracy - prediction_gap (higher is better)
         best_idx = max(
             range(len(logits_list)),
@@ -717,7 +796,7 @@ def compute_consensus(
         )
         qualified_indices = [best_idx]
         best_name = client_configs[best_idx].get("client_name", f"client_{best_idx}")
-        print(f"[Consensus] Using fallback client: {best_name}")
+        log(INFO, f"[Consensus] Using fallback client: {best_name}")
 
     # Filter to qualified clients only
     logits_list = [logits_list[i] for i in qualified_indices]
@@ -772,56 +851,11 @@ def compute_consensus(
 
     new_consensus = np.average(logits_list, axis=0, weights=normalized_weights)
 
-    # Class-based reweighting: boost minority class predictions
-    consensus_probs = np.exp(new_consensus) / np.sum(np.exp(new_consensus), axis=1, keepdims=True)
-    predicted_classes = np.argmax(consensus_probs, axis=1)
-    unique_classes, class_counts = np.unique(predicted_classes, return_counts=True)
-
-    total_samples = len(predicted_classes)
-    class_weights = {cls: total_samples / (len(unique_classes) * count) for cls, count in zip(unique_classes, class_counts)}
-    weight_sum = sum(class_weights.values())
-    class_weights = {cls: w / weight_sum for cls, w in class_weights.items()}
-
-    def reweight_consensus_probs(logits: np.ndarray, weights: dict) -> np.ndarray:
-        """Reweight consensus in probability space (mathematically correct).
-        
-        Args:
-            logits: Raw logits array of shape [num_samples, num_classes]
-            weights: Dict mapping class index to weight value
-            
-        Returns:
-            Reweighted logits with proper probability scaling
-        """
-        # Stable softmax: subtract max for numerical stability
-        logits_stable = logits - np.max(logits, axis=1, keepdims=True)
-        probs = np.exp(logits_stable)
-        probs = probs / probs.sum(axis=1, keepdims=True)
-        
-        # Build weight vector for all classes
-        num_classes = probs.shape[1]
-        weight_vector = np.ones(num_classes)
-        for cls, w in weights.items():
-            if 0 <= cls < num_classes:
-                weight_vector[cls] = w
-        
-        # Apply weights to probabilities
-        probs = probs * weight_vector
-        
-        # Renormalize to valid probability distribution
-        probs = probs / probs.sum(axis=1, keepdims=True)
-        
-        # Convert back to logits (with epsilon for numerical stability)
-        return np.log(probs + 1e-10)
-
-    class_weighted_consensus = reweight_consensus_probs(new_consensus, class_weights)
-    new_consensus = class_weighted_consensus
-
-    class_weighting_info = {
-        "class_distribution": {int(cls): int(count) for cls, count in zip(unique_classes, class_counts)},
-        "class_weights": {int(cls): float(w) for cls, w in class_weights.items()},
-        "minority_class": int(unique_classes[np.argmin(class_counts)]) if len(unique_classes) > 0 else None,
-        "majority_class": int(unique_classes[np.argmax(class_counts)]) if len(unique_classes) > 0 else None,
-    }
+    # Class-based reweighting DISABLED: was causing oscillation feedback loop.
+    # Reweighting based on PREDICTED distribution creates a cycle where consensus
+    # overcorrects toward minority class, then clients learn that bias, then
+    # consensus swings back. The quality-weighted average above is sufficient.
+    class_weighting_info = {"status": "disabled", "reason": "prevents oscillation feedback loop"}
 
     # Momentum smoothing across FL rounds
     smoothing_applied = False
@@ -866,10 +900,11 @@ def compute_consensus(
 class FLEXMedStrategy(Strategy):
     """Coordinates federated learning rounds with model-agnostic knowledge distillation."""
 
-    def __init__(self, config_path: str = CLIENT_INFO_FILE_PATH, checkpoint_dir: str = MODEL_CHECKPOINT_FILE_PATH):
+    def __init__(self, config_path: str = CLIENT_INFO_FILE_PATH, checkpoint_dir: str = MODEL_CHECKPOINT_FILE_PATH, batch_size: int = 32):
         super().__init__()
         self.config_path = config_path
         self.checkpoint_dir = checkpoint_dir
+        self.batch_size = batch_size
         self.client_configs = load_client_config(config_path)
         self.num_clients = len(self.client_configs)
         self.eval_history = []
@@ -914,6 +949,23 @@ class FLEXMedStrategy(Strategy):
         arrays = initial_arrays
         t_start = time.time()
         self.round_metrics_history = {}
+
+        # Pre-initialize the partitioner cache before FL rounds begin
+        # This ensures data heterogeneity can be captured for visualization
+        try:
+            log(INFO, "[FL] Pre-initializing Dirichlet partitioner...")
+            cache_key = (LOCAL_TRAIN_DATASET_PATH, self.num_clients, DIRICHLET_ALPHA, DIRICHLET_SEED)
+            if cache_key not in _PARTITIONER_CACHE:
+                partitioner, full_dataset = create_dirichlet_partitioner(
+                    LOCAL_TRAIN_DATASET_PATH, self.num_clients, DIRICHLET_ALPHA, DIRICHLET_SEED
+                )
+                _PARTITIONER_CACHE[cache_key] = (partitioner, full_dataset)
+                log(INFO, f"[FL] Partitioner initialized: {self.num_clients} partitions, alpha={DIRICHLET_ALPHA}")
+            
+            # Save data heterogeneity for all clients at FL start
+            save_all_clients_data_heterogeneity(self.client_configs, _PARTITIONER_CACHE)
+        except Exception as e:
+            log(WARNING, f"[FL] Failed to pre-initialize partitioner: {e}")
 
         print_client_data_distribution_summary(self.client_configs, _PARTITIONER_CACHE)
 
@@ -974,10 +1026,10 @@ class FLEXMedStrategy(Strategy):
                 if os.path.exists(client['model_path']):
                     model, _ = load_existing_model(model, client['model_path'], device)
                 model.to(device)
-                _, valloader = load_private_dataset(i, len(self.client_configs), batch_size=64)
+                _, valloader, _ = load_private_dataset(i, len(self.client_configs), batch_size=self.batch_size)
 
                 if valloader is None:
-                    valloader = load_public_test_dataset(batch_size=64)
+                    valloader = load_public_test_dataset(batch_size=self.batch_size)
 
                 model.eval()
                 all_preds, all_labels = [], []
@@ -1009,6 +1061,7 @@ class FLEXMedStrategy(Strategy):
                     'leukemia_accuracy': float(leukemia_acc), 'healthy_accuracy': float(healthy_acc),
                 }
             except Exception as e:
+                log(WARNING, f"[VAL] Client {i} validation failed: {e}")
                 client_metrics[str(i)] = {"accuracy": None, "loss": None, "error": str(e)}
         return client_metrics
 
@@ -1021,7 +1074,7 @@ class FLEXMedStrategy(Strategy):
                 if os.path.exists(client['model_path']):
                     model, _ = load_existing_model(model, client['model_path'], device)
                 model.to(device)
-                test_loader = load_public_test_dataset(batch_size=64)
+                test_loader = load_public_test_dataset(batch_size=self.batch_size)
                 metrics = test(model, test_loader, device, return_detailed=True)
                 client_metrics[str(i)] = metrics
             except Exception as e:
