@@ -192,7 +192,7 @@ INSERT INTO system_config (config) VALUES ('{
     "presets": {
         "low": {
             "dirichlet_alpha": 5.0,
-            "minority_boost": 0.55
+            "minority_boost": 0.55,
             "focal_alpha": 0.50,
             "focal_gamma": 2.0,
             "consensus_momentum": 0.10,
