@@ -200,7 +200,7 @@ INSERT INTO system_config (config) VALUES ('{
             "distill_decay_rate": 0.30,
             "train_loss_weight": 0.65,
             "distill_loss_weight": 0.35,
-            "lr_decay": 0.90
+            "lr_decay": 0.90,
             "learning_rate": 0.001
         },
         "moderate": {

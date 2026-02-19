@@ -1,4 +1,4 @@
-"use client";
+import { EmptyState } from "@/components/ui/empty-state";
 
 import { useState } from "react";
 import { Upload, Loader2, Microscope, Activity, FileText } from "lucide-react";
@@ -92,7 +92,7 @@ export default function ClientDetailsPage({ client }: ClientDetailsPageProps) {
   };
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8">
+    <div className="p-8 w-full mx-auto space-y-8">
       {/* Client Overview Card */}
       <div className="bg-card rounded-2xl shadow-sm border border-border p-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -197,14 +197,12 @@ export default function ClientDetailsPage({ client }: ClientDetailsPageProps) {
         {/* Right Column: Results & XAI */}
         <div className="lg:col-span-2 space-y-6">
           {!inferenceResult ? (
-            <div className="h-full min-h-[400px] flex flex-col items-center justify-center bg-card/30 border-2 border-dashed border-border rounded-2xl text-muted-foreground p-8 text-center">
-              <Activity className="h-12 w-12 mb-4 opacity-20" />
-              <p className="text-lg font-medium">No diagnosis run yet</p>
-              <p className="text-sm max-w-xs mt-1">
-                Upload a medical image and click "Run Diagnosis" to see clinical
-                results and AI explainability modules.
-              </p>
-            </div>
+            <EmptyState
+              title="No diagnosis run yet"
+              description="Upload a medical image and click 'Run Diagnosis' to see clinical results and AI explainability modules."
+              icon={Activity}
+              className="h-full min-h-[400px]"
+            />
           ) : (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {/* Primary Results Row */}

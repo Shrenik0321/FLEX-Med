@@ -6,6 +6,7 @@ import { API_BASE_PATH } from "@/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Loading } from "@/components/ui/loading";
 import { StartFLResponse } from "@/types/fl-simulation";
 import { Client } from "@/types/client";
 import {
@@ -206,12 +207,11 @@ export default function StartFLPage() {
                 {showClientDropdown && (
                   <div className="absolute z-50 mt-2 w-full rounded-md border bg-popover p-2 shadow-md">
                     {isLoadingClients ? (
-                      <div className="flex items-center justify-center py-4">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="ml-2 text-sm text-muted-foreground">
-                          Loading clients...
-                        </span>
-                      </div>
+                      <Loading
+                        size="sm"
+                        text="Loading clients..."
+                        className="py-4"
+                      />
                     ) : clients.length === 0 ? (
                       <div className="text-sm text-muted-foreground text-center py-4">
                         No clients found. Please add clients first.
@@ -348,7 +348,8 @@ export default function StartFLPage() {
               <div>
                 <p className="text-muted-foreground">Heterogeneity</p>
                 <p className="font-medium text-foreground">
-                  {HETEROGENEITY_PRESETS[selectedPreset]?.label || selectedPreset}{" "}
+                  {HETEROGENEITY_PRESETS[selectedPreset]?.label ||
+                    selectedPreset}{" "}
                   <span className="text-muted-foreground font-normal">
                     ({HETEROGENEITY_PRESETS[selectedPreset]?.alpha})
                   </span>

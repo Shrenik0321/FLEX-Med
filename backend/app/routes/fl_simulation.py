@@ -107,15 +107,14 @@ async def start_fl(
         heterogeneity_preset = system_config.get("heterogeneity_preset", "moderate")
 
     # Resolve preset config values — all preset-specific params live inside the preset object
-    from app.schemas.system_config import DEFAULT_HETEROGENEITY_PRESETS
     presets = system_config.get("presets", {})
     preset_config = presets.get(heterogeneity_preset, {})
 
-    # Fallback to default presets if preset not found in DB
-    if not preset_config and heterogeneity_preset in DEFAULT_HETEROGENEITY_PRESETS:
-        preset_config = DEFAULT_HETEROGENEITY_PRESETS[heterogeneity_preset]
-    elif not preset_config:
-        preset_config = DEFAULT_HETEROGENEITY_PRESETS["moderate"]
+    if not preset_config:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Preset '{heterogeneity_preset}' not found in system_config. Available: {list(presets.keys())}"
+        )
 
     logger.info(f"Using heterogeneity preset: {heterogeneity_preset}")
     logger.info(f"Preset config: dirichlet_alpha={preset_config.get('dirichlet_alpha')}, lr_decay={preset_config.get('lr_decay')}")
