@@ -4,7 +4,7 @@ import { Users, Loader2, Clock, XCircle, AlertCircle } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { API_BASE_PATH } from "@/utils";
-import { FLSimulation, parseMetrics } from "@/types/fl-simulation";
+import { FLSimulation, formatDuration } from "@/types/fl-simulation";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -178,10 +178,8 @@ function smartYLimit(
 }
 
 function gapBadge(gap: number) {
-  if (gap <= 0.1)
-    return "bg-emerald-50 text-emerald-700 border-emerald-200";
-  if (gap <= 0.2)
-    return "bg-amber-50 text-amber-700 border-amber-200";
+  if (gap <= 0.1) return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (gap <= 0.2) return "bg-amber-50 text-amber-700 border-amber-200";
   return "bg-red-50 text-red-700 border-red-200";
 }
 
@@ -225,13 +223,7 @@ function ConfusionMatrixCard({
   const fg = (v: number) =>
     intensity(v) > 0.6 ? "text-white" : "text-slate-900";
 
-  const Cell = ({
-    value,
-    label,
-  }: {
-    value: number;
-    label: string;
-  }) => (
+  const Cell = ({ value, label }: { value: number; label: string }) => (
     <div
       className={`h-20 flex flex-col items-center justify-center rounded-lg border border-slate-200 ${fg(value)}`}
       style={{ backgroundColor: bg(value) }}
@@ -356,7 +348,9 @@ function makeLineOptions(
         ticks: {
           font: { size: 11 },
           callback: (v: any) =>
-            isPercentage ? `${(Number(v) * 100).toFixed(0)}%` : Number(v).toFixed(3),
+            isPercentage
+              ? `${(Number(v) * 100).toFixed(0)}%`
+              : Number(v).toFixed(3),
         },
       },
       x: {
@@ -381,6 +375,8 @@ export default function FLSimulationDetailsPage({
   const [selectedClient, setSelectedClient] = useState<string>("all");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  console.log(simulation);
 
   // ---- Fetch data ----
   useEffect(() => {
@@ -456,10 +452,13 @@ export default function FLSimulationDetailsPage({
       const avgData = roundLabels.map((_, ri) => {
         const vals: number[] = [];
         clients.forEach((c) => {
-          const v = clientMetricsMap.get(c.id)?.rounds?.[ri]?.training?.val_loss;
+          const v = clientMetricsMap.get(c.id)?.rounds?.[ri]?.training
+            ?.val_loss;
           if (v != null) vals.push(v);
         });
-        return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+        return vals.length > 0
+          ? vals.reduce((a, b) => a + b, 0) / vals.length
+          : null;
       });
       return {
         labels: roundLabels,
@@ -485,24 +484,14 @@ export default function FLSimulationDetailsPage({
         labels,
         datasets: [
           {
-            label: "Train Loss",
-            data: rounds.map((r) => r.training?.train_loss ?? null),
-            borderColor: CLIENT_COLORS[0],
-            backgroundColor: CLIENT_COLORS[0],
-            tension: 0.3,
-            pointRadius: 3,
-            borderWidth: 2,
-            spanGaps: true,
-          },
-          {
             label: "Val Loss",
             data: rounds.map((r) => r.training?.val_loss ?? null),
-            borderColor: CLIENT_COLORS[1],
-            backgroundColor: CLIENT_COLORS[1],
-            borderDash: [6, 3],
+            borderColor: CLIENT_COLORS[0],
+            backgroundColor: "rgba(184, 0, 40, 0.08)",
             tension: 0.3,
-            pointRadius: 3,
-            borderWidth: 2,
+            pointRadius: 4,
+            borderWidth: 2.5,
+            fill: true,
             spanGaps: true,
           },
         ],
@@ -535,7 +524,9 @@ export default function FLSimulationDetailsPage({
           const v = rd?.validation?.accuracy ?? rd?.training?.train_accuracy;
           if (v != null) vals.push(v);
         });
-        return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+        return vals.length > 0
+          ? vals.reduce((a, b) => a + b, 0) / vals.length
+          : null;
       });
       return {
         labels: roundLabels,
@@ -603,7 +594,9 @@ export default function FLSimulationDetailsPage({
           const v = rd?.validation?.accuracy ?? rd?.training?.train_accuracy;
           if (v != null) vals.push(v);
         });
-        return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+        return vals.length > 0
+          ? vals.reduce((a, b) => a + b, 0) / vals.length
+          : null;
       });
       const deltas = avgAccs.slice(1).map((v, i) => {
         const prev = avgAccs[i];
@@ -800,7 +793,7 @@ export default function FLSimulationDetailsPage({
 
   if (isLoading && !simulation) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px]">
+      <div className="flex flex-col items-start min-h-[400px]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
         <p className="mt-4 text-lg text-gray-600">Loading simulation...</p>
       </div>
@@ -809,7 +802,7 @@ export default function FLSimulationDetailsPage({
 
   if (loadError) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px]">
+      <div className="flex flex-col items-start min-h-[400px]">
         <AlertCircle className="h-12 w-12 text-red-500" />
         <p className="mt-4 text-lg text-gray-600">{loadError}</p>
       </div>
@@ -822,7 +815,7 @@ export default function FLSimulationDetailsPage({
   ) {
     return (
       <div className="p-8">
-        <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 py-16">
+        <div className="flex flex-col items-start rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-16">
           <div className="relative">
             <Loader2 className="h-16 w-16 animate-spin text-primary" />
             <Clock className="absolute right-0 top-0 h-6 w-6 text-blue-500" />
@@ -831,13 +824,34 @@ export default function FLSimulationDetailsPage({
             FL Simulation{" "}
             {simulation.status === "pending" ? "Starting" : "In Progress"}
           </h2>
-          <p className="mt-2 text-center text-gray-600 max-w-md">
+          <p className="mt-2 text-gray-600 max-w-md">
             {simulation.status === "pending"
               ? "Initializing the federated learning simulation..."
               : "The simulation is currently running. This may take several minutes."}
           </p>
           {simulation.configs && (
-            <div className="mt-6 w-full max-w-xs">
+            <div className="mt-6 w-full max-w-sm">
+              {simulation.heterogeneity_preset && (
+                <div className="flex mb-4">
+                  <span
+                    className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${
+                      simulation.heterogeneity_preset === "high"
+                        ? "border-red-300 text-red-700 bg-red-50"
+                        : simulation.heterogeneity_preset === "moderate"
+                          ? "border-amber-300 text-amber-700 bg-amber-50"
+                          : simulation.heterogeneity_preset === "low"
+                            ? "border-emerald-300 text-emerald-700 bg-emerald-50"
+                            : "border-purple-300 text-purple-700 bg-purple-50"
+                    }`}
+                  >
+                    {simulation.heterogeneity_preset.charAt(0).toUpperCase() +
+                      simulation.heterogeneity_preset.slice(1)}{" "}
+                    Heterogeneity
+                    {simulation.configs.dirichlet_alpha != null &&
+                      ` (\u03B1=${simulation.configs.dirichlet_alpha})`}
+                  </span>
+                </div>
+              )}
               <dl className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <dt className="text-gray-500">Rounds</dt>
@@ -861,6 +875,16 @@ export default function FLSimulationDetailsPage({
                     {simulation.configs.batch_size}
                   </dd>
                 </div>
+                <div>
+                  <dt className="text-gray-500">LR Decay</dt>
+                  <dd className="font-medium">{simulation.configs.lr_decay}</dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500">Temperature</dt>
+                  <dd className="font-medium">
+                    {simulation.configs.temperature}
+                  </dd>
+                </div>
               </dl>
             </div>
           )}
@@ -872,7 +896,7 @@ export default function FLSimulationDetailsPage({
   if (simulation && simulation.status === "failed") {
     return (
       <div className="p-8">
-        <div className="flex flex-col items-center justify-center rounded-lg border-2 border-red-200 bg-red-50 py-16">
+        <div className="flex flex-col items-start rounded-lg border-2 border-red-200 bg-red-50 p-16">
           <XCircle className="h-16 w-16 text-red-500" />
           <h2 className="mt-6 text-2xl font-semibold text-gray-900">
             Simulation Failed
@@ -893,9 +917,7 @@ export default function FLSimulationDetailsPage({
 
   if (!simulation) {
     return (
-      <div className="p-8 text-center text-muted-foreground">
-        Simulation not found
-      </div>
+      <div className="p-8 text-muted-foreground">Simulation not found</div>
     );
   }
 
@@ -904,7 +926,7 @@ export default function FLSimulationDetailsPage({
   // ===========================================================================
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-10">
+    <div className="p-8 w-full space-y-10">
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div className="text-sm text-slate-500">
@@ -917,6 +939,15 @@ export default function FLSimulationDetailsPage({
           </span>{" "}
           &middot;{" "}
           <span className="font-medium text-emerald-600">Completed</span>
+          {simulation.duration != null && (
+            <>
+              {" "}
+              &middot;{" "}
+              <span className="font-medium text-slate-700">
+                {formatDuration(simulation.duration)}
+              </span>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -949,6 +980,95 @@ export default function FLSimulationDetailsPage({
         </div>
       </div>
 
+      {/* ── Simulation Config Summary ── */}
+      {simulation.configs && (
+        <section className="bg-white rounded-2xl border border-slate-200 p-5">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+            {simulation.heterogeneity_preset && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">
+                  Preset
+                </span>
+                <span
+                  className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                    simulation.heterogeneity_preset === "high"
+                      ? "border-red-300 text-red-700 bg-red-50"
+                      : simulation.heterogeneity_preset === "moderate"
+                        ? "border-amber-300 text-amber-700 bg-amber-50"
+                        : simulation.heterogeneity_preset === "low"
+                          ? "border-emerald-300 text-emerald-700 bg-emerald-50"
+                          : "border-purple-300 text-purple-700 bg-purple-50"
+                  }`}
+                >
+                  {simulation.heterogeneity_preset.charAt(0).toUpperCase() +
+                    simulation.heterogeneity_preset.slice(1)}
+                </span>
+              </div>
+            )}
+            <div className="h-4 w-px bg-slate-200" />
+            <div>
+              <span className="text-slate-400 text-xs">Rounds</span>{" "}
+              <span className="font-semibold text-slate-700">
+                {simulation.configs.num_server_rounds}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-400 text-xs">Epochs</span>{" "}
+              <span className="font-semibold text-slate-700">
+                {simulation.configs.local_epochs}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-400 text-xs">LR</span>{" "}
+              <span className="font-semibold text-slate-700">
+                {simulation.configs.lr}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-400 text-xs">LR Decay</span>{" "}
+              <span className="font-semibold text-slate-700">
+                {simulation.configs.lr_decay}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-400 text-xs">Batch</span>{" "}
+              <span className="font-semibold text-slate-700">
+                {simulation.configs.batch_size}
+              </span>
+            </div>
+            {simulation.configs.dirichlet_alpha != null && (
+              <div>
+                <span className="text-slate-400 text-xs">
+                  Dirichlet &alpha;
+                </span>{" "}
+                <span className="font-semibold text-slate-700">
+                  {simulation.configs.dirichlet_alpha}
+                </span>
+              </div>
+            )}
+            {simulation.configs.temperature != null && (
+              <div>
+                <span className="text-slate-400 text-xs">Temp</span>{" "}
+                <span className="font-semibold text-slate-700">
+                  {simulation.configs.temperature}
+                </span>
+              </div>
+            )}
+            {simulation.duration != null && (
+              <>
+                <div className="h-4 w-px bg-slate-200" />
+                <div>
+                  <span className="text-slate-400 text-xs">Duration</span>{" "}
+                  <span className="font-semibold text-slate-700">
+                    {formatDuration(simulation.duration)}
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* ── Section: Data Heterogeneity (all clients view) ── */}
       {selectedClient === "all" && dataHetChart && (
         <section>
@@ -958,7 +1078,11 @@ export default function FLSimulationDetailsPage({
             </h2>
             <span className="text-xs font-medium bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-200">
               Dirichlet &alpha; ={" "}
-              {simulation?.configs?.dirichlet_alpha ?? "1.0"}
+              {simulation?.heterogeneity_preset === "moderate"
+                ? "2.5"
+                : simulation?.heterogeneity_preset === "high"
+                  ? "1.0"
+                  : "5.0"}
             </span>
           </div>
 
@@ -983,9 +1107,6 @@ export default function FLSimulationDetailsPage({
                   <tr className="border-b border-slate-200 text-left">
                     <th className="py-2.5 font-semibold text-slate-600">
                       Client
-                    </th>
-                    <th className="py-2.5 font-semibold text-slate-600">
-                      Model
                     </th>
                     <th className="py-2.5 font-semibold text-slate-600 text-right">
                       Samples
@@ -1013,9 +1134,6 @@ export default function FLSimulationDetailsPage({
                             }}
                           />
                           {c.client_name}
-                        </td>
-                        <td className="py-2.5 text-slate-500">
-                          {c.model_type}
                         </td>
                         <td className="py-2.5 text-right text-slate-700">
                           {dh?.total_samples?.toLocaleString() ?? "—"}
@@ -1057,12 +1175,12 @@ export default function FLSimulationDetailsPage({
             <h3 className="text-sm font-semibold text-slate-700 mb-1">
               {selectedClient === "all"
                 ? "Avg Validation Loss"
-                : "Train vs Validation Loss"}
+                : "Validation Loss"}
             </h3>
             <p className="text-xs text-slate-400 mb-3">
               {selectedClient === "all"
                 ? "Average validation loss across all clients"
-                : "Overfitting gap: rising val loss with falling train loss = overfitting"}
+                : "The loss value calculated on the validation set after local training rounds"}
             </p>
             <div className="h-72">
               <Line data={lossChartData} options={lossOptions} />
@@ -1300,9 +1418,7 @@ export default function FLSimulationDetailsPage({
                 Confusion Matrix
               </h3>
               <ConfusionMatrixCard
-                confusionMatrix={
-                  selectedCM.global.post_fl.confusion_matrix
-                }
+                confusionMatrix={selectedCM.global.post_fl.confusion_matrix}
                 accuracy={selectedCM.global.post_fl.accuracy}
               />
             </div>
@@ -1391,9 +1507,7 @@ export default function FLSimulationDetailsPage({
                             : "bg-red-50 text-red-700 border-red-200"
                       }`}
                     >
-                      {selectedCM.data_heterogeneity.imbalance_ratio.toFixed(
-                        1,
-                      )}
+                      {selectedCM.data_heterogeneity.imbalance_ratio.toFixed(1)}
                       :1
                     </span>
                   </div>

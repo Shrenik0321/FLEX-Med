@@ -110,9 +110,6 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
                   <option value="densenet121">
                     DenseNet-121 (High Dense Connections)
                   </option>
-                  <option value="efficientnet_b0">
-                    EfficientNet-B0 (Modern Efficiency Optimizer)
-                  </option>
                 </select>
               </div>
 

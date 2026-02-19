@@ -34,12 +34,12 @@ clientapp = "flex_med.client_app:app"
 num-server-rounds = 10
 fraction-train = 1.0
 fraction-evaluate = 1.0
-local-epochs = 3
+local-epochs = 2
 batch-size = 32
 lr = 0.001
-lr-decay = 0.95
+lr-decay = 0.93
 distill-lr = 0.001
-distill-epochs = 3
+distill-epochs = 2
 temperature = 4.0
 
 [tool.flwr.federations]

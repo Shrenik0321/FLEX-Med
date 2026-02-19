@@ -1,126 +1,104 @@
-Context │
+ontext │
 │ │
-│ The FL system (FedMD with Dirichlet partitioning, alpha=1.0, 3 clients) fails to meet targets of 80%+ accuracy and <10% class gap. Current │
-│ results: │
+│ Problem: Log5 (fixed focal alpha=0.5) shows oscillations in rounds 7-10 and overfitting. Log6 (data-driven focal alpha) │
+│ made things SIGNIFICANTLY WORSE — final eval dropped from 79-90% (log5) to 72-85% (log6). Lanka was EXCLUDED from │
+│ consensus in R1 of log6. │
 │ │
-│ ┌────────┬──────────┬───────────┬─────────────────┐ │
-│ │ Client │ Accuracy │ Class Gap │ Imbalance Ratio │ │
-│ ├────────┼──────────┼───────────┼─────────────────┤ │
-│ │ Asiri │ 69.6% │ 45.8% │ 6.7:1 │ │
-│ ├────────┼──────────┼───────────┼─────────────────┤ │
-│ │ Delmon │ 67.7% │ 58.8% │ 21:1 │ │
-│ ├────────┼──────────┼───────────┼─────────────────┤ │
-│ │ Lanka │ 81.1% │ 4.6% │ 1.28:1 │ │
-│ └────────┴──────────┴───────────┴─────────────────┘ │
+│ Root cause of log6 regression: Data-driven focal alpha sets α≈0.21-0.27 based on minority ratio. Combined with │
+│ WeightedRandomSampler (which already over-samples minority class in each batch), this DOUBLE-COMPENSATES — producing │
+│ extremely high Healthy accuracy (88-98%) but crashing Leukemia accuracy (55-82%). │
 │ │
-│ Lanka (nearly balanced) already hits targets. Asiri and Delmon fail specifically because of data imbalance - their models predict "leukemia" │
-│ for everything. Additionally, rounds 9-10 show overfitting (val loss rising, accuracy declining). │
+│ Root cause of log5 oscillations: │
+│ - LR decay 0.95 is too gentle — R10 LR is still 0.00063 (needs to be ~0.00035) │
+│ - Consensus momentum is fixed at 0.20 — mature consensus in later rounds swings too much │
+│ - Distillation targets become unstable as rounds progress │
 │ │
-│ The single biggest problem: There is no WeightedRandomSampler in the training DataLoader. With 21:1 imbalance, batches are overwhelmingly │
-│ leukemia samples. Focal loss alpha alone cannot compensate for this frequency gap. │
+│ 3 High-Impact Changes (Priority Order) │
 │ │
-│ --- │
-│ Changes (4 total, 4 files) │
+│ Change 1: Revert Focal Alpha to Fixed 0.5 (CRITICAL) │
 │ │
-│ 1. Add WeightedRandomSampler to training DataLoader [CRITICAL] │
+│ File: backend/federated_learning/flex_med/client_app.py (lines 180-217) │
 │ │
-│ File: backend/federated_learning/flex_med/task.py │
+│ Set USE_DATA_DRIVEN_FOCAL_ALPHA = False. This reverts to the log5 behavior which was clearly better. │
 │ │
-│ Line 11 - Add WeightedRandomSampler to existing import: │
-│ from torch.utils.data import DataLoader, WeightedRandomSampler │
+│ Why: WeightedRandomSampler handles class imbalance at the BATCH level (more minority samples per batch). Focal alpha │
+│ handles it at the LOSS level. Doing both is redundant and harmful. With fixed α=0.5, focal loss focuses purely on hard │
+│ examples via gamma=2.0, which is its actual strength. │
 │ │
-│ Lines 321-322 - Replace the trainloader creation: │
-│ # BEFORE: │
-│ trainloader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=2) │
+│ Change 2: Stronger LR Decay (0.95 → 0.88) │
 │ │
-│ # AFTER: │
-│ class_sample_counts = torch.bincount(torch.tensor(train_targets), minlength=2).float() │
-│ class_weights = 1.0 / class_sample_counts.clamp(min=1) │
-│ sample_weights = class_weights[torch.tensor(train_targets)] │
-│ sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True) │
-│ trainloader = DataLoader(train_ds, batch_size=batch_size, sampler=sampler, num_workers=2) │
+│ File: backend/federated_learning/pyproject.toml (line 40) │
 │ │
-│ Why: Converts effective batch distribution from 21:1 to ~1:1. This is the standard PyTorch approach for class-imbalanced datasets. Works │
-│ regardless of Dirichlet alpha value. Note: sampler and shuffle=True are mutually exclusive in PyTorch. │
+│ Change lr-decay = 0.95 to lr-decay = 0.88. │
 │ │
-│ --- │
-│ 2. Simplify focal alpha calculation │
+│ Effect on learning rates: │
 │ │
-│ File: backend/federated_learning/flex_med/client_app.py │
+│ ┌───────┬────────────────┬────────────┐ │
+│ │ Round │ Current (0.95) │ New (0.88) │ │
+│ ├───────┼────────────────┼────────────┤ │
+│ │ R1 │ 0.00100 │ 0.00100 │ │
+│ ├───────┼────────────────┼────────────┤ │
+│ │ R5 │ 0.00081 │ 0.00060 │ │
+│ ├───────┼────────────────┼────────────┤ │
+│ │ R8 │ 0.00070 │ 0.00040 │ │
+│ ├───────┼────────────────┼────────────┤ │
+│ │ R10 │ 0.00063 │ 0.00028 │ │
+│ └───────┴────────────────┴────────────┘ │
 │ │
-│ Lines 168-212 - Replace the entire dynamic focal alpha block (damping, boost, symmetric shift) with: │
-│ n_leukemia = class_counts.get(0, 0) │
-│ n_healthy = class_counts.get(1, 0) │
-│ total_samples = n_leukemia + n_healthy │
+│ This directly reduces oscillation amplitude in later rounds where models are already at 85-90% accuracy and need │
+│ fine-tuning, not aggressive updates. The key: rounds 7-10 in log5 show val loss bouncing (0.0500→0.0514→0.0487→0.0522 for │
+│ Asiri) — this is the LR being too high for the loss landscape at that stage. │
 │ │
-│ if total_samples > 0 and n_leukemia > 0 and n_healthy > 0: │
-│ # With WeightedRandomSampler handling frequency balance, │
-│ # focal alpha only needs mild residual correction │
-│ focal_alpha = n_healthy / total_samples │
-│ focal_alpha = max(0.25, min(0.75, focal_alpha)) │
-│ else: │
-│ focal_alpha = 0.50 │
+│ Change 3: Progressive Consensus Momentum (0.20 → 0.15-0.45) │
 │ │
-│ print(f"[{display_id} | {client_name}] Focal Alpha: {focal_alpha:.4f} (L:{n_leukemia}, H:{n_healthy})") │
+│ File: backend/federated_learning/flex_med/task.py — compute_consensus() function (around line 862) │
 │ │
-│ Why: The sampler now handles the heavy lifting of class balance. The complex damping/boost/symmetric-shift logic was producing insufficient │
-│ corrections (4.5:1 effective weight for 21:1 imbalance) and added instability. Clamping to [0.25, 0.75] prevents extreme values. │
+│ Currently: consensus_logits = momentum _ last_consensus + (1 - momentum) _ new_consensus with fixed momentum=0.20. │
 │ │
-│ --- │
-│ 3. Add CosineAnnealingLR within training + steeper inter-round decay │
+│ Change to progressive momentum that increases with round number: │
+│ # Early rounds: trust new data more (low momentum) │
+│ # Late rounds: stabilize consensus (high momentum) │
+│ progress = (server_round - 1) / max(total_rounds - 1, 1) │
+│ effective_momentum = 0.15 + 0.30 \* progress # 0.15 at R1 → 0.45 at R10 │
 │ │
-│ File 1: backend/federated_learning/flex_med/task.py │
+│ Why this matters: The consensus is the DISTILLATION TARGET — every client learns from it. If it swings too much between │
+│ rounds, clients chase a moving target, creating oscillation. In later rounds, the consensus should be more stable (higher │
+│ momentum = more weight on previous consensus). │
 │ │
-│ In train() function, after optimizer creation (line 534), add: │
-│ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR( │
-│ optimizer, T_max=epochs, eta_min=effective_lr \* 0.1 │
-│ ) │
+│ Implementation: Pass total_rounds into compute_consensus() from FLEXMedStrategy.aggregate_train(). The strategy already │
+│ knows num_rounds. │
 │ │
-│ After the validation block (line 571, where # REMOVED: scheduler.step(epoch_val_loss) comment is), replace comment with: │
-│ scheduler.step() │
+│ Files to Modify │
 │ │
-│ File 2: backend/federated_learning/pyproject.toml │
+│ 1. backend/federated_learning/flex_med/client_app.py — Line 180: set USE_DATA_DRIVEN_FOCAL_ALPHA = False │
+│ 2. backend/federated_learning/pyproject.toml — Line 40: lr-decay = 0.88 │
+│ 3. backend/federated_learning/flex_med/task.py — compute_consensus() function: add progressive momentum logic. Also │
+│ update FLEXMedStrategy.aggregate_train() to pass num_rounds context. │
 │ │
-│ Line ~40 - Change: │
-│ lr-decay = 0.93 # was 0.98 │
+│ What NOT to Change │
 │ │
-│ Why: Addresses the post-round-8 overfitting. CosineAnnealingLR decays LR smoothly within each round's local training. Steeper inter-round │
-│ decay (0.93^9 = 0.52 vs 0.98^9 = 0.83) ensures LR is meaningfully reduced by late rounds. Together they prevent the "accuracy declining + │
-│ loss increasing" pattern seen in rounds 9-10. │
-│ │
-│ --- │
-│ 4. Tune consensus momentum and distillation weight │
-│ │
-│ File: backend/app/config.py │
-│ │
-│ Line 189 - Reduce consensus momentum: │
-│ consensus_momentum: float = 0.25 # was 0.40 │
-│ │
-│ Lines 201-202 - Increase distillation strength: │
-│ distill_weight_base: float = float(os.getenv("FLEX_MED_DISTILL_WEIGHT", "0.55")) # was 0.45 │
-│ distill_decay_rate: float = float(os.getenv("FLEX_MED_DISTILL_DECAY", "0.12")) # was 0.2 │
-│ │
-│ Why: │
-│ - Momentum 0.40 -> 0.25: Consensus currently drags 40% of old (poor) predictions forward. At 0.25, consensus is 75% driven by current round │
-│ logits, more responsive to improving models. │
-│ - Distill weight 0.45 -> 0.55, decay 0.2 -> 0.12: At round 10, distillation weight goes from 0.37 (current) to 0.49 (proposed). Stronger │
-│ sustained distillation prevents imbalanced clients from drifting too far toward their skewed local distributions in late rounds. The │
-│ consensus (built from balanced public data) acts as a regularizer. │
-│ │
-│ --- │
-│ What is intentionally NOT changed │
-│ │
-│ - Freeze strategy (Phase 1/Phase 2 split is reasonable) │
-│ - Gradient clipping, adaptive dropout, data augmentation │
-│ - Quality gating in compute_consensus │
-│ - Batch size, local epochs, temperature │
-│ - Model architectures │
+│ - Freeze strategy: 2-phase (20% classifier only, 80% last block+classifier) is working well │
+│ - Batch size, local epochs: These are fine at 32 and 3 │
+│ - Distillation weight/decay: Current 0.45 base / 0.2 decay is reasonable │
+│ - Minority boost (0.70): This is a sensible moderate value for WeightedRandomSampler │
+│ - AdaptiveDropout: Working correctly, responds to val loss trends │
 │ │
 │ Verification │
 │ │
-│ 1. Run FL simulation with alpha=1.0 (current baseline) and compare: │
-│ - All clients should achieve >80% accuracy │
-│ - Class gap should be <10-15% even for the 21:1 client │
-│ - Val loss should decrease monotonically (no R9-10 spike) │
-│ 2. Run with alpha=0.5 (harder heterogeneity) to confirm robustness │
-│ 3. Check confusion matrix: TN should be significantly higher for Asiri/Delmon
+│ Run a 10-round FL simulation with Dirichlet α=2.5 and compare: │
+│ - Training accuracy curves should be monotonically increasing (or near-monotonic) │
+│ - Val loss should decrease steadily, not oscillate in R7-10 │
+│ - Public test EVAL gaps should stay below 15% in later rounds │
+│ - No clients should be EXCLUDED from consensus │
+│ - Final global eval should match or exceed log5 (Asiri ~80%, Lanka ~87%, Delmon ~90%) │
+│ │
+│ Dirichlet Sensitivity Notes │
+│ │
+│ For α=1.0 (more heterogeneous): consensus momentum should start higher (0.25→0.50) and distillation weight base should be │
+│ increased (0.55-0.60) to provide stronger federated guidance against local drift. │
+│ │
+│ For α=5.0 (less heterogeneous): current settings would work well since data is near-IID. Could even reduce consensus │
+│ momentum range to (0.10→0.30). │
+│ │
+│ The architecture is NOT only optimal for α=2.5 — the progressive momentum approach naturally adapts. The LR decay and │
+│ focal loss settings are data-distribution-agnostic.

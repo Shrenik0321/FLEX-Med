@@ -2,6 +2,20 @@
 
 export type SimulationStatus = "pending" | "running" | "completed" | "failed";
 
+export interface TrainingConfig {
+  dirichlet_alpha?: number;
+  dirichlet_seed?: number;
+  dirichlet_min_partition_size?: number;
+  minority_boost?: number;
+  focal_alpha?: number;
+  focal_gamma?: number;
+  consensus_momentum?: number;
+  distill_weight_base?: number;
+  distill_decay_rate?: number;
+  train_loss_weight?: number;
+  distill_loss_weight?: number;
+}
+
 export interface FLConfig {
   num_server_rounds: number;
   fraction_train: number;
@@ -13,10 +27,14 @@ export interface FLConfig {
   distill_epochs: number;
   temperature: number;
   batch_size: number;
+  // Heterogeneity preset used for this run
+  heterogeneity_preset?: string;
   // Dirichlet Partitioning Configuration
   dirichlet_alpha?: number;
   dirichlet_seed?: number;
   dirichlet_min_partition_size?: number;
+  // Training strategy snapshot (stored for reference)
+  training_config?: TrainingConfig;
 }
 
 export interface RoundMetrics {
@@ -38,6 +56,8 @@ export interface AggregateMetrics {
   avg_precision: number;
   avg_recall: number;
   avg_f1: number;
+  avg_specificity?: number;
+  avg_roc_auc?: number;
   std_accuracy: number;
   num_clients: number;
 }
@@ -68,6 +88,7 @@ export interface FLSimulation {
   id: number;
   configs: FLConfig;
   aggregate_metrics: FLSimulationMetrics; // JSONB stored as object (not string)
+  heterogeneity_preset?: string | null; // Top-level column: low, moderate, high, custom
   status: SimulationStatus;
   error_message?: string | null;
   created_at: string;
@@ -105,11 +126,15 @@ export function parseMetrics(
 export function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
 
   if (hours > 0) {
     return `${hours}h ${minutes}m`;
   }
-  return `${minutes}m`;
+  if (minutes > 0) {
+    return `${minutes}m ${secs}s`;
+  }
+  return `${secs}s`;
 }
 
 // Helper to format date

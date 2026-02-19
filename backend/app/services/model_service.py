@@ -1,23 +1,17 @@
-import random
 import sys
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
-import numpy as np
 import torch
 from PIL import Image
-from torchvision import datasets
 
 from app.config import Settings, get_settings
 
-# Make the local 0 package importable (lives in ../federated_learning)
-# backend/app/services/model_service.py -> services -> app -> backend
+# Make the local FL package importable (lives in ../federated_learning)
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 FED_LEARNING_PATH = BACKEND_ROOT / "federated_learning"
 if FED_LEARNING_PATH.exists():
     sys.path.append(str(FED_LEARNING_PATH))
-
-from typing import Dict, Optional, Tuple
 
 from flex_med.task import (  # type: ignore  # added to sys.path above
     COMMON_TRANSFORM,
@@ -31,7 +25,6 @@ MODEL_TYPE_NAMES = {
     "resnet50": "ResNet50",
     "mobilenet_v2": "MobileNetV2",
     "densenet121": "DenseNet121",
-    "efficientnet_b0": "EfficientNet-B0",
 }
 
 
@@ -63,9 +56,6 @@ def select_model(model_path: Path) -> Tuple[torch.nn.Module, str]:
     if "mobilenet" in name:
         model = get_model_by_type('mobilenet_v2')
         model_name = "MobileNetV2"
-    elif "efficientnet" in name or "effnet" in name:
-        model = get_model_by_type('efficientnet_b0')
-        model_name = "EfficientNet-B0"
     elif "resnet" in name:
         model = get_model_by_type('resnet50')
         model_name = "ResNet50"
@@ -97,8 +87,8 @@ def adapt_state_dict(model: torch.nn.Module, state_dict: Dict[str, torch.Tensor]
                 del new_state_dict["fc.weight"]
                 del new_state_dict["fc.bias"]
 
-    # Check for MobileNet/EfficientNet (classifier.1.weight -> classifier.1.1.weight)
-    elif "MobileNet" in model_name or "EfficientNet" in model_name:
+    # Check for MobileNet(classifier.1.weight -> classifier.1.1.weight)
+    elif "MobileNet" in model_name in model_name:
         if "classifier.1.weight" in state_dict and "classifier.1.1.weight" not in state_dict:
              # Check if model has Sequential classifier[1]
              if hasattr(model, "classifier") and isinstance(model.classifier[1], torch.nn.Sequential):

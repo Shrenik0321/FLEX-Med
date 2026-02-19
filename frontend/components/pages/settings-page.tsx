@@ -2,43 +2,97 @@
 
 import { useState, useEffect } from "react";
 
+interface PresetConfig {
+  dirichlet_alpha: number;
+  minority_boost: number;
+  focal_alpha: number;
+  focal_gamma: number;
+  consensus_momentum: number;
+  distill_weight_base: number;
+  distill_decay_rate: number;
+  train_loss_weight: number;
+  distill_loss_weight: number;
+  lr_decay: number;
+  learning_rate: number;
+}
+
 interface SystemConfig {
-  // FL Training Configuration
+  // Active Heterogeneity Preset
+  heterogeneity_preset: string;
+  presets: Record<string, PresetConfig>;
+
+  // FL Training Configuration (global)
   num_rounds: number;
   local_epochs: number;
   batch_size: number;
-  learning_rate: number;
-  lr_decay: number;
 
-  // Knowledge Distillation Configuration
+  // Knowledge Distillation Configuration (global)
   distill_lr: number;
   distill_epochs: number;
   temperature: number;
 
-  // Data Heterogeneity Configuration
-  dirichlet_alpha: number;
+  // Dirichlet Partitioning (global)
   dirichlet_seed: number;
   dirichlet_min_partition_size: number;
 
-  // Dataset Paths
+  // Dataset Paths (global)
   public_anchor_dataset_path: string;
   public_test_dataset_path: string;
   local_train_dataset_path: string;
 
-  // System Configuration
+  // System Configuration (global)
   ngrok_url: string;
 }
 
 const defaultConfig: SystemConfig = {
+  heterogeneity_preset: "moderate",
+  presets: {
+    low: {
+      dirichlet_alpha: 5.0,
+      minority_boost: 1.0,
+      focal_alpha: 0.5,
+      focal_gamma: 2.0,
+      consensus_momentum: 0.1,
+      distill_weight_base: 0.55,
+      distill_decay_rate: 0.3,
+      train_loss_weight: 0.65,
+      distill_loss_weight: 0.35,
+      lr_decay: 0.92,
+      learning_rate: 0.001,
+    },
+    moderate: {
+      dirichlet_alpha: 2.5,
+      minority_boost: 0.7,
+      focal_alpha: 0.5,
+      focal_gamma: 2.0,
+      consensus_momentum: 0.2,
+      distill_weight_base: 0.45,
+      distill_decay_rate: 0.2,
+      train_loss_weight: 0.7,
+      distill_loss_weight: 0.3,
+      lr_decay: 0.95,
+      learning_rate: 0.001,
+    },
+    high: {
+      dirichlet_alpha: 1.0,
+      minority_boost: 0.65,
+      focal_alpha: 0.5,
+      focal_gamma: 2.5,
+      consensus_momentum: 0.3,
+      distill_weight_base: 0.35,
+      distill_decay_rate: 0.15,
+      train_loss_weight: 0.75,
+      distill_loss_weight: 0.25,
+      lr_decay: 0.97,
+      learning_rate: 0.001,
+    },
+  },
   num_rounds: 10,
   local_epochs: 5,
   batch_size: 32,
-  learning_rate: 0.0001,
-  lr_decay: 0.99,
   distill_lr: 0.001,
   distill_epochs: 2,
   temperature: 3.0,
-  dirichlet_alpha: 1.0,
   dirichlet_seed: 42,
   dirichlet_min_partition_size: 400,
   public_anchor_dataset_path: "/content/datasets/cnmc/cnmc_public_anchor",
@@ -47,14 +101,70 @@ const defaultConfig: SystemConfig = {
   ngrok_url: "https://eb474f08357f.ngrok-free.app",
 };
 
+const PRESET_DESCRIPTIONS: Record<
+  string,
+  { label: string; description: string; alpha: string }
+> = {
+  low: {
+    label: "Low Heterogeneity",
+    description:
+      "Nearly uniform data distribution across clients. Suitable for baseline experiments.",
+    alpha: "alpha ~ 5.0",
+  },
+  moderate: {
+    label: "Moderate Heterogeneity",
+    description:
+      "Balanced non-IID distribution. Recommended default for most experiments.",
+    alpha: "alpha ~ 2.5",
+  },
+  high: {
+    label: "High Heterogeneity",
+    description:
+      "Highly skewed data distribution. Tests robustness under extreme non-IID conditions.",
+    alpha: "alpha ~ 1.0",
+  },
+  custom: {
+    label: "Custom",
+    description: "Manually configure all training strategy parameters.",
+    alpha: "user-defined",
+  },
+};
+
 export default function SettingsPage() {
   const [config, setConfig] = useState<SystemConfig>(defaultConfig);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
+
+  // Helper to get the active preset config values
+  const getActivePreset = (): PresetConfig => {
+    const preset = config.presets[config.heterogeneity_preset];
+    if (preset) return preset;
+    // Fallback to moderate
+    return config.presets["moderate"] ?? defaultConfig.presets.moderate;
+  };
+
+  // Helper to update a field in the active preset
+  const handlePresetFieldChange = (
+    field: keyof PresetConfig,
+    value: number,
+  ) => {
+    const activePresetKey = config.heterogeneity_preset;
+    setConfig((prev) => ({
+      ...prev,
+      presets: {
+        ...prev.presets,
+        [activePresetKey]: {
+          ...prev.presets[activePresetKey],
+          [field]: value,
+        },
+      },
+    }));
+  };
 
   // Fetch configuration from backend on mount
   useEffect(() => {
@@ -64,7 +174,7 @@ export default function SettingsPage() {
   const fetchConfig = async () => {
     setLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/system_config");
+      const response = await fetch("http://localhost:7860/api/system_config");
 
       if (!response.ok) {
         throw new Error(`Failed to fetch config: ${response.statusText}`);
@@ -99,7 +209,7 @@ export default function SettingsPage() {
     setSaveMessage(null);
 
     try {
-      const response = await fetch("http://localhost:8000/api/system_config", {
+      const response = await fetch("http://localhost:7860/api/system_config", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -152,6 +262,32 @@ export default function SettingsPage() {
     });
     setTimeout(() => setSaveMessage(null), 3000);
   };
+
+  const handlePresetChange = async (preset: string) => {
+    if (preset === "custom") {
+      // When switching to custom, copy current active preset values into a "custom" entry
+      const currentPreset = getActivePreset();
+      setConfig((prev) => ({
+        ...prev,
+        heterogeneity_preset: "custom",
+        presets: {
+          ...prev.presets,
+          custom: { ...currentPreset },
+        },
+      }));
+      setShowAdvanced(true);
+      return;
+    }
+
+    // For named presets, just switch the active preset key
+    setConfig((prev) => ({
+      ...prev,
+      heterogeneity_preset: preset,
+    }));
+  };
+
+  const isPresetSelected = config.heterogeneity_preset !== "custom";
+  const activePreset = getActivePreset();
 
   return (
     <div className="p-8">
@@ -255,17 +391,23 @@ export default function SettingsPage() {
               <input
                 type="number"
                 step="0.0001"
-                value={config.learning_rate}
+                value={activePreset.learning_rate}
                 onChange={(e) =>
-                  handleInputChange(
+                  handlePresetFieldChange(
                     "learning_rate",
                     parseFloat(e.target.value) || 0,
                   )
                 }
-                className="w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-card"
+                className={`w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${isPresetSelected ? "bg-muted text-muted-foreground" : "bg-card"}`}
                 min="0.00001"
                 max="1"
+                readOnly={isPresetSelected}
               />
+              {isPresetSelected && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Auto-set by preset
+                </p>
+              )}
             </div>
 
             <div>
@@ -275,14 +417,23 @@ export default function SettingsPage() {
               <input
                 type="number"
                 step="0.01"
-                value={config.lr_decay}
+                value={activePreset.lr_decay}
                 onChange={(e) =>
-                  handleInputChange("lr_decay", parseFloat(e.target.value) || 0)
+                  handlePresetFieldChange(
+                    "lr_decay",
+                    parseFloat(e.target.value) || 0,
+                  )
                 }
-                className="w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-card"
+                className={`w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${isPresetSelected ? "bg-muted text-muted-foreground" : "bg-card"}`}
                 min="0.8"
                 max="1"
+                readOnly={isPresetSelected}
               />
+              {isPresetSelected && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Auto-set by preset
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -358,6 +509,41 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Heterogeneity Preset Selector */}
+        <div className="bg-card rounded-lg p-6 shadow-sm border border-border">
+          <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+            <span className="flex-red-dot" />
+            Heterogeneity Preset
+          </h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Select a preset to auto-configure Dirichlet alpha and all training
+            strategy parameters for the chosen heterogeneity level
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {Object.entries(PRESET_DESCRIPTIONS).map(
+              ([key, { label, description, alpha }]) => (
+                <button
+                  key={key}
+                  onClick={() => handlePresetChange(key)}
+                  className={`text-left p-4 rounded-lg border-2 transition-all ${
+                    config.heterogeneity_preset === key
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-muted-foreground/30"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium text-foreground">{label}</span>
+                    <span className="text-xs text-muted-foreground font-mono">
+                      {alpha}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{description}</p>
+                </button>
+              ),
+            )}
+          </div>
+        </div>
+
         {/* Data Heterogeneity Configuration */}
         <div className="bg-card rounded-lg p-6 shadow-sm border border-border">
           <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
@@ -376,19 +562,22 @@ export default function SettingsPage() {
               <input
                 type="number"
                 step="0.1"
-                value={config.dirichlet_alpha}
+                value={activePreset.dirichlet_alpha}
                 onChange={(e) =>
-                  handleInputChange(
+                  handlePresetFieldChange(
                     "dirichlet_alpha",
                     parseFloat(e.target.value) || 0,
                   )
                 }
-                className="w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-card"
+                className={`w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${isPresetSelected ? "bg-muted text-muted-foreground" : "bg-card"}`}
                 min="0.1"
                 max="10"
+                readOnly={isPresetSelected}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Lower = more heterogeneity. Recommended: 1.0
+                {isPresetSelected
+                  ? "Auto-set by preset"
+                  : "Lower = more heterogeneity"}
               </p>
             </div>
 
@@ -434,6 +623,201 @@ export default function SettingsPage() {
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Advanced Training Configuration (Collapsible) */}
+        <div className="bg-card rounded-lg p-6 shadow-sm border border-border">
+          <button
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="w-full flex items-center justify-between text-left"
+          >
+            <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+              <span className="flex-red-dot" />
+              Advanced Training Configuration
+            </h2>
+            <span className="text-muted-foreground text-sm">
+              {showAdvanced ? "Hide" : "Show"}
+            </span>
+          </button>
+          {isPresetSelected && (
+            <p className="text-xs text-muted-foreground mt-2">
+              These values are auto-configured by the{" "}
+              {PRESET_DESCRIPTIONS[config.heterogeneity_preset]?.label} preset.
+              Select &quot;Custom&quot; to edit them manually.
+            </p>
+          )}
+
+          {showAdvanced && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="text-sm font-medium text-foreground block mb-2">
+                  Minority Boost
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  value={activePreset.minority_boost}
+                  onChange={(e) =>
+                    handlePresetFieldChange(
+                      "minority_boost",
+                      parseFloat(e.target.value) || 0,
+                    )
+                  }
+                  className={`w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${isPresetSelected ? "bg-muted text-muted-foreground" : "bg-card"}`}
+                  min="0"
+                  max="2"
+                  readOnly={isPresetSelected}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground block mb-2">
+                  Focal Alpha
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  value={activePreset.focal_alpha}
+                  onChange={(e) =>
+                    handlePresetFieldChange(
+                      "focal_alpha",
+                      parseFloat(e.target.value) || 0,
+                    )
+                  }
+                  className={`w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${isPresetSelected ? "bg-muted text-muted-foreground" : "bg-card"}`}
+                  min="0"
+                  max="1"
+                  readOnly={isPresetSelected}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground block mb-2">
+                  Focal Gamma
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={activePreset.focal_gamma}
+                  onChange={(e) =>
+                    handlePresetFieldChange(
+                      "focal_gamma",
+                      parseFloat(e.target.value) || 0,
+                    )
+                  }
+                  className={`w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${isPresetSelected ? "bg-muted text-muted-foreground" : "bg-card"}`}
+                  min="0"
+                  max="5"
+                  readOnly={isPresetSelected}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground block mb-2">
+                  Consensus Momentum
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  value={activePreset.consensus_momentum}
+                  onChange={(e) =>
+                    handlePresetFieldChange(
+                      "consensus_momentum",
+                      parseFloat(e.target.value) || 0,
+                    )
+                  }
+                  className={`w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${isPresetSelected ? "bg-muted text-muted-foreground" : "bg-card"}`}
+                  min="0"
+                  max="1"
+                  readOnly={isPresetSelected}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground block mb-2">
+                  Distill Weight Base
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  value={activePreset.distill_weight_base}
+                  onChange={(e) =>
+                    handlePresetFieldChange(
+                      "distill_weight_base",
+                      parseFloat(e.target.value) || 0,
+                    )
+                  }
+                  className={`w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${isPresetSelected ? "bg-muted text-muted-foreground" : "bg-card"}`}
+                  min="0"
+                  max="1"
+                  readOnly={isPresetSelected}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground block mb-2">
+                  Distill Decay Rate
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  value={activePreset.distill_decay_rate}
+                  onChange={(e) =>
+                    handlePresetFieldChange(
+                      "distill_decay_rate",
+                      parseFloat(e.target.value) || 0,
+                    )
+                  }
+                  className={`w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${isPresetSelected ? "bg-muted text-muted-foreground" : "bg-card"}`}
+                  min="0"
+                  max="1"
+                  readOnly={isPresetSelected}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground block mb-2">
+                  Train Loss Weight
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  value={activePreset.train_loss_weight}
+                  onChange={(e) =>
+                    handlePresetFieldChange(
+                      "train_loss_weight",
+                      parseFloat(e.target.value) || 0,
+                    )
+                  }
+                  className={`w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${isPresetSelected ? "bg-muted text-muted-foreground" : "bg-card"}`}
+                  min="0"
+                  max="1"
+                  readOnly={isPresetSelected}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground block mb-2">
+                  Distill Loss Weight
+                </label>
+                <input
+                  type="number"
+                  step="0.05"
+                  value={activePreset.distill_loss_weight}
+                  onChange={(e) =>
+                    handlePresetFieldChange(
+                      "distill_loss_weight",
+                      parseFloat(e.target.value) || 0,
+                    )
+                  }
+                  className={`w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent ${isPresetSelected ? "bg-muted text-muted-foreground" : "bg-card"}`}
+                  min="0"
+                  max="1"
+                  readOnly={isPresetSelected}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Dataset Paths */}

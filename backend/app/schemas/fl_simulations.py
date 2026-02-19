@@ -14,6 +14,7 @@ class FLSimulationBase(BaseModel):
     """Base schema for FL Simulation"""
     configs: dict  # JSONB - FL hyperparameters
     aggregate_metrics: dict = {}  # JSONB - Aggregated metrics from all clients
+    heterogeneity_preset: Optional[str] = None  # Heterogeneity preset used for this run (from DB)
     status: SimulationStatus = SimulationStatus.PENDING
     error_message: Optional[str] = None
 
@@ -59,6 +60,7 @@ class FLSimulationUpdate(BaseModel):
     """Schema for updating simulation"""
     status: Optional[SimulationStatus] = None
     aggregate_metrics: Optional[dict] = None
+    heterogeneity_preset: Optional[str] = None
     error_message: Optional[str] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
@@ -78,23 +80,6 @@ class FLSimulation(FLSimulationBase):
 # ==========================================
 # HELPER FUNCTIONS
 # ==========================================
-
-def parse_simulation_metrics(metrics_str: str) -> dict:
-    """
-    Parse simulation metrics JSON string.
-
-    Args:
-        metrics_str: JSON string containing simulation metrics
-
-    Returns:
-        Dict containing metrics, or empty dict if parsing fails
-    """
-    if not metrics_str or metrics_str.strip() == "":
-        return {}
-    try:
-        return json.loads(metrics_str)
-    except json.JSONDecodeError:
-        return {}
 
 def compute_aggregate_metrics(clients_data: List[dict]) -> dict:
     """
@@ -308,9 +293,7 @@ if __name__ == "__main__":
     print(f"Status: {sim.status}")
     print(f"Duration: {sim.duration}s")
 
-    # Example 3: Parse metrics
-    print("\nExample 3: Parse Metrics")
+    # Example 3: Show metrics
+    print("\nExample 3: Metrics")
     print("-" * 70)
-
-    metrics = parse_simulation_metrics(sim.metrics)
-    print(f"Parsed metrics: {json.dumps(metrics, indent=2)}")
+    print(f"Metrics: {sim.metrics}")

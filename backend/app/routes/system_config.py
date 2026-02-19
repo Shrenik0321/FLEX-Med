@@ -2,7 +2,10 @@
 from fastapi import APIRouter, HTTPException, Depends
 from supabase import Client as SupabaseClient
 from app.config import get_supabase_client
-from app.schemas.system_config import SystemConfig, SystemConfigUpdate, SystemConfigData
+from app.schemas.system_config import (
+    SystemConfig, SystemConfigUpdate, SystemConfigData,
+    DEFAULT_HETEROGENEITY_PRESETS,
+)
 from datetime import datetime
 import logging
 
@@ -159,3 +162,49 @@ async def partial_update_system_config(
     except Exception as e:
         logger.error(f"Error partially updating system config: {e}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+@router.get("/system_config/presets")
+async def list_presets(
+    supabase: SupabaseClient = Depends(get_supabase_client)
+):
+    """Return all available heterogeneity presets from the database."""
+    try:
+        response = supabase.from_("system_config").select("config").limit(1).execute()
+        if response.data and len(response.data) > 0:
+            presets = response.data[0]["config"].get("presets")
+            if presets:
+                return presets
+        # Fallback to defaults if not in DB
+        return DEFAULT_HETEROGENEITY_PRESETS
+    except Exception as e:
+        logger.error(f"Error fetching presets: {e}")
+        return DEFAULT_HETEROGENEITY_PRESETS
+
+
+@router.get("/system_config/presets/{preset_name}")
+async def get_preset(
+    preset_name: str,
+    supabase: SupabaseClient = Depends(get_supabase_client)
+):
+    """Return the config values for a specific heterogeneity preset from the database."""
+    try:
+        response = supabase.from_("system_config").select("config").limit(1).execute()
+        if response.data and len(response.data) > 0:
+            presets = response.data[0]["config"].get("presets")
+            if presets and preset_name in presets:
+                return presets[preset_name]
+        # Fallback to defaults
+        if preset_name in DEFAULT_HETEROGENEITY_PRESETS:
+            return DEFAULT_HETEROGENEITY_PRESETS[preset_name]
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown preset '{preset_name}'. Valid presets: {list(DEFAULT_HETEROGENEITY_PRESETS.keys())}"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching preset '{preset_name}': {e}")
+        if preset_name in DEFAULT_HETEROGENEITY_PRESETS:
+            return DEFAULT_HETEROGENEITY_PRESETS[preset_name]
+        raise HTTPException(status_code=404, detail=f"Unknown preset '{preset_name}'")

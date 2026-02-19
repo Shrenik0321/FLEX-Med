@@ -165,12 +165,9 @@ def train(msg: Message, context: Context):
     except Exception:
          pass
 
-    # Focal alpha = 0.5 (neutral). Class balance is handled by WeightedRandomSampler.
-    # Gamma=2.0 still focuses on hard examples, which is complementary to the sampler.
     n_leukemia = class_counts.get(0, 0)
     n_healthy = class_counts.get(1, 0)
     focal_alpha = FOCAL_ALPHA_DEFAULT
-
     print(f"[{display_id} | {client_name}] Focal Alpha: {focal_alpha:.4f} (L:{n_leukemia}, H:{n_healthy})")
 
     dataset_len = len(trainloader.dataset)

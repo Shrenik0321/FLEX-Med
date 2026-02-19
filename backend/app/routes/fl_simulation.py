@@ -1,10 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import requests
 import json
-import subprocess
-import tempfile
 import os
 import sys
 from pathlib import Path
@@ -17,23 +15,7 @@ from app.schemas.fl_simulations import (
 )
 import logging
 
-# Initialize logger
 logger = logging.getLogger(__name__)
-
-# Add federated_learning to Python path for importing FL logic
-FL_PATH = Path(__file__).parent.parent.parent / "federated_learning"
-if str(FL_PATH) not in sys.path:
-    sys.path.insert(0, str(FL_PATH))
-
-# Import FL simulation logic from flex_med package
-try:
-    from flex_med.task import load_client_config
-    # from flex_med.server import run_federated_learning # Removed: module does not exist and function is unused
-    FL_AVAILABLE = True
-    logger.info("FL simulation package imported successfully")
-except ImportError as e:
-    FL_AVAILABLE = False
-    logger.warning(f"FL simulation package not available: {e}")
 
 router = APIRouter()
 
@@ -42,6 +24,7 @@ class StartFLRequest(BaseModel):
     client_ids: Optional[List[int]] = None  # If None, all clients are used
     dataset: Optional[str] = None
     config: Optional[Dict[str, Any]] = None
+    heterogeneity_preset: Optional[str] = None  # low, moderate, high, custom
 
 
 @router.post("/start_fl")
@@ -73,6 +56,7 @@ async def start_fl(
     selected_client_ids = request.client_ids if request else None
     dataset = request.dataset if request else None
     user_config = request.config if request else None
+    heterogeneity_preset = request.heterogeneity_preset if request else None
 
     # Fetch all clients from database
     response = supabase.from_("clients").select("*").execute()
@@ -105,46 +89,88 @@ async def start_fl(
     # Extract client IDs for simulation record
     client_ids = [c['id'] for c in clients_data]
 
-    # Define FL configuration (merge user config with defaults)
-    default_configs = {
-        "num_server_rounds": 2,
+    # Load configuration from system_config table (single source of truth)
+    try:
+        config_response = supabase.from_("system_config").select("*").limit(1).execute()
+        if config_response.data and len(config_response.data) > 0:
+            system_config = config_response.data[0]["config"]
+            logger.info(f"Loaded system_config from database")
+        else:
+            logger.warning("No system_config found in database, using defaults")
+            system_config = {}
+    except Exception as e:
+        logger.warning(f"Failed to load system_config from database: {e}, using defaults")
+        system_config = {}
+
+    # Resolve heterogeneity preset: request overrides system_config default
+    if not heterogeneity_preset:
+        heterogeneity_preset = system_config.get("heterogeneity_preset", "moderate")
+
+    # Resolve preset config values — all preset-specific params live inside the preset object
+    from app.schemas.system_config import DEFAULT_HETEROGENEITY_PRESETS
+    presets = system_config.get("presets", {})
+    preset_config = presets.get(heterogeneity_preset, {})
+
+    # Fallback to default presets if preset not found in DB
+    if not preset_config and heterogeneity_preset in DEFAULT_HETEROGENEITY_PRESETS:
+        preset_config = DEFAULT_HETEROGENEITY_PRESETS[heterogeneity_preset]
+    elif not preset_config:
+        preset_config = DEFAULT_HETEROGENEITY_PRESETS["moderate"]
+
+    logger.info(f"Using heterogeneity preset: {heterogeneity_preset}")
+    logger.info(f"Preset config: dirichlet_alpha={preset_config.get('dirichlet_alpha')}, lr_decay={preset_config.get('lr_decay')}")
+
+    # Build FL configs — global params from system_config, preset-specific from preset
+    configs = {
+        "num_server_rounds": system_config.get("num_rounds", 10),
         "fraction_train": 1.0,
         "fraction_evaluate": 1.0,
-        "local_epochs": 2,
-        "lr": 0.0001,
-        "lr_decay": 0.98,
-        "distill_lr": 0.001,
-        "distill_epochs": 2,
-        "temperature": 3.0,
-        "batch_size": 32
+        "local_epochs": system_config.get("local_epochs", 5),
+        "lr": preset_config.get("learning_rate", 0.001),
+        "lr_decay": preset_config.get("lr_decay", 0.95),
+        "distill_lr": system_config.get("distill_lr", 0.001),
+        "distill_epochs": system_config.get("distill_epochs", 2),
+        "temperature": system_config.get("temperature", 3.0),
+        "batch_size": system_config.get("batch_size", 32),
     }
 
-    # Merge user-provided config with defaults
-    configs = {**default_configs}
-    if user_config:
-        # Map frontend config keys to backend config keys
-        config_mapping = {
-            "numRounds": "num_server_rounds",
-            "localEpochs": "local_epochs",
-            "learningRate": "lr",
-            "batchSize": "batch_size",
-            "distillEpochs": "distill_epochs",
-            "distillLearningRate": "distill_lr",
-            "temperature": "temperature"
-        }
+    # Build training strategy config — all values from the resolved preset
+    training_config = {
+        "dirichlet_alpha": preset_config.get("dirichlet_alpha", 2.5),
+        "dirichlet_seed": system_config.get("dirichlet_seed", 42),
+        "dirichlet_min_partition_size": system_config.get("dirichlet_min_partition_size", 400),
+        "minority_boost": preset_config.get("minority_boost", 0.80),
+        "focal_alpha": preset_config.get("focal_alpha", 0.50),
+        "focal_gamma": preset_config.get("focal_gamma", 2.0),
+        "consensus_momentum": preset_config.get("consensus_momentum", 0.20),
+        "distill_weight_base": preset_config.get("distill_weight_base", 0.45),
+        "distill_decay_rate": preset_config.get("distill_decay_rate", 0.20),
+        "train_loss_weight": preset_config.get("train_loss_weight", 0.70),
+        "distill_loss_weight": preset_config.get("distill_loss_weight", 0.30),
+    }
 
-        for frontend_key, backend_key in config_mapping.items():
-            if frontend_key in user_config:
-                configs[backend_key] = user_config[frontend_key]
+    # Build dataset paths config
+    dataset_paths = {
+        "public_anchor": system_config.get("public_anchor_dataset_path", "/content/datasets/cnmc/cnmc_public_anchor"),
+        "public_test": system_config.get("public_test_dataset_path", "/content/datasets/cnmc/cnmc_public_test"),
+        "local_train": system_config.get("local_train_dataset_path", "/content/datasets/cnmc/cnmc_local_train"),
+    }
 
-        logger.info(f"Applied user config overrides: {user_config}")
-        
-    # The notebook's /start_fl endpoint updates its local pyproject.toml
-    # based on the number of clients in the request payload
+    # Resolve orchestrator URL from system_config or fallback to settings
+    orchestrator_url = system_config.get("ngrok_url", settings.federated_training_orchestrator_url)
 
-    # Create simulation record (without client_ids - new schema)
+    logger.info(f"FL config: {configs}")
+    logger.info(f"Training config: {training_config}")
+    logger.info(f"Orchestrator URL: {orchestrator_url}")
+
+    # Create simulation record with full config snapshot
     sim_data = {
-        "configs": configs,
+        "configs": {
+            **configs,
+            "dirichlet_alpha": training_config["dirichlet_alpha"],
+            "training_config": training_config,
+        },
+        "heterogeneity_preset": heterogeneity_preset,
         "status": SimulationStatus.PENDING.value,
     }
 
@@ -212,19 +238,22 @@ async def start_fl(
             "started_at": datetime.now().isoformat()
         }).eq("id", simulation_id).execute()
 
-        logger.info(f"Starting FL simulation {simulation_id} via orchestrator at {settings.federated_training_orchestrator_url}")
+        logger.info(f"Starting FL simulation {simulation_id} via orchestrator at {orchestrator_url}")
 
-        # Prepare request payload with simulation_id and client data
+        # Prepare request payload with simulation_id, client data, and full config
         orchestrator_payload = {
             "simulation_id": simulation_id,
             "clients": clients_data,
             "supabase_url": settings.supabase_url,
-            "supabase_key": settings.supabase_key
+            "supabase_key": settings.supabase_key,
+            "fl_config": configs,
+            "training_config": training_config,
+            "dataset_paths": dataset_paths,
         }
 
         # Forward to FL orchestrator
         response = requests.post(
-            f"{settings.federated_training_orchestrator_url}/start_fl",
+            f"{orchestrator_url}/start_fl",
             json=orchestrator_payload,
             headers={"Content-Type": "application/json"},
             timeout=30

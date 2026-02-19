@@ -405,7 +405,7 @@ class AdaptiveTrainingState:
 
     def __init__(self, client_id: int, model_type: str, initial_dropout: float = 0.3,
                  max_dropout: float = 0.6, min_dropout: float = 0.2,
-                 dropout_increment: float = 0.1, patience_rounds: int = 2):
+                 dropout_increment: float = 0.05, patience_rounds: int = 3):
         self.client_id = client_id
         self.model_type = model_type
         self.dropout_rate = initial_dropout

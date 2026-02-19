@@ -89,6 +89,7 @@ CREATE TABLE fl_simulations (
     id SERIAL PRIMARY KEY,
     configs JSONB NOT NULL DEFAULT '{}'::jsonb,
     aggregate_metrics JSONB NOT NULL DEFAULT '{}'::jsonb,
+    heterogeneity_preset TEXT,
     status simulation_status NOT NULL DEFAULT 'pending',
     error_message TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -185,22 +186,62 @@ CREATE TABLE system_config (
 );
 
 -- Insert default configuration (singleton row)
+-- Includes heterogeneity presets, active config, and training strategy params (v3.1)
 INSERT INTO system_config (config) VALUES ('{
+    "heterogeneity_preset": "moderate",
+    "presets": {
+        "low": {
+            "dirichlet_alpha": 5.0,
+            "minority_boost": 0.55
+            "focal_alpha": 0.50,
+            "focal_gamma": 2.0,
+            "consensus_momentum": 0.10,
+            "distill_weight_base": 0.55,
+            "distill_decay_rate": 0.30,
+            "train_loss_weight": 0.65,
+            "distill_loss_weight": 0.35,
+            "lr_decay": 0.90
+            "learning_rate": 0.001
+        },
+        "moderate": {
+            "dirichlet_alpha": 2.5,
+            "minority_boost": 0.70,
+            "focal_alpha": 0.50,
+            "focal_gamma": 2.0,
+            "consensus_momentum": 0.40,
+            "distill_weight_base": 0.45,
+            "distill_decay_rate": 0.20,
+            "train_loss_weight": 0.70,
+            "distill_loss_weight": 0.30,
+            "lr_decay": 0.93,
+            "learning_rate": 0.001
+        },
+        "high": {
+            "dirichlet_alpha": 1.0,
+            "minority_boost": 0.65,
+            "focal_alpha": 0.50,
+            "focal_gamma": 2.5,
+            "consensus_momentum": 0.30,
+            "distill_weight_base": 0.35,
+            "distill_decay_rate": 0.15,
+            "train_loss_weight": 0.75,
+            "distill_loss_weight": 0.25,
+            "lr_decay": 0.97,
+            "learning_rate": 0.001
+        }
+    },
     "num_rounds": 10,
-    "local_epochs": 5,
+    "local_epochs": 2,
     "batch_size": 32,
-    "learning_rate": 0.0001,
-    "lr_decay": 0.99,
     "distill_lr": 0.001,
     "distill_epochs": 2,
-    "temperature": 3.0,
-    "dirichlet_alpha": 1.0,
+    "temperature": 4.0,
     "dirichlet_seed": 42,
     "dirichlet_min_partition_size": 400,
-    "public_anchor_dataset_path": "/content/datasets/cnmc/cnmc_public_anchor",
-    "public_test_dataset_path": "/content/datasets/cnmc/cnmc_public_test",
-    "local_train_dataset_path": "/content/datasets/cnmc/cnmc_local_train",
-    "ngrok_url": "https://eb474f08357f.ngrok-free.app"
+    "public_anchor_dataset_path": "/content/drive/MyDrive/College/FLEX-Med/backend/datasets/cnmc/cnmc_public_anchor",
+    "public_test_dataset_path": "/content/drive/MyDrive/College/FLEX-Med/backend/datasets/cnmc/cnmc_public_test",
+    "local_train_dataset_path": "/content/drive/MyDrive/College/FLEX-Med/backend/datasets/cnmc/cnmc_local_train",
+    "ngrok_url": "https://intraspinal-agape-deidra.ngrok-free.dev"
 }'::jsonb);
 
 CREATE INDEX idx_system_config_id ON system_config(id);

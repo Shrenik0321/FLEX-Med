@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Brain, Play, Users, Database, X, Loader2 } from "lucide-react";
+import { Play, Users, Database, X, Loader2, Layers } from "lucide-react";
 import { API_BASE_PATH } from "@/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -17,13 +17,39 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 
 // Dataset options
 const datasets = [
   { value: "cnmc", label: "CNMC 2019 Dataset" },
   { value: "cifar", label: "CIFAR Dataset" },
 ];
+
+const HETEROGENEITY_PRESETS: Record<
+  string,
+  { label: string; description: string; alpha: string; color: string }
+> = {
+  low: {
+    label: "Low",
+    description:
+      "Nearly uniform data distribution. Suitable for baseline experiments.",
+    alpha: "\u03B1 ~ 5.0",
+    color: "border-emerald-500 bg-emerald-50 text-emerald-700",
+  },
+  moderate: {
+    label: "Moderate",
+    description:
+      "Balanced non-IID distribution. Recommended for most experiments.",
+    alpha: "\u03B1 ~ 2.5",
+    color: "border-amber-500 bg-amber-50 text-amber-700",
+  },
+  high: {
+    label: "High",
+    description:
+      "Highly skewed distribution. Tests robustness under extreme non-IID.",
+    alpha: "\u03B1 ~ 1.0",
+    color: "border-red-500 bg-red-50 text-red-700",
+  },
+};
 
 export default function StartFLPage() {
   const router = useRouter();
@@ -32,6 +58,7 @@ export default function StartFLPage() {
   const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [selectedClients, setSelectedClients] = useState<number[]>([]);
   const [selectedDataset, setSelectedDataset] = useState<string>("");
+  const [selectedPreset, setSelectedPreset] = useState<string>("moderate");
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -107,20 +134,15 @@ export default function StartFLPage() {
     try {
       setIsStarting(true);
 
-      // Log configuration
-      console.log("FL Configuration:", {
-        selectedClients,
-        selectedDataset,
-      });
-
       // Call the API to start FL simulation with selected client IDs
-      // Configuration is now managed in Settings page and fetched from database by backend
+      // Training config is managed in Settings page; heterogeneity preset is selected here
       const response = await fetch(`${API_BASE_PATH}/start_fl`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           client_ids: selectedClients,
           dataset: selectedDataset,
+          heterogeneity_preset: selectedPreset,
         }),
       });
 
@@ -241,6 +263,47 @@ export default function StartFLPage() {
             </div>
           </div>
 
+          {/* Heterogeneity Preset Selection */}
+          <div className="bg-card rounded-lg shadow-sm border border-border p-6">
+            <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Layers size={18} className="text-primary" />
+              Data Heterogeneity
+            </h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Select the data heterogeneity level for this simulation. Training
+              strategy parameters are auto-configured per preset in Settings.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {Object.entries(HETEROGENEITY_PRESETS).map(
+                ([key, { label, description, alpha, color }]) => (
+                  <button
+                    key={key}
+                    onClick={() => setSelectedPreset(key)}
+                    className={`text-left p-4 rounded-lg border-2 transition-all ${
+                      selectedPreset === key
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-muted-foreground/30"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-medium text-foreground">
+                        {label}
+                      </span>
+                      <span
+                        className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${color}`}
+                      >
+                        {alpha}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {description}
+                    </p>
+                  </button>
+                ),
+              )}
+            </div>
+          </div>
+
           {/* Dataset Selection */}
           <div className="bg-card rounded-lg shadow-sm border border-border p-6">
             <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
@@ -280,6 +343,15 @@ export default function StartFLPage() {
                 <p className="text-muted-foreground">Clients</p>
                 <p className="font-medium text-foreground">
                   {selectedClients.length || "None"}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Heterogeneity</p>
+                <p className="font-medium text-foreground">
+                  {HETEROGENEITY_PRESETS[selectedPreset]?.label || selectedPreset}{" "}
+                  <span className="text-muted-foreground font-normal">
+                    ({HETEROGENEITY_PRESETS[selectedPreset]?.alpha})
+                  </span>
                 </p>
               </div>
               <div>

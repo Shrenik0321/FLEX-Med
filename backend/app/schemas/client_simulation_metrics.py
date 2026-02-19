@@ -103,28 +103,6 @@ class ClientSimulationMetrics(ClientSimulationMetricsBase):
 # HELPER FUNCTIONS
 # ==========================================
 
-def parse_client_metrics(metrics: dict) -> dict:
-    """
-    Parse and validate client metrics structure.
-
-    Args:
-        metrics: Metrics dict from database
-
-    Returns:
-        Validated metrics dict with expected structure
-    """
-    if not metrics or not isinstance(metrics, dict):
-        return {}
-
-    # Ensure expected structure
-    result = {
-        "global": metrics.get("global", {}),
-        "rounds": metrics.get("rounds", [])
-    }
-
-    return result
-
-
 def get_latest_round_metrics(metrics: dict) -> Optional[dict]:
     """
     Get metrics from the latest training round.
@@ -142,35 +120,6 @@ def get_latest_round_metrics(metrics: dict) -> Optional[dict]:
     # Rounds should be sorted by round number
     latest = max(rounds, key=lambda r: r.get("round", 0))
     return latest.get("validation")
-
-
-def get_data_heterogeneity(metrics: dict) -> Optional[dict]:
-    """
-    Get data heterogeneity statistics for a client's partition.
-
-    This includes information about the Dirichlet partitioning that created
-    the non-IID data distribution for this client.
-
-    Args:
-        metrics: Full metrics dict
-
-    Returns:
-        Dict with heterogeneity metrics or None if not available:
-        {
-            "total_samples": int,
-            "train_samples": int,
-            "val_samples": int,
-            "class_distribution": {
-                "leukemia": int,
-                "healthy": int,
-                "leukemia_pct": float,
-                "healthy_pct": float
-            },
-            "imbalance_ratio": float,
-            "partition_id": int
-        }
-    """
-    return metrics.get("data_heterogeneity")
 
 
 def get_improvement_summary(metrics: dict) -> dict:
