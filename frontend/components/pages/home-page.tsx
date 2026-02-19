@@ -10,17 +10,6 @@ export default function HomePage() {
 
   return (
     <div className="p-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold text-foreground flex items-center gap-3">
-          Dashboard Overview
-          <span className="flex-red-underline inline-block w-12" />
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Welcome back! Here's your healthcare ML infrastructure at a glance.
-        </p>
-      </div>
-
       {/* Statistics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {stats.map((stat, idx) => (
@@ -107,8 +96,8 @@ export default function HomePage() {
                     item.type === "success"
                       ? "bg-green-500"
                       : item.type === "alert"
-                      ? "bg-primary"
-                      : "bg-blue-500"
+                        ? "bg-primary"
+                        : "bg-blue-500"
                   }`}
                 />
                 <div className="flex-1 min-w-0">

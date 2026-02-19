@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Brain, Play, Settings, Users, Database, X } from "lucide-react";
+import { Play, Users, Database, X, Loader2, Layers } from "lucide-react";
 import { API_BASE_PATH } from "@/utils";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { StartFLResponse } from "@/types/fl-simulation";
+import { Client } from "@/types/client";
 import {
   Select,
   SelectContent,
@@ -15,16 +17,6 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-
-// Dummy client data
-const dummyClients = [
-  { id: 1, name: "Hospital A - ResNet18" },
-  { id: 2, name: "Hospital B - MobileNetV2" },
-  { id: 3, name: "Hospital C - DenseNet121" },
-  { id: 4, name: "Hospital D - VGG16" },
-  { id: 5, name: "Hospital E - EfficientNet" },
-];
 
 // Dataset options
 const datasets = [
@@ -32,24 +24,73 @@ const datasets = [
   { value: "cifar", label: "CIFAR Dataset" },
 ];
 
+const HETEROGENEITY_PRESETS: Record<
+  string,
+  { label: string; description: string; alpha: string; color: string }
+> = {
+  low: {
+    label: "Low",
+    description:
+      "Nearly uniform data distribution. Suitable for baseline experiments.",
+    alpha: "\u03B1 ~ 5.0",
+    color: "border-emerald-500 bg-emerald-50 text-emerald-700",
+  },
+  moderate: {
+    label: "Moderate",
+    description:
+      "Balanced non-IID distribution. Recommended for most experiments.",
+    alpha: "\u03B1 ~ 2.5",
+    color: "border-amber-500 bg-amber-50 text-amber-700",
+  },
+  high: {
+    label: "High",
+    description:
+      "Highly skewed distribution. Tests robustness under extreme non-IID.",
+    alpha: "\u03B1 ~ 1.0",
+    color: "border-red-500 bg-red-50 text-red-700",
+  },
+};
+
 export default function StartFLPage() {
   const router = useRouter();
   const [isStarting, setIsStarting] = useState(false);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [selectedClients, setSelectedClients] = useState<number[]>([]);
   const [selectedDataset, setSelectedDataset] = useState<string>("");
+  const [selectedPreset, setSelectedPreset] = useState<string>("moderate");
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Configuration state
-  const [config, setConfig] = useState({
-    numRounds: 10,
-    localEpochs: 5,
-    learningRate: 0.001,
-    batchSize: 32,
-    distillEpochs: 3,
-    distillLearningRate: 0.001,
-    temperature: 3.0,
-  });
+  // Fetch clients from backend on mount
+  useEffect(() => {
+    const fetchClients = async () => {
+      try {
+        setIsLoadingClients(true);
+        const response = await fetch(`${API_BASE_PATH}/clients`);
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch clients");
+        }
+
+        const data: Client[] = await response.json();
+        setClients(data);
+
+        // Select all clients by default
+        const allClientIds = data.map((client) => client.id);
+        setSelectedClients(allClientIds);
+
+        toast.success(`Loaded ${data.length} clients`);
+      } catch (error) {
+        console.error("Error fetching clients:", error);
+        toast.error("Failed to load clients. Please check backend connection.");
+      } finally {
+        setIsLoadingClients(false);
+      }
+    };
+
+    fetchClients();
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -81,10 +122,10 @@ export default function StartFLPage() {
 
   const handleStart = async () => {
     // Validation
-    // if (selectedClients.length === 0) {
-    //   toast.error("Please select at least one client");
-    //   return;
-    // }
+    if (selectedClients.length === 0) {
+      toast.error("Please select at least one client");
+      return;
+    }
     // if (!selectedDataset) {
     //   toast.error("Please select a dataset");
     //   return;
@@ -93,19 +134,16 @@ export default function StartFLPage() {
     try {
       setIsStarting(true);
 
-      // Log configuration (in future, this will write to pyproject.toml)
-      console.log("FL Configuration:", {
-        selectedClients,
-        selectedDataset,
-        config,
-      });
-
-      // Call the API to start FL simulation
+      // Call the API to start FL simulation with selected client IDs
+      // Training config is managed in Settings page; heterogeneity preset is selected here
       const response = await fetch(`${API_BASE_PATH}/start_fl`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // In future, send the configuration in the body
-        // body: JSON.stringify({ selectedClients, selectedDataset, config }),
+        body: JSON.stringify({
+          client_ids: selectedClients,
+          dataset: selectedDataset,
+          heterogeneity_preset: selectedPreset,
+        }),
       });
 
       if (!response.ok) {
@@ -135,24 +173,12 @@ export default function StartFLPage() {
     }
   };
 
-  const selectedClientNames = dummyClients
+  const selectedClientNames = clients
     .filter((c) => selectedClients.includes(c.id))
-    .map((c) => c.name);
+    .map((c) => `${c.client_name} - ${c.model_type}`);
 
   return (
     <div className="p-8 space-y-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-semibold text-foreground flex items-center gap-3">
-          <Brain className="text-primary" />
-          Start FL Simulation
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Configure and launch a new federated learning simulation across
-          selected clients
-        </p>
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Configuration Form */}
         <div className="lg:col-span-2 space-y-6">
@@ -179,21 +205,36 @@ export default function StartFLPage() {
 
                 {showClientDropdown && (
                   <div className="absolute z-50 mt-2 w-full rounded-md border bg-popover p-2 shadow-md">
-                    {dummyClients.map((client) => (
-                      <div
-                        key={client.id}
-                        className="flex items-center space-x-2 rounded-sm px-2 py-2 hover:bg-accent cursor-pointer"
-                        onClick={() => handleClientToggle(client.id)}
-                      >
-                        <Checkbox
-                          checked={selectedClients.includes(client.id)}
-                          onCheckedChange={() => handleClientToggle(client.id)}
-                        />
-                        <label className="text-sm cursor-pointer flex-1">
-                          {client.name}
-                        </label>
+                    {isLoadingClients ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="ml-2 text-sm text-muted-foreground">
+                          Loading clients...
+                        </span>
                       </div>
-                    ))}
+                    ) : clients.length === 0 ? (
+                      <div className="text-sm text-muted-foreground text-center py-4">
+                        No clients found. Please add clients first.
+                      </div>
+                    ) : (
+                      clients.map((client) => (
+                        <div
+                          key={client.id}
+                          className="flex items-center space-x-2 rounded-sm px-2 py-2 hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                          onClick={() => handleClientToggle(client.id)}
+                        >
+                          <Checkbox
+                            checked={selectedClients.includes(client.id)}
+                            onCheckedChange={() =>
+                              handleClientToggle(client.id)
+                            }
+                          />
+                          <label className="text-sm cursor-pointer flex-1">
+                            {client.client_name} - {client.model_type}
+                          </label>
+                        </div>
+                      ))
+                    )}
                   </div>
                 )}
               </div>
@@ -201,25 +242,64 @@ export default function StartFLPage() {
               {/* Selected clients display */}
               {selectedClients.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-3">
-                  {selectedClientNames.map((name, idx) => (
-                    <div
-                      key={idx}
-                      className="inline-flex items-center gap-1 px-3 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium border border-primary/20"
-                    >
-                      {name}
-                      <button
-                        onClick={() =>
-                          handleClientToggle(
-                            dummyClients.find((c) => c.name === name)!.id,
-                          )
-                        }
-                        className="ml-1 hover:bg-primary/20 rounded-full p-0.5"
+                  {clients
+                    .filter((c) => selectedClients.includes(c.id))
+                    .map((client) => (
+                      <div
+                        key={client.id}
+                        className="inline-flex items-center gap-1 px-3 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium border border-primary/20"
                       >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ))}
+                        {client.client_name} - {client.model_type}
+                        <button
+                          onClick={() => handleClientToggle(client.id)}
+                          className="ml-1 hover:bg-primary/20 rounded-full p-0.5"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
                 </div>
+              )}
+            </div>
+          </div>
+
+          {/* Heterogeneity Preset Selection */}
+          <div className="bg-card rounded-lg shadow-sm border border-border p-6">
+            <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Layers size={18} className="text-primary" />
+              Data Heterogeneity
+            </h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Select the data heterogeneity level for this simulation. Training
+              strategy parameters are auto-configured per preset in Settings.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {Object.entries(HETEROGENEITY_PRESETS).map(
+                ([key, { label, description, alpha, color }]) => (
+                  <button
+                    key={key}
+                    onClick={() => setSelectedPreset(key)}
+                    className={`text-left p-4 rounded-lg border-2 transition-all ${
+                      selectedPreset === key
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-muted-foreground/30"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-medium text-foreground">
+                        {label}
+                      </span>
+                      <span
+                        className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${color}`}
+                      >
+                        {alpha}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {description}
+                    </p>
+                  </button>
+                ),
               )}
             </div>
           </div>
@@ -249,131 +329,6 @@ export default function StartFLPage() {
               </Select>
             </div>
           </div>
-
-          {/* FL Configuration */}
-          <div className="bg-card rounded-lg shadow-sm border border-border p-6">
-            <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-              <Settings size={18} className="text-primary" />
-              FL Configuration
-            </h2>
-            <p className="text-xs text-muted-foreground mb-4">
-              These settings will be written to pyproject.toml (UI only for now)
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Number of Rounds */}
-              <div className="space-y-2">
-                <Label>Number of Federated Rounds</Label>
-                <Input
-                  type="number"
-                  value={config.numRounds}
-                  onChange={(e) =>
-                    setConfig({
-                      ...config,
-                      numRounds: parseInt(e.target.value),
-                    })
-                  }
-                  min="1"
-                />
-              </div>
-
-              {/* Local Epochs */}
-              <div className="space-y-2">
-                <Label>Local Epochs per Client</Label>
-                <Input
-                  type="number"
-                  value={config.localEpochs}
-                  onChange={(e) =>
-                    setConfig({
-                      ...config,
-                      localEpochs: parseInt(e.target.value),
-                    })
-                  }
-                  min="1"
-                />
-              </div>
-
-              {/* Learning Rate */}
-              <div className="space-y-2">
-                <Label>Learning Rate</Label>
-                <Input
-                  type="number"
-                  step="0.0001"
-                  value={config.learningRate}
-                  onChange={(e) =>
-                    setConfig({
-                      ...config,
-                      learningRate: parseFloat(e.target.value),
-                    })
-                  }
-                />
-              </div>
-
-              {/* Batch Size */}
-              <div className="space-y-2">
-                <Label>Batch Size</Label>
-                <Input
-                  type="number"
-                  value={config.batchSize}
-                  onChange={(e) =>
-                    setConfig({
-                      ...config,
-                      batchSize: parseInt(e.target.value),
-                    })
-                  }
-                  min="1"
-                />
-              </div>
-
-              {/* Distillation Epochs */}
-              <div className="space-y-2">
-                <Label>Distillation Epochs</Label>
-                <Input
-                  type="number"
-                  value={config.distillEpochs}
-                  onChange={(e) =>
-                    setConfig({
-                      ...config,
-                      distillEpochs: parseInt(e.target.value),
-                    })
-                  }
-                  min="1"
-                />
-              </div>
-
-              {/* Distillation Learning Rate */}
-              <div className="space-y-2">
-                <Label>Distillation Learning Rate</Label>
-                <Input
-                  type="number"
-                  step="0.0001"
-                  value={config.distillLearningRate}
-                  onChange={(e) =>
-                    setConfig({
-                      ...config,
-                      distillLearningRate: parseFloat(e.target.value),
-                    })
-                  }
-                />
-              </div>
-
-              {/* Temperature */}
-              <div className="space-y-2">
-                <Label>Temperature</Label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  value={config.temperature}
-                  onChange={(e) =>
-                    setConfig({
-                      ...config,
-                      temperature: parseFloat(e.target.value),
-                    })
-                  }
-                />
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Summary & Actions */}
@@ -391,49 +346,42 @@ export default function StartFLPage() {
                 </p>
               </div>
               <div>
+                <p className="text-muted-foreground">Heterogeneity</p>
+                <p className="font-medium text-foreground">
+                  {HETEROGENEITY_PRESETS[selectedPreset]?.label || selectedPreset}{" "}
+                  <span className="text-muted-foreground font-normal">
+                    ({HETEROGENEITY_PRESETS[selectedPreset]?.alpha})
+                  </span>
+                </p>
+              </div>
+              <div>
                 <p className="text-muted-foreground">Dataset</p>
                 <p className="font-medium text-foreground">
                   {datasets.find((d) => d.value === selectedDataset)?.label ||
                     "None"}
                 </p>
               </div>
-              <div>
-                <p className="text-muted-foreground">Federated Rounds</p>
-                <p className="font-medium text-foreground">
-                  {config.numRounds}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Local Epochs</p>
-                <p className="font-medium text-foreground">
-                  {config.localEpochs}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Learning Rate</p>
-                <p className="font-medium text-foreground">
-                  {config.learningRate}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Batch Size</p>
-                <p className="font-medium text-foreground">
-                  {config.batchSize}
-                </p>
-              </div>
             </div>
           </div>
 
-          {/* Start Button */}
           <div className="bg-card rounded-lg shadow-sm border border-border p-6">
-            <button
+            <Button
               onClick={handleStart}
               disabled={isStarting}
-              className="w-full px-5 py-3 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full text-base py-6"
             >
-              <Play size={18} />
-              {isStarting ? "Starting Simulation..." : "Start FL Simulation"}
-            </button>
+              {isStarting ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Starting Simulation...
+                </>
+              ) : (
+                <>
+                  <Play className="mr-2 h-5 w-5 fill-current" />
+                  Start FL Simulation
+                </>
+              )}
+            </Button>
             <p className="text-xs text-muted-foreground mt-3 text-center">
               This will initiate federated learning with the selected
               configuration

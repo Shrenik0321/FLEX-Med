@@ -7,7 +7,7 @@ IMPROVEMENTS:
 - ✨ Per-metric optimization for accuracy, loss, and other metrics
 
 This module provides comprehensive graphical visualization of FL training metrics
-stored in cnmc_data.json. It generates:
+stored in flex_med/utils/client_data.json. It generates:
 - Per-client metric trends (accuracy, f1, precision, recall, loss) across rounds
 - Pre-FL vs Post-FL comparison charts showing improvement/decline
 - Aggregate performance across all clients
@@ -32,13 +32,49 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-# Try to import config, fallback to defaults
+# Try to import config, fallback to environment variables or relative paths
+import sys
+from pathlib import Path
+
+def setup_environment():
+    """Ensure backend root is in sys.path for app.config imports"""
+    current_file = Path(__file__).resolve()
+    # utils -> flex_med -> federated_learning -> backend
+    backend_root = current_file.parent.parent.parent.parent
+    if str(backend_root) not in sys.path:
+        sys.path.insert(0, str(backend_root))
+    return backend_root
+
+setup_environment()
+
 try:
-    from flex_med.utils.config import DATA_JSON_PATH, BASE_PATH, GRAPHS_OUTPUT_DIR
+    from app.config import get_settings, get_supabase_client
+    _settings = get_settings()
+    CLIENT_INFO_FILE_PATH = str(_settings.client_info_file_path)
+    BASE_PATH = str(_settings.base_path)
+    GRAPHS_OUTPUT_DIR = str(_settings.graphs_output_dir)
+    SUPABASE_AVAILABLE = True
 except ImportError:
-    BASE_PATH = "/content/drive/MyDrive/College/FLEX-Med"
-    DATA_JSON_PATH = os.path.join(BASE_PATH, "flex-med/cnmc_data.json")
-    GRAPHS_OUTPUT_DIR = os.path.join(BASE_PATH, "graphical_visualisation")
+    import warnings
+    warnings.warn(
+        "Could not import config from app.config. "
+        "Using environment variables or relative paths as fallback. "
+        "Set BASE_PATH, FLEX_MED_CONFIG_FILE, or GRAPHS_OUTPUT_DIR env vars to configure."
+    )
+    # Get current file location and derive base path
+    current_file = os.path.dirname(os.path.abspath(__file__))
+    # Go up from utils -> flex_med -> federated_learning -> backend
+    backend_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file))))
+    BASE_PATH = os.getenv("BASE_PATH", backend_root)
+    CLIENT_INFO_FILE_PATH = os.getenv(
+        "FLEX_MED_CONFIG_FILE",
+        os.path.join(BASE_PATH, "federated_learning", "flex_med", "utils", "client_data.json")
+    )
+    GRAPHS_OUTPUT_DIR = os.getenv(
+        "GRAPHS_OUTPUT_DIR",
+        os.path.join(BASE_PATH, "graphical_visualisation")
+    )
+    SUPABASE_AVAILABLE = False
 
 # Color palette for clients
 CLIENT_COLORS = [
@@ -151,43 +187,98 @@ def smart_ylim(values: List[float], metric: str, padding: float = 0.15) -> Tuple
 def collect_all_values(clients: List[Dict], metric: str, stage: str = 'validation') -> List[float]:
     """
     Collect all values for a metric across all clients to determine optimal y-axis range.
-    
+
     Args:
         clients: List of client data
         metric: Metric name
-        stage: 'validation', 'pre_fl', 'post_fl', or 'global'
-    
+        stage: 'validation', 'post_fl', or 'global'
+              Note: 'pre_fl' stage removed - use theoretical baselines instead
+
     Returns:
         List of all values
     """
     all_values = []
-    
+
     for client in clients:
         if stage == 'validation':
             _, values = extract_validation_series(client, metric)
             all_values.extend(values)
         elif stage == 'global':
             global_metrics = extract_global_metrics(client)
-            pre_val = global_metrics.get('pre_fl', {}).get(metric)
             post_val = global_metrics.get('post_fl', {}).get(metric)
-            if pre_val is not None:
-                all_values.append(pre_val)
             if post_val is not None:
                 all_values.append(post_val)
-        elif stage in ['pre_fl', 'post_fl']:
+        elif stage == 'post_fl':
             _, values = extract_metric_series(client, metric, stage)
             all_values.extend(values)
-    
+
     return all_values
 
 
-def load_cnmc_data(data_path: str = DATA_JSON_PATH) -> List[Dict]:
-    """Load client data from cnmc_data.json"""
+def load_cnmc_data(data_path: str = CLIENT_INFO_FILE_PATH) -> List[Dict]:
+    """Load client data from client_data.json"""
     if not os.path.exists(data_path):
         raise FileNotFoundError(f"Data file not found: {data_path}")
 
     with open(data_path, 'r') as f:
         return json.load(f)
+
+
+def load_data_from_db(simulation_id: int) -> List[Dict]:
+    """
+    Fetch simulation results directly from Supabase.
+    
+    Reconstructs the client_data.json structure from client_simulation_metrics
+    and clients tables.
+    """
+    if not SUPABASE_AVAILABLE:
+        raise ImportError("Supabase client not available. Check your configuration.")
+
+    try:
+        supabase = get_supabase_client()
+        print(f"🔄 Fetching data from Supabase for simulation {simulation_id}...")
+
+        # 1. Fetch metrics records for this simulation
+        metrics_response = supabase.table('client_simulation_metrics') \
+            .select('client_id, metrics, status, clients(*)') \
+            .eq('simulation_id', simulation_id) \
+            .execute()
+
+        if not metrics_response.data:
+            print(f"⚠️ No metrics found for simulation {simulation_id}")
+            return []
+
+        # 2. Reconstruct the client data structure
+        clients_data = []
+        for record in metrics_response.data:
+            # Base client info from the joined 'clients' table
+            client_info = record.get('clients', {})
+            if not client_info:
+                print(f"⚠️ Warning: Missing client metadata for client {record.get('client_id')}")
+                continue
+
+            # Merge in the specific metrics from this simulation
+            # Note: The visualization code expects client['metrics'] to be a dict
+            client_metrics = record.get('metrics', {})
+            
+            # Handle string vs dict (JSONB usually returns dict)
+            if isinstance(client_metrics, str):
+                try:
+                   client_metrics = json.loads(client_metrics)
+                except:
+                   client_metrics = {}
+
+            # Create the combined structure expected by visualization functions
+            reconstructed_client = client_info.copy()
+            reconstructed_client['metrics'] = client_metrics
+            clients_data.append(reconstructed_client)
+
+        print(f"✅ Successfully loaded {len(clients_data)} clients from database")
+        return clients_data
+
+    except Exception as e:
+        print(f"❌ Error fetching from database: {e}")
+        return []
 
 
 def extract_metric_series(client: Dict, metric: str, stage: str = 'post_fl') -> Tuple[List[int], List[float]]:
@@ -266,34 +357,37 @@ def extract_improvement_series(client: Dict, metric: str) -> Tuple[List[int], Li
     return rounds, values
 
 
-def extract_validation_series(client: Dict, metric: str, include_pre_fl: bool = True) -> Tuple[List[int], List[float]]:
+def extract_validation_series(client: Dict, metric: str, include_baseline: bool = True) -> Tuple[List[int], List[float]]:
     """
     Extract validation metric series across rounds (for hybrid evaluation strategy).
 
     Args:
         client: Client data dictionary
         metric: Metric name (accuracy, f1_score, etc.)
-        include_pre_fl: If True, prepend round 0 with Pre-FL baseline value
+        include_baseline: If True, prepend round 0 with theoretical baseline value
 
     Returns:
         Tuple of (rounds, values)
     """
+    # Theoretical baselines for binary classification (random chance)
+    BASELINES = {
+        'accuracy': 0.5,
+        'precision': 0.5,
+        'recall': 0.5,
+        'f1_score': 0.5,
+        'loss': 0.693,  # ln(2) for random binary classifier
+    }
+
     rounds = []
     values = []
 
     metrics = client.get('metrics', {})
-    
-    # Add Pre-FL baseline as round 0 if available
-    if include_pre_fl:
-        global_metrics = metrics.get('global', {})
-        pre_fl = global_metrics.get('pre_fl', {})
-        
-        if pre_fl and metric in pre_fl:
-            pre_fl_value = pre_fl.get(metric)
-            if pre_fl_value is not None:
-                rounds.append(0)
-                values.append(pre_fl_value)
-    
+
+    # Add theoretical baseline as round 0
+    if include_baseline and metric in BASELINES:
+        rounds.append(0)
+        values.append(BASELINES[metric])
+
     # Add validation metrics from each round
     if not isinstance(metrics, dict) or 'rounds' not in metrics:
         return rounds, values
@@ -313,19 +407,19 @@ def extract_validation_series(client: Dict, metric: str, include_pre_fl: bool = 
 
 def extract_global_metrics(client: Dict) -> Dict:
     """
-    Extract global Pre-FL and Post-FL metrics (for hybrid evaluation strategy).
+    Extract global Post-FL metrics (for hybrid evaluation strategy).
 
     Args:
         client: Client data dictionary
 
     Returns:
-        Dictionary with 'pre_fl', 'post_fl', and 'improvement' metrics
+        Dictionary with 'post_fl' and 'improvement' metrics
+        Note: 'pre_fl' has been removed - use theoretical baselines instead
     """
     metrics = client.get('metrics', {})
     global_metrics = metrics.get('global', {})
 
     return {
-        'pre_fl': global_metrics.get('pre_fl', {}),
         'post_fl': global_metrics.get('post_fl', {}),
         'improvement': global_metrics.get('improvement', {})
     }
@@ -402,12 +496,19 @@ def plot_metric_across_rounds(
                 transform=ax1.transAxes, fontsize=9, verticalalignment='top',
                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
 
-    # Right plot: Pre-FL vs Post-FL comparison (from global metrics)
+    # Right plot: Baseline vs Post-FL comparison
     ax2 = axes[1]
     bar_width = 0.35
     x_positions = np.arange(len(clients))
 
-    pre_fl_values = []
+    # Theoretical baselines for binary classification
+    BASELINES = {
+        'accuracy': 0.5, 'precision': 0.5, 'recall': 0.5,
+        'f1_score': 0.5, 'loss': 0.693
+    }
+    baseline_value = BASELINES.get(metric, 0.5)
+
+    baseline_values = []
     post_fl_values = []
     client_labels = []
     all_global_values = []
@@ -418,23 +519,21 @@ def plot_metric_across_rounds(
 
         # Get global metrics
         global_metrics = extract_global_metrics(client)
-        pre_fl = global_metrics.get('pre_fl', {})
         post_fl = global_metrics.get('post_fl', {})
 
-        pre_val = pre_fl.get(metric, 0) or 0
         post_val = post_fl.get(metric, 0) or 0
-        
-        pre_fl_values.append(pre_val)
-        post_fl_values.append(post_val)
-        all_global_values.extend([pre_val, post_val])
 
-    bars1 = ax2.bar(x_positions - bar_width/2, pre_fl_values, bar_width,
-                    label='Pre-FL', color='#e74c3c', alpha=0.8)
+        baseline_values.append(baseline_value)
+        post_fl_values.append(post_val)
+        all_global_values.extend([baseline_value, post_val])
+
+    bars1 = ax2.bar(x_positions - bar_width/2, baseline_values, bar_width,
+                    label='Baseline (Random)', color='#95a5a6', alpha=0.8)
     bars2 = ax2.bar(x_positions + bar_width/2, post_fl_values, bar_width,
                     label='Post-FL', color='#2ecc71', alpha=0.8)
 
     # Add value labels on bars
-    for bar, val in zip(bars1, pre_fl_values):
+    for bar, val in zip(bars1, baseline_values):
         if val > 0:
             ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
                     f'{val:.2f}', ha='center', va='bottom', fontsize=9)
@@ -445,12 +544,12 @@ def plot_metric_across_rounds(
 
     ax2.set_xlabel('Client')
     ax2.set_ylabel(config['label'])
-    ax2.set_title(f'{config["label"]}: Pre-FL vs Post-FL Comparison')
+    ax2.set_title(f'{config["label"]}: Baseline vs Post-FL Comparison')
     ax2.set_xticks(x_positions)
     ax2.set_xticklabels(client_labels, rotation=45, ha='right')
     ax2.legend()
     ax2.grid(True, alpha=0.3, axis='y')
-    
+
     # Apply smart y-axis scaling for global comparison
     if config.get('use_smart_scaling', True) and all_global_values:
         ymin, ymax = smart_ylim(all_global_values, metric)
@@ -559,34 +658,39 @@ def plot_improvement_over_rounds(
 ) -> str:
     """
     Plot improvement trends over rounds for each client with smart y-axis scaling.
-    Calculates improvement as (validation_metric - pre_fl_baseline).
+    Calculates improvement as (validation_metric - theoretical_baseline).
+    Theoretical baselines: 0.5 for accuracy/precision/recall/f1 (random chance for binary classification).
     """
     setup_plot_style()
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
 
     metrics_to_plot = ['accuracy', 'f1_score', 'precision', 'recall']
 
+    # Theoretical baselines for binary classification (random chance)
+    THEORETICAL_BASELINES = {
+        'accuracy': 0.5, 'f1_score': 0.5, 'precision': 0.5, 'recall': 0.5
+    }
+
     for idx, metric in enumerate(metrics_to_plot):
         ax = axes[idx // 2, idx % 2]
         config = METRICS_CONFIG.get(metric, {'label': metric})
 
         all_improvements = []
-        
+
+        # Use theoretical baseline (0.5 for all bounded metrics)
+        baseline_value = THEORETICAL_BASELINES.get(metric, 0.5)
+
         for i, client in enumerate(clients):
             color = CLIENT_COLORS[i % len(CLIENT_COLORS)]
             name = client.get('client_name', f'Client {i}')
             model = client.get('model_type', 'unknown')
 
-            # Get validation series
-            rounds, val_values = extract_validation_series(client, metric)
-
-            # Get pre-FL baseline
-            global_metrics = extract_global_metrics(client)
-            pre_fl_value = global_metrics.get('pre_fl', {}).get(metric, 0) or 0
+            # Get validation series (skip baseline at round 0)
+            rounds, val_values = extract_validation_series(client, metric, include_baseline=False)
 
             if rounds and val_values:
-                # Calculate improvement relative to pre-FL baseline
-                improvements = [val - pre_fl_value for val in val_values]
+                # Calculate improvement relative to theoretical baseline
+                improvements = [val - baseline_value for val in val_values]
                 all_improvements.extend(improvements)
 
                 ax.plot(rounds, [v * 100 for v in improvements], marker='o',
@@ -608,7 +712,7 @@ def plot_improvement_over_rounds(
         ax.set_xlim(left=0)
         ax.legend(loc='best', fontsize=9)
         ax.grid(True, alpha=0.3)
-        
+
         # Smart y-axis scaling
         if all_improvements:
             improvement_pct = [v * 100 for v in all_improvements]
@@ -618,7 +722,7 @@ def plot_improvement_over_rounds(
             ymax = max(ymax, 2)
             ax.set_ylim(ymin, ymax)
 
-    plt.suptitle('Per-Round Improvement Trends (Validation - Pre-FL Baseline)', fontsize=16, fontweight='bold')
+    plt.suptitle('Per-Round Improvement Trends (vs Theoretical 0.5 Baseline)', fontsize=16, fontweight='bold')
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
     # Save plot
@@ -723,60 +827,59 @@ def plot_confusion_matrix_comparison(
     show_plot: bool = True
 ) -> str:
     """
-    Plot confusion matrix comparison (Pre-FL vs Post-FL) for each client.
+    Plot Post-FL confusion matrix for each client.
+    Note: Pre-FL comparison removed - using theoretical baseline (0.5 accuracy) instead.
     """
     setup_plot_style()
     n_clients = len(clients)
-    fig, axes = plt.subplots(n_clients, 2, figsize=(12, 5 * n_clients))
+
+    # Single column layout for Post-FL only
+    fig, axes = plt.subplots(1, n_clients, figsize=(6 * n_clients, 5))
 
     if n_clients == 1:
         axes = [axes]
 
     for i, client in enumerate(clients):
         name = client.get('client_name', f'Client {i}')
+        model = client.get('model_type', 'unknown')
 
         global_metrics = extract_global_metrics(client)
-        pre_fl = global_metrics.get('pre_fl', {})
         post_fl = global_metrics.get('post_fl', {})
 
-        for j, (stage, stage_data, title) in enumerate([
-            ('pre_fl', pre_fl, f'{name} - Pre-FL'),
-            ('post_fl', post_fl, f'{name} - Post-FL')
-        ]):
-            ax = axes[i][j] if n_clients > 1 else axes[j]
+        ax = axes[i]
 
-            cm = stage_data.get('confusion_matrix', {})
-            if cm:
-                matrix = np.array([
-                    [cm.get('TP', 0), cm.get('FP', 0)],
-                    [cm.get('FN', 0), cm.get('TN', 0)]
-                ])
+        cm = post_fl.get('confusion_matrix', {})
+        if cm:
+            matrix = np.array([
+                [cm.get('TP', 0), cm.get('FN', 0)],
+                [cm.get('FP', 0), cm.get('TN', 0)]
+            ])
 
-                im = ax.imshow(matrix, cmap='Blues', aspect='auto')
+            im = ax.imshow(matrix, cmap='Blues', aspect='auto')
 
-                # Add text annotations
-                for row in range(2):
-                    for col in range(2):
-                        text_color = 'white' if matrix[row, col] > matrix.max()/2 else 'black'
-                        ax.text(col, row, f'{matrix[row, col]}',
-                               ha='center', va='center', fontsize=14,
-                               color=text_color, fontweight='bold')
+            # Add text annotations
+            for row in range(2):
+                for col in range(2):
+                    text_color = 'white' if matrix[row, col] > matrix.max()/2 else 'black'
+                    ax.text(col, row, f'{matrix[row, col]}',
+                           ha='center', va='center', fontsize=14,
+                           color=text_color, fontweight='bold')
 
-                ax.set_xticks([0, 1])
-                ax.set_yticks([0, 1])
-                ax.set_xticklabels(['Predicted\nLeukemia', 'Predicted\nHealthy'])
-                ax.set_yticklabels(['Actual\nLeukemia', 'Actual\nHealthy'])
-                ax.set_title(title)
+            ax.set_xticks([0, 1])
+            ax.set_yticks([0, 1])
+            ax.set_xticklabels(['Predicted\nLeukemia', 'Predicted\nHealthy'])
+            ax.set_yticklabels(['Actual\nLeukemia', 'Actual\nHealthy'])
+            ax.set_title(f'{name} ({model})')
 
-                # Add accuracy annotation
-                acc = stage_data.get('accuracy', 0)
-                ax.text(0.5, -0.15, f'Accuracy: {acc:.1%}',
-                       transform=ax.transAxes, ha='center', fontsize=11)
-            else:
-                ax.text(0.5, 0.5, 'No Data', ha='center', va='center', fontsize=14)
-                ax.set_title(title)
+            # Add accuracy annotation
+            acc = post_fl.get('accuracy', 0)
+            ax.text(0.5, -0.15, f'Accuracy: {acc:.1%}',
+                   transform=ax.transAxes, ha='center', fontsize=11)
+        else:
+            ax.text(0.5, 0.5, 'No Data', ha='center', va='center', fontsize=14)
+            ax.set_title(f'{name} ({model})')
 
-    plt.suptitle('Confusion Matrix: Pre-FL vs Post-FL Comparison', fontsize=16, fontweight='bold')
+    plt.suptitle('Post-FL Confusion Matrix (Public Test Dataset)', fontsize=16, fontweight='bold')
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
     # Save plot
@@ -982,33 +1085,35 @@ def plot_summary_dashboard(
     ax3.legend(loc='best', fontsize=9)
     ax3.grid(True, alpha=0.3, axis='y')
 
-    # 4. ROC-AUC Comparison (middle-right)
+    # 4. ROC-AUC Comparison (middle-right) - Baseline vs Post-FL
     ax4 = fig.add_subplot(gs[1, 2:])
 
-    pre_roc = []
+    # Theoretical baseline for ROC-AUC (random classifier = 0.5)
+    BASELINE_ROC_AUC = 0.5
+
+    baseline_roc = []
     post_roc = []
     all_roc = []
-    
+
     for client in clients:
         global_metrics = extract_global_metrics(client)
-        pre_val = global_metrics.get('pre_fl', {}).get('roc_auc', 0) or 0
         post_val = global_metrics.get('post_fl', {}).get('roc_auc', 0) or 0
-        pre_roc.append(pre_val)
+        baseline_roc.append(BASELINE_ROC_AUC)
         post_roc.append(post_val)
-        all_roc.extend([pre_val, post_val])
+        all_roc.extend([BASELINE_ROC_AUC, post_val])
 
     x = np.arange(len(clients))
-    ax4.bar(x - 0.2, pre_roc, 0.4, label='Pre-FL', color='#e74c3c', alpha=0.8)
+    ax4.bar(x - 0.2, baseline_roc, 0.4, label='Baseline (Random)', color='#95a5a6', alpha=0.8)
     ax4.bar(x + 0.2, post_roc, 0.4, label='Post-FL', color='#2ecc71', alpha=0.8)
 
     ax4.set_xlabel('Client')
     ax4.set_ylabel('ROC-AUC')
-    ax4.set_title('ROC-AUC: Pre vs Post FL', fontsize=14, fontweight='bold')
+    ax4.set_title('ROC-AUC: Baseline vs Post FL', fontsize=14, fontweight='bold')
     ax4.set_xticks(x)
     ax4.set_xticklabels(client_names, rotation=45, ha='right')
     ax4.legend()
     ax4.grid(True, alpha=0.3, axis='y')
-    
+
     # Smart scaling
     if all_roc:
         ymin, ymax = smart_ylim(all_roc, 'roc_auc')
@@ -1094,61 +1199,70 @@ def plot_global_fl_benefit(
     show_plot: bool = True
 ) -> str:
     """
-    Plot Global FL Benefit Analysis (Pre-FL vs Post-FL on public test dataset) with smart scaling.
-    Shows the overall improvement from federated learning.
+    Plot Global FL Benefit Analysis (Baseline vs Post-FL on public test dataset) with smart scaling.
+    Shows the overall improvement from federated learning compared to theoretical baselines.
+    Theoretical baselines: 0.5 for accuracy/f1/class_gap (random chance), 0.693 for loss (ln(2)).
     """
     setup_plot_style()
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
 
     metrics_to_plot = ['accuracy', 'f1_score', 'loss', 'class_gap']
 
+    # Theoretical baselines for binary classification
+    THEORETICAL_BASELINES = {
+        'accuracy': 0.5,
+        'f1_score': 0.5,
+        'loss': 0.693,  # ln(2)
+        'class_gap': 1.0,  # Maximum gap (improvement = reduction)
+    }
+
     for idx, metric in enumerate(metrics_to_plot):
         ax = axes[idx // 2, idx % 2]
         config = METRICS_CONFIG.get(metric, {'label': metric})
 
-        pre_values = []
+        baseline_values = []
         post_values = []
         client_labels = []
         improvements = []
         all_values = []
+
+        baseline_val = THEORETICAL_BASELINES.get(metric, 0.5)
 
         for i, client in enumerate(clients):
             name = client.get('client_name', f'Client {i}')[:15]
             client_labels.append(name)
 
             global_metrics = extract_global_metrics(client)
-            pre_fl = global_metrics['pre_fl']
-            post_fl = global_metrics['post_fl']
+            post_fl = global_metrics.get('post_fl', {})
 
-            pre_val = pre_fl.get(metric, 0) or 0
             post_val = post_fl.get(metric, 0) or 0
-            improvement = post_val - pre_val
+            improvement = post_val - baseline_val
 
-            pre_values.append(pre_val)
+            baseline_values.append(baseline_val)
             post_values.append(post_val)
             improvements.append(improvement)
-            all_values.extend([pre_val, post_val])
+            all_values.extend([baseline_val, post_val])
 
         x = np.arange(len(clients))
         width = 0.35
 
-        bars1 = ax.bar(x - width/2, pre_values, width,
-                      label='Pre-FL (Centralized)', color='#e74c3c', alpha=0.8)
+        bars1 = ax.bar(x - width/2, baseline_values, width,
+                      label='Baseline (Random)', color='#95a5a6', alpha=0.8)
         bars2 = ax.bar(x + width/2, post_values, width,
                       label='Post-FL (Federated)', color='#2ecc71', alpha=0.8)
 
         # Add value labels and improvement annotations
-        for i, (bar1, bar2, pre_val, post_val, imp) in enumerate(zip(bars1, bars2, pre_values, post_values, improvements)):
-            if pre_val > 0:
+        for i, (bar1, bar2, base_val, post_val, imp) in enumerate(zip(bars1, bars2, baseline_values, post_values, improvements)):
+            if base_val > 0:
                 ax.text(bar1.get_x() + bar1.get_width()/2, bar1.get_height() + 0.01,
-                       f'{pre_val:.2f}', ha='center', va='bottom', fontsize=8)
+                       f'{base_val:.2f}', ha='center', va='bottom', fontsize=8)
             if post_val > 0:
                 ax.text(bar2.get_x() + bar2.get_width()/2, bar2.get_height() + 0.01,
                        f'{post_val:.2f}', ha='center', va='bottom', fontsize=8)
 
             # Add improvement arrow
             if imp != 0:
-                y_start = max(pre_val, post_val) + 0.05
+                y_start = max(base_val, post_val) + 0.05
                 color = '#2ecc71' if imp > 0 else '#e74c3c'
                 ax.annotate(f'{imp:+.2f}', xy=(x[i], y_start),
                            xytext=(x[i], y_start + 0.05),
@@ -1162,7 +1276,7 @@ def plot_global_fl_benefit(
         ax.set_xticklabels(client_labels, rotation=45, ha='right')
         ax.legend()
         ax.grid(True, alpha=0.3, axis='y')
-        
+
         # Smart y-axis scaling
         if all_values and config.get('use_smart_scaling', True):
             ymin, ymax = smart_ylim(all_values, metric)
@@ -1170,7 +1284,7 @@ def plot_global_fl_benefit(
             ymax = ymax * 1.1
             ax.set_ylim(ymin, ymax)
 
-    plt.suptitle('Global FL Benefit Analysis (Public Test Dataset)\nCentralized vs Federated Models\n✨ Smart Auto-Scaled Y-Axes',
+    plt.suptitle('Global FL Benefit Analysis (Public Test Dataset)\nTheoretical Baseline vs Federated Models\n✨ Smart Auto-Scaled Y-Axes',
                 fontsize=16, fontweight='bold')
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
@@ -1278,12 +1392,17 @@ def plot_hybrid_evaluation_comparison(
     """
     Plot comparison between validation progression and global evaluation with smart scaling.
     Shows how per-round validation metrics relate to final test performance.
+    Uses theoretical baselines (0.5 for accuracy, 0.693 for loss) instead of pre_fl.
     """
     setup_plot_style()
     fig, axes = plt.subplots(len(clients), 2, figsize=(16, 5 * len(clients)))
 
     if len(clients) == 1:
         axes = [axes]
+
+    # Theoretical baselines
+    BASELINE_ACCURACY = 0.5
+    BASELINE_LOSS = 0.693  # ln(2)
 
     for i, client in enumerate(clients):
         name = client.get('client_name', f'Client {i}')
@@ -1294,8 +1413,8 @@ def plot_hybrid_evaluation_comparison(
         ax_left = axes[i][0] if len(clients) > 1 else axes[0]
 
         all_acc_values = []
-        
-        # Validation progression
+
+        # Validation progression (includes baseline at round 0)
         rounds, val_acc = extract_validation_series(client, 'accuracy')
         if rounds and val_acc:
             all_acc_values.extend(val_acc)
@@ -1303,18 +1422,18 @@ def plot_hybrid_evaluation_comparison(
                         linewidth=2, markersize=6, color=color,
                         label='Validation (per-round)', linestyle='-')
 
-        # Global markers
+        # Global Post-FL marker only
         global_metrics = extract_global_metrics(client)
-        if global_metrics['pre_fl'] and global_metrics['post_fl']:
-            pre_acc = global_metrics['pre_fl'].get('accuracy', 0) * 100
+        if global_metrics.get('post_fl'):
             post_acc = global_metrics['post_fl'].get('accuracy', 0) * 100
-            all_acc_values.extend([pre_acc / 100, post_acc / 100])
+            all_acc_values.append(post_acc / 100)
 
             max_round = max(rounds) if rounds else 1
 
-            ax_left.scatter([0], [pre_acc], s=200, marker='D', color='#e74c3c',
-                          edgecolors='black', linewidths=2, label='Global Pre-FL (Test)',
-                          zorder=10)
+            # Add baseline reference line
+            ax_left.axhline(y=BASELINE_ACCURACY * 100, color='#95a5a6', linestyle='--',
+                          linewidth=2, alpha=0.7, label='Baseline (50%)')
+
             ax_left.scatter([max_round], [post_acc], s=200, marker='D', color='#2ecc71',
                           edgecolors='black', linewidths=2, label='Global Post-FL (Test)',
                           zorder=10)
@@ -1325,7 +1444,7 @@ def plot_hybrid_evaluation_comparison(
         ax_left.set_xlim(left=0)
         ax_left.legend(loc='best')
         ax_left.grid(True, alpha=0.3)
-        
+
         # Smart scaling
         if all_acc_values:
             acc_pct = [v * 100 if v <= 1 else v for v in all_acc_values]
@@ -1336,8 +1455,8 @@ def plot_hybrid_evaluation_comparison(
         ax_right = axes[i][1] if len(clients) > 1 else axes[1]
 
         all_loss_values = []
-        
-        # Validation loss
+
+        # Validation loss (includes baseline at round 0)
         rounds, val_loss = extract_validation_series(client, 'loss')
         if rounds and val_loss:
             all_loss_values.extend(val_loss)
@@ -1345,15 +1464,17 @@ def plot_hybrid_evaluation_comparison(
                          markersize=6, color=color,
                          label='Validation (per-round)', linestyle='-')
 
-        # Global markers
-        if global_metrics['pre_fl'] and global_metrics['post_fl']:
-            pre_loss = global_metrics['pre_fl'].get('loss', 0)
+        # Global Post-FL marker only
+        if global_metrics.get('post_fl'):
             post_loss = global_metrics['post_fl'].get('loss', 0)
-            all_loss_values.extend([pre_loss, post_loss])
+            all_loss_values.append(post_loss)
 
-            ax_right.scatter([0], [pre_loss], s=200, marker='D', color='#e74c3c',
-                           edgecolors='black', linewidths=2, label='Global Pre-FL (Test)',
-                           zorder=10)
+            max_round = max(rounds) if rounds else 1
+
+            # Add baseline reference line
+            ax_right.axhline(y=BASELINE_LOSS, color='#95a5a6', linestyle='--',
+                           linewidth=2, alpha=0.7, label=f'Baseline (ln2≈{BASELINE_LOSS:.3f})')
+
             ax_right.scatter([max_round], [post_loss], s=200, marker='D', color='#2ecc71',
                            edgecolors='black', linewidths=2, label='Global Post-FL (Test)',
                            zorder=10)
@@ -1364,13 +1485,13 @@ def plot_hybrid_evaluation_comparison(
         ax_right.set_xlim(left=0)
         ax_right.legend(loc='best')
         ax_right.grid(True, alpha=0.3)
-        
+
         # Smart scaling
         if all_loss_values:
             ymin, ymax = smart_ylim(all_loss_values, 'loss')
             ax_right.set_ylim(ymin, ymax)
 
-    plt.suptitle('Hybrid Evaluation Strategy\nValidation Progression vs Global Test Performance\n✨ Smart Auto-Scaled Y-Axes',
+    plt.suptitle('Hybrid Evaluation Strategy\nValidation Progression vs Theoretical Baseline\n✨ Smart Auto-Scaled Y-Axes',
                 fontsize=16, fontweight='bold')
     plt.tight_layout(rect=[0, 0, 1, 0.96])
 
@@ -1390,15 +1511,16 @@ def plot_hybrid_evaluation_comparison(
 
 
 def generate_all_visualizations(
-    data_path: str = DATA_JSON_PATH,
+    data_path: str = CLIENT_INFO_FILE_PATH,
     output_dir: str = GRAPHS_OUTPUT_DIR,
-    show_plots: bool = True
+    show_plots: bool = True,
+    simulation_id: Optional[int] = None
 ) -> Dict[str, str]:
     """
-    Generate all visualizations from cnmc_data.json with smart auto-scaling.
+    Generate all visualizations from client_data.json with smart auto-scaling.
 
     Args:
-        data_path: Path to cnmc_data.json
+        data_path: Path to client_data.json
         output_dir: Directory to save visualizations
         show_plots: Whether to display plots inline
 
@@ -1415,9 +1537,12 @@ def generate_all_visualizations(
 
     # Load data
     try:
-        clients = load_cnmc_data(data_path)
-        print(f"Loaded {len(clients)} clients from data file")
-    except FileNotFoundError as e:
+        if simulation_id is not None:
+            clients = load_data_from_db(simulation_id)
+        else:
+            clients = load_cnmc_data(data_path)
+            print(f"Loaded {len(clients)} clients from data file")
+    except Exception as e:
         print(f"Error: {e}")
         return {}
 
@@ -1510,64 +1635,34 @@ def generate_all_visualizations(
     return saved_files
 
 
-def print_metrics_summary(data_path: str = DATA_JSON_PATH):
-    """Print a text summary of the metrics."""
-    clients = load_cnmc_data(data_path)
-
     print("\n" + "=" * 70)
-    print("FLEX-Med FL Training Summary")
-    print("=" * 70)
 
-    for i, client in enumerate(clients):
-        name = client.get('client_name', f'Client {i}')
-        model = client.get('model_type', 'unknown')
 
-        metrics = client.get('metrics', {})
-        current = metrics.get('current', {})
-        rounds = metrics.get('rounds', [])
+def print_metrics_summary(
+    data_source: str = CLIENT_INFO_FILE_PATH,
+    simulation_id: Optional[int] = None
+):
+    """
+    Print a textual summary of FL metrics.
+    
+    Args:
+        data_source: Path to JSON file
+        simulation_id: Optional ID to fetch from DB
+    """
+    if simulation_id is not None:
+        clients = load_data_from_db(simulation_id)
+    else:
+        try:
+            clients = load_cnmc_data(data_source)
+        except FileNotFoundError:
+            print(f"❌ File not found: {data_source}")
+            return
+            
+    if not clients:
+        print("❌ No client data found.")
+        return
 
-        print(f"\n[{i}] {name} ({model})")
-        print("-" * 50)
-
-        # Check for global metrics (hybrid strategy)
-        global_metrics = metrics.get('global', {})
-        if global_metrics and 'pre_fl' in global_metrics and 'post_fl' in global_metrics:
-            print(f"  Evaluation Strategy: HYBRID")
-            print(f"  Rounds completed: {len(rounds)}")
-            print()
-            print(f"  GLOBAL METRICS (Public Test Dataset):")
-            pre = global_metrics['pre_fl']
-            post = global_metrics['post_fl']
-            imp = global_metrics.get('improvement', {})
-
-            print(f"    Pre-FL  (Centralized): Acc={pre.get('accuracy', 0):.2%}, Loss={pre.get('loss', 0):.3f}")
-            print(f"    Post-FL (Federated):   Acc={post.get('accuracy', 0):.2%}, Loss={post.get('loss', 0):.3f}")
-            print(f"    FL Benefit:            Acc={imp.get('accuracy', 0):+.2%}, Loss={imp.get('loss', 0):+.3f}")
-            print()
-            print(f"  FINAL METRICS:")
-            print(f"    Accuracy:   {post.get('accuracy', 0):.2%}")
-            print(f"    F1 Score:   {post.get('f1_score', 0):.3f}")
-            print(f"    Precision:  {post.get('precision', 0):.3f}")
-            print(f"    Recall:     {post.get('recall', 0):.3f}")
-            print(f"    Class Gap:  {post.get('class_gap', 0):.2%}")
-
-        elif current:
-            # Legacy format (old evaluation strategy)
-            print(f"  Evaluation Strategy: LEGACY")
-            pre = current.get('pre_fl', {})
-            post = current.get('post_fl', {})
-            imp = current.get('improvement', {})
-
-            print(f"  Rounds completed: {current.get('last_round', 'N/A')}")
-            print(f"  Pre-FL Accuracy:  {pre.get('accuracy', 0):.2%}")
-            print(f"  Post-FL Accuracy: {post.get('accuracy', 0):.2%}")
-            print(f"  Improvement:      {imp.get('accuracy', 0):+.2%}")
-            print(f"  Post-FL F1:       {post.get('f1_score', 0):.3f}")
-            print(f"  Post-FL ROC-AUC:  {post.get('roc_auc', 0):.3f}")
-        else:
-            print("  No metrics available")
-
-    print("\n" + "=" * 70)
+    generate_text_summary(clients)
 
 
 # Main entry point
@@ -1575,18 +1670,20 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description='Generate FL evaluation visualizations with smart auto-scaling')
-    parser.add_argument('--data', type=str, default=DATA_JSON_PATH,
-                       help='Path to cnmc_data.json')
+    parser.add_argument('--data', type=str, default=CLIENT_INFO_FILE_PATH,
+                       help='Path to client_data.json')
     parser.add_argument('--output', type=str, default=GRAPHS_OUTPUT_DIR,
                        help='Output directory for graphs')
     parser.add_argument('--no-show', action='store_true',
                        help='Do not display plots (just save)')
     parser.add_argument('--summary', action='store_true',
                        help='Print text summary only')
+    parser.add_argument('--simulation-id', '-s', type=int, default=None,
+                       help='Fetch metrics from database for this simulation ID')
 
     args = parser.parse_args()
 
     if args.summary:
-        print_metrics_summary(args.data)
+        print_metrics_summary(args.data, args.simulation_id)
     else:
-        generate_all_visualizations(args.data, args.output, not args.no_show)
+        generate_all_visualizations(args.data, args.output, not args.no_show, args.simulation_id)

@@ -1,6 +1,15 @@
 "use client";
 
-import { Home, Users, Plus, Brain, History, Play } from "lucide-react";
+import {
+  Home,
+  Users,
+  Plus,
+  Brain,
+  History,
+  Play,
+  UsersRound,
+  Settings,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -16,10 +25,10 @@ export default function Sidebar() {
   return (
     <div className="w-64 bg-card border-r border-border flex flex-col">
       {/* Logo */}
-      <div className="p-6 border-b border-border">
+      <div className="h-20 flex items-center px-6 border-b border-border">
         <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold">FM</span>
+          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white">
+            <span className="font-bold">FM</span>
           </div>
           <h1 className="text-lg font-semibold text-foreground">FLEX-Med</h1>
         </Link>
@@ -58,6 +67,7 @@ export default function Sidebar() {
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
               >
+                <UsersRound size={16} />
                 All Clients
               </Link>
               <Link
@@ -110,6 +120,19 @@ export default function Sidebar() {
             </AccordionContent>
           </AccordionItem>
         </Accordion>
+
+        {/* Settings Link */}
+        <Link
+          href="/settings"
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+            pathname === "/settings"
+              ? "text-primary bg-primary/10 flex-red-border-left"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          }`}
+        >
+          <Settings size={20} />
+          <span>Settings</span>
+        </Link>
       </nav>
     </div>
   );

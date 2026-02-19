@@ -1,9 +1,11 @@
 "use client";
 
 import { API_BASE_PATH } from "@/utils";
-import { Search, Trash2, MoreVertical, Play } from "lucide-react";
+import { Search, Trash2, MoreVertical, Loader2 } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Loading } from "@/components/ui/loading";
 
 // Helper to format ISO date strings to dd/mm/yy
 function formatDate(dateString: string): string {
@@ -26,7 +28,6 @@ interface Client {
   status: string;
   model_type: number;
   created_at: string;
-  dataset_path?: string;
 }
 
 // Confirmation Modal Component
@@ -59,20 +60,23 @@ function DeleteConfirmationModal({
           cannot be undone.
         </p>
         <div className="flex justify-end gap-3">
-          <button
-            onClick={onCancel}
-            disabled={isDeleting}
-            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <Button variant="ghost" onClick={onCancel} disabled={isDeleting}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="destructive"
             onClick={onConfirm}
             disabled={isDeleting}
-            className="px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-[#9a0022] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isDeleting ? "Deleting..." : "Delete"}
-          </button>
+            {isDeleting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              "Delete"
+            )}
+          </Button>
         </div>
       </div>
     </div>
@@ -83,14 +87,9 @@ function DeleteConfirmationModal({
 interface ActionDropdownProps {
   client: Client;
   onDelete: (client: Client) => void;
-  onStartTraining: (client: Client) => void;
 }
 
-function ActionDropdown({
-  client,
-  onDelete,
-  onStartTraining,
-}: ActionDropdownProps) {
+function ActionDropdown({ client, onDelete }: ActionDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -115,30 +114,21 @@ function ActionDropdown({
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <button
+      <Button
+        variant="ghost"
+        size="icon"
         onClick={(e) => {
           e.stopPropagation();
           setIsOpen(!isOpen);
         }}
-        className="p-1 hover:bg-gray-100 rounded transition-colors"
+        className="h-8 w-8 hover:bg-muted"
         title="Actions"
       >
-        <MoreVertical size={18} className="text-gray-600" />
-      </button>
+        <MoreVertical className="h-4 w-4 text-muted-foreground" />
+      </Button>
 
       {isOpen && (
         <div className="absolute right-0 mt-2 w-48 bg-card rounded-lg shadow-lg border border-border py-1 z-50">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onStartTraining(client);
-              setIsOpen(false);
-            }}
-            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
-          >
-            <Play size={16} className="text-green-600" />
-            Start Training
-          </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -161,7 +151,7 @@ export default function ClientsListPage({
   onSelectClient,
 }: ClientsListPageProps) {
   const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean;
@@ -184,7 +174,7 @@ export default function ClientsListPage({
       } catch (error) {
         console.error("Failed to fetch clients:", error);
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
 
@@ -208,14 +198,14 @@ export default function ClientsListPage({
         `http://localhost:8000/api/clients/${deleteModal.clientId}`,
         {
           method: "DELETE",
-        }
+        },
       );
 
       if (!response.ok) throw new Error("Failed to delete");
 
       // Remove the deleted client from the state
       setClients((prevClients) =>
-        prevClients.filter((client) => client.id !== deleteModal.clientId)
+        prevClients.filter((client) => client.id !== deleteModal.clientId),
       );
 
       // Close the modal
@@ -232,39 +222,8 @@ export default function ClientsListPage({
     setDeleteModal({ isOpen: false, clientId: null, clientName: "" });
   };
 
-  const handleStartTraining = async (client: Client) => {
-    try {
-      const response = await fetch(
-        `${API_BASE_PATH}/clients/${client.id}/start_local_train`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (!response.ok) throw new Error("Failed to start training");
-
-      const data = await response.json();
-      console.log("Training started:", data);
-
-      // Optionally update the client's status to "Training"
-      setClients((prevClients) =>
-        prevClients.map((c) =>
-          c.id === client.id ? { ...c, status: "Training" } : c
-        )
-      );
-
-      toast.success(`Training started for ${client.client_name}`);
-    } catch (error) {
-      console.error("Failed to start training:", error);
-      toast.error("Failed to start training. Please try again.");
-    }
-  };
-
-  if (loading) {
-    return <div className="p-8">Loading clients...</div>;
+  if (isLoading) {
+    return <Loading fullScreen text="Synchronizing client database..." />;
   }
 
   const filteredClients = clients.filter((client) => {
@@ -279,24 +238,8 @@ export default function ClientsListPage({
 
   return (
     <div className="p-8">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-semibold text-foreground">Clients</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage all your healthcare clients and their ML deployments
-          </p>
-        </div>
-        <button
-          onClick={onAddClick}
-          className="px-4 py-2 bg-card border border-primary text-primary rounded-lg font-medium hover:bg-primary/10 transition-colors"
-        >
-          Add New Client
-        </button>
-      </div>
-
       {/* Search */}
-      <div className="mb-6">
+      <div className="mb-6 max-w-md">
         <div className="relative">
           <Search
             className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground"
@@ -327,9 +270,6 @@ export default function ClientsListPage({
                 Models
               </th>
               <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                Dataset Available
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
                 Created At
               </th>
               <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
@@ -353,8 +293,8 @@ export default function ClientsListPage({
                       client.status === "Training"
                         ? "border-primary text-primary bg-[rgba(184,0,40,0.05)]"
                         : client.status === "Completed"
-                        ? "border-green-500 text-green-700 bg-green-50"
-                        : "border-[#718096] text-muted-foreground bg-gray-50"
+                          ? "border-green-500 text-green-700 bg-green-50"
+                          : "border-[#718096] text-muted-foreground bg-gray-50"
                     }`}
                   >
                     {client.status}
@@ -363,17 +303,6 @@ export default function ClientsListPage({
                 <td className="px-6 py-4 text-sm text-foreground">
                   {client.model_type}
                 </td>
-                <td className="px-6 py-4 text-sm">
-                  <span
-                    className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${
-                      client.dataset_path
-                        ? "border-green-500 text-green-700 bg-green-50"
-                        : "border-red-500 text-red-700 bg-red-50"
-                    }`}
-                  >
-                    {client.dataset_path ? "True" : "False"}
-                  </span>
-                </td>
                 <td className="px-6 py-4 text-sm text-foreground">
                   {formatDate(client.created_at)}
                 </td>
@@ -381,7 +310,6 @@ export default function ClientsListPage({
                   <ActionDropdown
                     client={client}
                     onDelete={handleDeleteClick}
-                    onStartTraining={handleStartTraining}
                   />
                 </td>
               </tr>
@@ -398,6 +326,10 @@ export default function ClientsListPage({
         onCancel={handleDeleteCancel}
         isDeleting={isDeleting}
       />
+
+      {isDeleting && (
+        <Loading fullScreen text="Removing client from network..." />
+      )}
     </div>
   );
 }

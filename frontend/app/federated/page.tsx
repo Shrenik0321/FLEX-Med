@@ -1,13 +1,13 @@
 "use client";
 
-import FLHistoryPage from "@/components/pages/fl-history-page";
+import FLSimulationListPage from "@/components/pages/fl-simulations-list-page";
 import { useRouter } from "next/navigation";
 
 export default function FederatedLearningPage() {
   const router = useRouter();
 
   return (
-    <FLHistoryPage
+    <FLSimulationListPage
       onStartClick={() => router.push("/federated/start")}
       onSelectSimulation={(simulation) => {
         // Store simulation data in localStorage for the details page

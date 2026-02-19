@@ -1,11 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import requests
 import json
-import subprocess
-import tempfile
 import os
+import sys
 from pathlib import Path
 from datetime import datetime
 from supabase import Client as SupabaseClient
@@ -20,93 +19,159 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Load orchestrator URL from settings
-# Ngrok URL for local training orchestrator (update when Colab session changes)
-FEDERATED_TRAINING_ORCHESTRATOR_URL = "https://08261171662e.ngrok-free.app"
+class StartFLRequest(BaseModel):
+    """Request body for starting FL simulation."""
+    client_ids: Optional[List[int]] = None  # If None, all clients are used
+    dataset: Optional[str] = None
+    config: Optional[Dict[str, Any]] = None
+    heterogeneity_preset: Optional[str] = None  # low, moderate, high, custom
 
-# Global FL pipeline status tracker
-fl_status = {
-    "is_running": False,
-    "current_stage": None,
-    "progress": 0,
-    "total_rounds": 0,
-    "current_round": 0,
-    "clients": 0,
-    "started_at": None,
-    "completed_at": None,
-    "error": None,
-    "logs": []
-}
-
-def update_fl_status(stage: str = None, progress: int = None, current_round: int = None, log: str = None, error: str = None, completed: bool = False):
-    """Update global FL status for monitoring"""
-    global fl_status
-
-    if stage:
-        fl_status["current_stage"] = stage
-    if progress is not None:
-        fl_status["progress"] = progress
-    if current_round is not None:
-        fl_status["current_round"] = current_round
-    if log:
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        fl_status["logs"].append(f"[{timestamp}] {log}")
-        # Keep only last 50 logs
-        if len(fl_status["logs"]) > 50:
-            fl_status["logs"] = fl_status["logs"][-50:]
-    if error:
-        fl_status["error"] = error
-    if completed:
-        fl_status["is_running"] = False
-        fl_status["completed_at"] = datetime.now().isoformat()
-        fl_status["progress"] = 100
 
 @router.post("/start_fl")
-async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
+async def start_fl(
+    request: Optional[StartFLRequest] = None,
+    supabase: SupabaseClient = Depends(get_supabase_client),
+    settings: Settings = Depends(get_settings)
+):
     """
     Start a new federated learning simulation.
 
     This endpoint:
-    1. Fetches all clients from the database
+    1. Fetches clients from the database (optionally filtered by client_ids)
     2. Creates a simulation record to track the FL run
     3. Forwards the request to the FL orchestrator (Colab/ngrok)
     4. Updates simulation status based on orchestrator response
+
+    Request Body:
+        - client_ids: Optional list of client IDs to participate (if None, all clients are used)
+        - dataset: Optional dataset selection
+        - config: Optional FL configuration overrides
 
     Returns:
         - message: Success/error message
         - simulation_id: ID of the created simulation record
         - orchestrator_response: Response from FL orchestrator
     """
+    # Parse request body
+    selected_client_ids = request.client_ids if request else None
+    dataset = request.dataset if request else None
+    user_config = request.config if request else None
+    heterogeneity_preset = request.heterogeneity_preset if request else None
+
     # Fetch all clients from database
     response = supabase.from_("clients").select("*").execute()
-    clients_data = response.data if response.data else []
+    all_clients = response.data if response.data else []
 
-    if not clients_data:
+    if not all_clients:
         raise HTTPException(status_code=400, detail="No clients found in database")
+
+    # Filter clients based on selected_client_ids
+    if selected_client_ids:
+        clients_data = [c for c in all_clients if c['id'] in selected_client_ids]
+
+        if not clients_data:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No clients found with IDs: {selected_client_ids}"
+            )
+
+        # Validate that all selected IDs exist
+        found_ids = {c['id'] for c in clients_data}
+        missing_ids = set(selected_client_ids) - found_ids
+        if missing_ids:
+            logger.warning(f"Some client IDs not found: {missing_ids}")
+    else:
+        # No filter, use all clients
+        clients_data = all_clients
+
+    logger.info(f"Starting FL with {len(clients_data)} clients (selected from {len(all_clients)} total)")
 
     # Extract client IDs for simulation record
     client_ids = [c['id'] for c in clients_data]
 
-    # Define FL configuration (from pyproject.toml defaults)
+    # Load configuration from system_config table (single source of truth)
+    try:
+        config_response = supabase.from_("system_config").select("*").limit(1).execute()
+        if config_response.data and len(config_response.data) > 0:
+            system_config = config_response.data[0]["config"]
+            logger.info(f"Loaded system_config from database")
+        else:
+            logger.warning("No system_config found in database, using defaults")
+            system_config = {}
+    except Exception as e:
+        logger.warning(f"Failed to load system_config from database: {e}, using defaults")
+        system_config = {}
+
+    # Resolve heterogeneity preset: request overrides system_config default
+    if not heterogeneity_preset:
+        heterogeneity_preset = system_config.get("heterogeneity_preset", "moderate")
+
+    # Resolve preset config values — all preset-specific params live inside the preset object
+    from app.schemas.system_config import DEFAULT_HETEROGENEITY_PRESETS
+    presets = system_config.get("presets", {})
+    preset_config = presets.get(heterogeneity_preset, {})
+
+    # Fallback to default presets if preset not found in DB
+    if not preset_config and heterogeneity_preset in DEFAULT_HETEROGENEITY_PRESETS:
+        preset_config = DEFAULT_HETEROGENEITY_PRESETS[heterogeneity_preset]
+    elif not preset_config:
+        preset_config = DEFAULT_HETEROGENEITY_PRESETS["moderate"]
+
+    logger.info(f"Using heterogeneity preset: {heterogeneity_preset}")
+    logger.info(f"Preset config: dirichlet_alpha={preset_config.get('dirichlet_alpha')}, lr_decay={preset_config.get('lr_decay')}")
+
+    # Build FL configs — global params from system_config, preset-specific from preset
     configs = {
-        "num_server_rounds": 10,
+        "num_server_rounds": system_config.get("num_rounds", 10),
         "fraction_train": 1.0,
         "fraction_evaluate": 1.0,
-        "local_epochs": 8,
-        "lr": 0.0001,
-        "lr_decay": 0.98,
-        "distill_lr": 0.001,
-        "distill_epochs": 2,
-        "temperature": 3.0,
-        "batch_size": 32
+        "local_epochs": system_config.get("local_epochs", 5),
+        "lr": preset_config.get("learning_rate", 0.001),
+        "lr_decay": preset_config.get("lr_decay", 0.95),
+        "distill_lr": system_config.get("distill_lr", 0.001),
+        "distill_epochs": system_config.get("distill_epochs", 2),
+        "temperature": system_config.get("temperature", 3.0),
+        "batch_size": system_config.get("batch_size", 32),
     }
 
-    # Create simulation record
+    # Build training strategy config — all values from the resolved preset
+    training_config = {
+        "dirichlet_alpha": preset_config.get("dirichlet_alpha", 2.5),
+        "dirichlet_seed": system_config.get("dirichlet_seed", 42),
+        "dirichlet_min_partition_size": system_config.get("dirichlet_min_partition_size", 400),
+        "minority_boost": preset_config.get("minority_boost", 0.80),
+        "focal_alpha": preset_config.get("focal_alpha", 0.50),
+        "focal_gamma": preset_config.get("focal_gamma", 2.0),
+        "consensus_momentum": preset_config.get("consensus_momentum", 0.20),
+        "distill_weight_base": preset_config.get("distill_weight_base", 0.45),
+        "distill_decay_rate": preset_config.get("distill_decay_rate", 0.20),
+        "train_loss_weight": preset_config.get("train_loss_weight", 0.70),
+        "distill_loss_weight": preset_config.get("distill_loss_weight", 0.30),
+    }
+
+    # Build dataset paths config
+    dataset_paths = {
+        "public_anchor": system_config.get("public_anchor_dataset_path", "/content/datasets/cnmc/cnmc_public_anchor"),
+        "public_test": system_config.get("public_test_dataset_path", "/content/datasets/cnmc/cnmc_public_test"),
+        "local_train": system_config.get("local_train_dataset_path", "/content/datasets/cnmc/cnmc_local_train"),
+    }
+
+    # Resolve orchestrator URL from system_config or fallback to settings
+    orchestrator_url = system_config.get("ngrok_url", settings.federated_training_orchestrator_url)
+
+    logger.info(f"FL config: {configs}")
+    logger.info(f"Training config: {training_config}")
+    logger.info(f"Orchestrator URL: {orchestrator_url}")
+
+    # Create simulation record with full config snapshot
     sim_data = {
-        "client_ids": client_ids,
-        "configs": configs,
-        "status": SimulationStatus.PENDING,
-        "metrics": "{}"
+        "configs": {
+            **configs,
+            "dirichlet_alpha": training_config["dirichlet_alpha"],
+            "training_config": training_config,
+        },
+        "heterogeneity_preset": heterogeneity_preset,
+        "status": SimulationStatus.PENDING.value,
     }
 
     try:
@@ -120,6 +185,24 @@ async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
     except Exception as e:
         logger.error(f"Error creating simulation record: {e}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+    # Create client_simulation_metrics records for participating clients (new schema)
+    try:
+        for client in clients_data:
+            client_metrics_data = {
+                "simulation_id": simulation_id,
+                "client_id": client["id"],
+                "status": "pending",
+                "metrics": {}  # Empty JSONB, will be populated during FL
+            }
+            supabase.from_("client_simulation_metrics").insert(client_metrics_data).execute()
+
+        logger.info(f"Created {len(clients_data)} client_simulation_metrics records for simulation {simulation_id}")
+
+    except Exception as e:
+        logger.error(f"Error creating client_simulation_metrics records: {e}")
+        # Not fatal - continue with simulation (metrics will be missing though)
+        logger.warning("Simulation will continue but metrics may not be saved properly")
 
     # Clean up metrics field to prevent double-encoding
     for client in clients_data:
@@ -151,17 +234,29 @@ async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
     try:
         # Update simulation status to RUNNING
         supabase.from_("fl_simulations").update({
-            "status": SimulationStatus.RUNNING,
+            "status": SimulationStatus.RUNNING.value,
             "started_at": datetime.now().isoformat()
         }).eq("id", simulation_id).execute()
 
-        logger.info(f"Starting FL simulation {simulation_id} via orchestrator")
+        logger.info(f"Starting FL simulation {simulation_id} via orchestrator at {orchestrator_url}")
+
+        # Prepare request payload with simulation_id, client data, and full config
+        orchestrator_payload = {
+            "simulation_id": simulation_id,
+            "clients": clients_data,
+            "supabase_url": settings.supabase_url,
+            "supabase_key": settings.supabase_key,
+            "fl_config": configs,
+            "training_config": training_config,
+            "dataset_paths": dataset_paths,
+        }
 
         # Forward to FL orchestrator
         response = requests.post(
-            f"{FEDERATED_TRAINING_ORCHESTRATOR_URL}/start_fl",
-            json=clients_data,
-            headers={"Content-Type": "application/json"}
+            f"{orchestrator_url}/start_fl",
+            json=orchestrator_payload,
+            headers={"Content-Type": "application/json"},
+            timeout=30
         )
         response.raise_for_status()
 
@@ -181,7 +276,7 @@ async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
             error_message = f"Orchestrator API Error: {e.response.text}"
 
         supabase.from_("fl_simulations").update({
-            "status": SimulationStatus.FAILED,
+            "status": SimulationStatus.FAILED.value,
             "error_message": error_message
         }).eq("id", simulation_id).execute()
 
@@ -199,88 +294,12 @@ async def start_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
         error_message = f"Unexpected error: {str(e)}"
 
         supabase.from_("fl_simulations").update({
-            "status": SimulationStatus.FAILED,
+            "status": SimulationStatus.FAILED.value,
             "error_message": error_message
         }).eq("id", simulation_id).execute()
 
         logger.error(f"FL simulation {simulation_id} failed: {error_message}")
         raise HTTPException(status_code=500, detail=error_message)
-
-@router.post("/resume_fl")
-async def resume_fl(supabase: SupabaseClient = Depends(get_supabase_client)):
-    """
-    Resume FL simulation from last checkpoint.
-
-    This endpoint:
-    1. Fetches clients from database
-    2. Validates pre_fl metrics exist (required for resume)
-    3. Forwards to Colab orchestrator's /resume_fl endpoint
-    4. Skips pre-FL evaluation (already done)
-    5. Runs FL from last checkpoint
-    6. Post-FL evaluation runs after completion
-    """
-    # Fetch all clients from database
-    response = supabase.from_("clients").select("*").execute()
-    clients_data = response.data if response.data else []
-
-    if not clients_data:
-        raise HTTPException(status_code=400, detail="No clients found in database")
-
-    # Validate that pre_fl metrics exist for all clients
-    missing_pre_fl = []
-    for client in clients_data:
-        metrics_value = client.get('metrics', '{}')
-        if isinstance(metrics_value, str):
-            try:
-                metrics = json.loads(metrics_value) if metrics_value else {}
-            except json.JSONDecodeError:
-                metrics = {}
-        else:
-            metrics = metrics_value or {}
-
-        if 'pre_fl' not in metrics:
-            missing_pre_fl.append(client.get('client_name', f"ID:{client.get('id')}"))
-
-    if missing_pre_fl:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Pre-FL metrics missing for clients: {', '.join(missing_pre_fl)}. Use /start_fl for fresh training."
-        )
-
-    # Clean up metrics field (same as start_fl)
-    for client in clients_data:
-        metrics_value = client.get('metrics', '{}')
-        if isinstance(metrics_value, str):
-            if metrics_value.startswith('"') and metrics_value.endswith('"'):
-                try:
-                    metrics_value = json.loads(metrics_value)
-                except json.JSONDecodeError:
-                    metrics_value = metrics_value.strip('"')
-            if not metrics_value or metrics_value.strip() == '':
-                metrics_value = '{}'
-        elif isinstance(metrics_value, dict):
-            metrics_value = json.dumps(metrics_value)
-        else:
-            metrics_value = '{}'
-        client['metrics'] = metrics_value
-
-    try:
-        # Forward to Colab orchestrator's /resume_fl endpoint
-        response = requests.post(
-            f"{FEDERATED_TRAINING_ORCHESTRATOR_URL}/resume_fl",
-            json=clients_data,
-            headers={"Content-Type": "application/json"}
-        )
-        response.raise_for_status()
-        return response.json()
-
-    except requests.exceptions.RequestException as e:
-        if hasattr(e, 'response') and e.response is not None:
-            raise HTTPException(
-                status_code=e.response.status_code,
-                detail=f"Orchestrator API Error: {e.response.text}"
-            )
-        raise HTTPException(status_code=500, detail=f"Failed to connect to orchestrator: {str(e)}")
 
 # ==========================================
 # FL SIMULATION MANAGEMENT ENDPOINTS
@@ -296,12 +315,12 @@ async def create_simulation(
 
     This endpoint is typically called before starting an FL run to track
     the simulation configuration and status.
+
+    Note: This is a standalone CRUD endpoint. For running FL, use /start_fl or /start_fl_simulation.
     """
     data = {
-        "client_ids": simulation_data.client_ids,
         "configs": simulation_data.configs,
-        "status": SimulationStatus.PENDING,
-        "metrics": "{}"
+        "status": SimulationStatus.PENDING.value,
     }
 
     try:
@@ -420,17 +439,25 @@ async def complete_simulation(
             raise HTTPException(status_code=404, detail=f"Simulation {simulation_id} not found")
 
         simulation = sim_response.data[0]
-        client_ids = simulation['client_ids']
 
-        # Fetch all client metrics
-        clients_response = supabase.from_("clients").select("*").in_("id", client_ids).execute()
-        clients_data = clients_response.data if clients_response.data else []
+        # Fetch all client metrics from client_simulation_metrics table (new schema)
+        metrics_response = supabase.from_("client_simulation_metrics").select("*").eq("simulation_id", simulation_id).execute()
+        metrics_data = metrics_response.data if metrics_response.data else []
 
-        if not clients_data:
+        if not metrics_data:
             raise HTTPException(
                 status_code=400,
-                detail=f"No clients found for simulation {simulation_id}"
+                detail=f"No client metrics found for simulation {simulation_id}"
             )
+
+        # Convert metrics from client_simulation_metrics format to clients format
+        # (compute_aggregate_metrics expects 'metrics' field as string)
+        clients_data = []
+        for metric_record in metrics_data:
+            clients_data.append({
+                'id': metric_record['client_id'],
+                'metrics': json.dumps(metric_record['metrics']) if isinstance(metric_record['metrics'], dict) else metric_record['metrics']
+            })
 
         # Compute aggregate metrics
         aggregate_metrics = compute_aggregate_metrics(clients_data)
@@ -451,8 +478,8 @@ async def complete_simulation(
 
         # Update simulation
         update_data = {
-            "status": SimulationStatus.COMPLETED,
-            "metrics": metrics_str,
+            "status": SimulationStatus.COMPLETED.value,
+            "aggregate_metrics": aggregate_metrics,  # Store as JSONB dict (not string)
             "completed_at": completed_at.isoformat(),
             "duration": duration
         }

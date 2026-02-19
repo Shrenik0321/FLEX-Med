@@ -2,6 +2,20 @@
 
 export type SimulationStatus = "pending" | "running" | "completed" | "failed";
 
+export interface TrainingConfig {
+  dirichlet_alpha?: number;
+  dirichlet_seed?: number;
+  dirichlet_min_partition_size?: number;
+  minority_boost?: number;
+  focal_alpha?: number;
+  focal_gamma?: number;
+  consensus_momentum?: number;
+  distill_weight_base?: number;
+  distill_decay_rate?: number;
+  train_loss_weight?: number;
+  distill_loss_weight?: number;
+}
+
 export interface FLConfig {
   num_server_rounds: number;
   fraction_train: number;
@@ -13,6 +27,14 @@ export interface FLConfig {
   distill_epochs: number;
   temperature: number;
   batch_size: number;
+  // Heterogeneity preset used for this run
+  heterogeneity_preset?: string;
+  // Dirichlet Partitioning Configuration
+  dirichlet_alpha?: number;
+  dirichlet_seed?: number;
+  dirichlet_min_partition_size?: number;
+  // Training strategy snapshot (stored for reference)
+  training_config?: TrainingConfig;
 }
 
 export interface RoundMetrics {
@@ -22,6 +44,8 @@ export interface RoundMetrics {
   avg_f1: number;
   avg_precision: number;
   avg_recall: number;
+  avg_train_loss?: number; // Training loss from local training phase
+  avg_val_loss?: number; // Validation loss from local training phase
   num_clients_trained: number;
   timestamp: string;
 }
@@ -32,20 +56,23 @@ export interface AggregateMetrics {
   avg_precision: number;
   avg_recall: number;
   avg_f1: number;
+  avg_specificity?: number;
+  avg_roc_auc?: number;
   std_accuracy: number;
   num_clients: number;
 }
 
 export interface FLSimulationMetrics {
   aggregate: {
-    pre_fl: AggregateMetrics;
+    // Note: pre_fl removed as evaluating untrained models gives meaningless ~50% accuracy
     post_fl: AggregateMetrics;
     improvement: {
+      // Now calculated as Round 1 vs Final Round progression
       avg_accuracy: number;
       avg_loss: number;
-      avg_precision: number;
-      avg_recall: number;
-      avg_f1: number;
+      avg_precision?: number;
+      avg_recall?: number;
+      avg_f1?: number;
     };
   };
   rounds: RoundMetrics[];
@@ -59,9 +86,9 @@ export interface FLSimulationMetrics {
 
 export interface FLSimulation {
   id: number;
-  client_ids: number[];
   configs: FLConfig;
-  metrics: string; // JSON string (parse with parseMetrics helper)
+  aggregate_metrics: FLSimulationMetrics; // JSONB stored as object (not string)
+  heterogeneity_preset?: string | null; // Top-level column: low, moderate, high, custom
   status: SimulationStatus;
   error_message?: string | null;
   created_at: string;
@@ -70,28 +97,44 @@ export interface FLSimulation {
   duration?: number | null; // Duration in seconds
 }
 
-// Helper to parse metrics JSON string
-export function parseMetrics(metricsStr: string): FLSimulationMetrics | null {
-  if (!metricsStr || metricsStr.trim() === "" || metricsStr === "{}") {
-    return null;
+// Helper to parse metrics (handles both object and JSON string for backwards compatibility)
+export function parseMetrics(
+  metrics: FLSimulationMetrics | string | any,
+): FLSimulationMetrics | null {
+  // If already an object with expected structure
+  if (metrics && typeof metrics === "object" && !Array.isArray(metrics)) {
+    return metrics as FLSimulationMetrics;
   }
-  try {
-    return JSON.parse(metricsStr) as FLSimulationMetrics;
-  } catch (error) {
-    console.error("Failed to parse metrics:", error);
-    return null;
+
+  // If it's a JSON string (backwards compatibility)
+  if (typeof metrics === "string") {
+    if (!metrics || metrics.trim() === "" || metrics === "{}") {
+      return null;
+    }
+    try {
+      return JSON.parse(metrics) as FLSimulationMetrics;
+    } catch (error) {
+      console.error("Failed to parse metrics:", error);
+      return null;
+    }
   }
+
+  return null;
 }
 
 // Helper to format duration
 export function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
 
   if (hours > 0) {
     return `${hours}h ${minutes}m`;
   }
-  return `${minutes}m`;
+  if (minutes > 0) {
+    return `${minutes}m ${secs}s`;
+  }
+  return `${secs}s`;
 }
 
 // Helper to format date

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import ClientDetailsPage from "@/components/pages/client-details-page";
+import { Loading } from "@/components/ui/loading";
 
 type Client = {
   id: number;
@@ -33,12 +34,10 @@ export default function ClientDetails() {
   if (!client) {
     return (
       <div className="p-8">
-        <p>Loading client details...</p>
+        <Loading fullScreen />
       </div>
     );
   }
 
-  return (
-    <ClientDetailsPage client={client} onBack={() => router.push("/clients")} />
-  );
+  return <ClientDetailsPage client={client} />;
 }
