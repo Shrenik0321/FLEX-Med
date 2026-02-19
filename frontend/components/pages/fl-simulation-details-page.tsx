@@ -4,7 +4,11 @@ import { Users, Loader2, Clock, XCircle, AlertCircle } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { API_BASE_PATH } from "@/utils";
-import { FLSimulation, formatDuration } from "@/types/fl-simulation";
+import {
+  FLSimulation,
+  formatDuration,
+  parseMetrics,
+} from "@/types/fl-simulation";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -791,731 +795,673 @@ export default function FLSimulationDetailsPage({
   // Conditional rendering for loading / running / failed states
   // ===========================================================================
 
-  if (isLoading && !simulation) {
-    return (
-      <div className="flex flex-col items-start min-h-[400px]">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="mt-4 text-lg text-gray-600">Loading simulation...</p>
-      </div>
-    );
-  }
-
-  if (loadError) {
-    return (
-      <div className="flex flex-col items-start min-h-[400px]">
-        <AlertCircle className="h-12 w-12 text-red-500" />
-        <p className="mt-4 text-lg text-gray-600">{loadError}</p>
-      </div>
-    );
-  }
-
-  if (
-    simulation &&
-    (simulation.status === "running" || simulation.status === "pending")
-  ) {
-    return (
-      <div className="p-8">
-        <div className="flex flex-col items-start rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-16">
-          <div className="relative">
-            <Loader2 className="h-16 w-16 animate-spin text-primary" />
-            <Clock className="absolute right-0 top-0 h-6 w-6 text-blue-500" />
-          </div>
-          <h2 className="mt-6 text-2xl font-semibold text-gray-900">
-            FL Simulation{" "}
-            {simulation.status === "pending" ? "Starting" : "In Progress"}
-          </h2>
-          <p className="mt-2 text-gray-600 max-w-md">
-            {simulation.status === "pending"
-              ? "Initializing the federated learning simulation..."
-              : "The simulation is currently running. This may take several minutes."}
-          </p>
-          {simulation.configs && (
-            <div className="mt-6 w-full max-w-sm">
-              {simulation.heterogeneity_preset && (
-                <div className="flex mb-4">
-                  <span
-                    className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${
-                      simulation.heterogeneity_preset === "high"
-                        ? "border-red-300 text-red-700 bg-red-50"
-                        : simulation.heterogeneity_preset === "moderate"
-                          ? "border-amber-300 text-amber-700 bg-amber-50"
-                          : simulation.heterogeneity_preset === "low"
-                            ? "border-emerald-300 text-emerald-700 bg-emerald-50"
-                            : "border-purple-300 text-purple-700 bg-purple-50"
-                    }`}
-                  >
-                    {simulation.heterogeneity_preset.charAt(0).toUpperCase() +
-                      simulation.heterogeneity_preset.slice(1)}{" "}
-                    Heterogeneity
-                    {simulation.configs.dirichlet_alpha != null &&
-                      ` (\u03B1=${simulation.configs.dirichlet_alpha})`}
-                  </span>
-                </div>
-              )}
-              <dl className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <dt className="text-gray-500">Rounds</dt>
-                  <dd className="font-medium">
-                    {simulation.configs.num_server_rounds}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500">Local Epochs</dt>
-                  <dd className="font-medium">
-                    {simulation.configs.local_epochs}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500">LR</dt>
-                  <dd className="font-medium">{simulation.configs.lr}</dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500">Batch Size</dt>
-                  <dd className="font-medium">
-                    {simulation.configs.batch_size}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500">LR Decay</dt>
-                  <dd className="font-medium">{simulation.configs.lr_decay}</dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500">Temperature</dt>
-                  <dd className="font-medium">
-                    {simulation.configs.temperature}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  if (simulation && simulation.status === "failed") {
-    return (
-      <div className="p-8">
-        <div className="flex flex-col items-start rounded-lg border-2 border-red-200 bg-red-50 p-16">
-          <XCircle className="h-16 w-16 text-red-500" />
-          <h2 className="mt-6 text-2xl font-semibold text-gray-900">
-            Simulation Failed
-          </h2>
-          {simulation.error_message && (
-            <p className="mt-4 max-w-md text-sm text-gray-700 bg-white rounded p-4">
-              {simulation.error_message}
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  if (isLoading) {
-    return <Loading fullScreen text="Synchronizing client database..." />;
-  }
-
-  if (!simulation) {
-    return (
-      <div className="p-8 text-muted-foreground">Simulation not found</div>
-    );
-  }
-
-  // ===========================================================================
-  // Completed simulation — main render
-  // ===========================================================================
-
   return (
-    <div className="p-8 w-full space-y-10">
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-slate-500">
-          <span className="font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
-            #{simulationId}
-          </span>{" "}
-          &middot;{" "}
-          <span className="font-medium text-slate-700">
-            {clients.length} Clients
-          </span>{" "}
-          &middot;{" "}
-          <span className="font-medium text-emerald-600">Completed</span>
-          {simulation.duration != null && (
-            <>
-              {" "}
-              &middot;{" "}
-              <span className="font-medium text-slate-700">
-                {formatDuration(simulation.duration)}
-              </span>
-            </>
-          )}
+    <div className="p-8 w-full animate-in fade-in duration-500">
+      {isLoading && !simulation ? (
+        <Loading className="min-h-[400px]" text="Loading simulation data..." />
+      ) : !simulation ? (
+        <div className="p-8 flex flex-col items-center justify-center min-h-[400px] text-muted-foreground">
+          <p>Simulation not found</p>
         </div>
+      ) : (
+        (() => {
+          if (
+            simulation.status === "running" ||
+            simulation.status === "pending"
+          ) {
+            return (
+              <div className="flex flex-col items-center justify-center p-16 bg-muted/30 border-2 border-dashed border-border rounded-lg text-center">
+                <Loader2 className="h-16 w-16 mb-4 animate-spin text-primary" />
+                <h2 className="text-xl font-semibold mb-2">
+                  Simulation In Progress
+                </h2>
+                <p className="text-muted-foreground max-w-md">
+                  The simulation is currently running. This may take several
+                  minutes.
+                </p>
+              </div>
+            );
+          }
+          if (simulation.status === "failed") {
+            return (
+              <div className="flex flex-col items-center justify-center p-16 bg-red-50/50 border-2 border-dashed border-red-200 rounded-lg text-center">
+                <XCircle className="h-16 w-16 mb-4 text-red-500" />
+                <h2 className="text-xl font-semibold mb-2 text-red-900">
+                  Simulation Failed
+                </h2>
+                {simulation.error_message && (
+                  <p className="mt-4 max-w-md text-sm text-red-700 bg-white rounded p-4">
+                    {simulation.error_message}
+                  </p>
+                )}
+              </div>
+            );
+          }
 
-        <div className="flex items-center gap-2">
-          <Users size={16} className="text-slate-400" />
-          <Select value={selectedClient} onValueChange={setSelectedClient}>
-            <SelectTrigger className="w-[260px] h-9 text-sm font-medium">
-              <SelectValue placeholder="Select client" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Clients (Overview)</SelectItem>
-              {clients.map((c, idx) => (
-                <SelectItem key={c.id} value={c.id.toString()}>
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-2 h-2 rounded-full"
-                      style={{
-                        backgroundColor:
-                          CLIENT_COLORS[idx % CLIENT_COLORS.length],
-                      }}
-                    />
-                    {c.client_name}{" "}
-                    <span className="text-xs text-slate-400">
-                      ({c.model_type})
+          const metrics = parseMetrics(simulation.aggregate_metrics);
+          const globalMetrics = metrics?.aggregate?.post_fl;
+          const improvement = metrics?.aggregate?.improvement;
+
+          return (
+            <div className="space-y-10">
+              {/* ── Header ── */}
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-500">
+                  <span className="font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">
+                    #{simulationId}
+                  </span>{" "}
+                  &middot;{" "}
+                  <span className="font-medium text-slate-700">
+                    {clients.length} Clients
+                  </span>{" "}
+                  &middot;{" "}
+                  <span className="font-medium text-emerald-600">
+                    Completed
+                  </span>
+                  {simulation.duration != null && (
+                    <>
+                      {" "}
+                      &middot;{" "}
+                      <span className="font-medium text-slate-700">
+                        {formatDuration(simulation.duration)}
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Users size={16} className="text-slate-400" />
+                  <Select
+                    value={selectedClient}
+                    onValueChange={setSelectedClient}
+                  >
+                    <SelectTrigger className="w-[260px] h-9 text-sm font-medium">
+                      <SelectValue placeholder="Select client" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        All Clients (Overview)
+                      </SelectItem>
+                      {clients.map((c, idx) => (
+                        <SelectItem key={c.id} value={c.id.toString()}>
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-2 h-2 rounded-full"
+                              style={{
+                                backgroundColor:
+                                  CLIENT_COLORS[idx % CLIENT_COLORS.length],
+                              }}
+                            />
+                            {c.client_name}{" "}
+                            <span className="text-xs text-slate-400">
+                              ({c.model_type})
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* ── Simulation Config Summary ── */}
+              {simulation.configs && (
+                <section className="bg-white rounded-2xl border border-slate-200 p-5">
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+                    {simulation.heterogeneity_preset && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">
+                          Preset
+                        </span>
+                        <span
+                          className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                            simulation.heterogeneity_preset === "high"
+                              ? "border-red-300 text-red-700 bg-red-50"
+                              : simulation.heterogeneity_preset === "moderate"
+                                ? "border-amber-300 text-amber-700 bg-amber-50"
+                                : simulation.heterogeneity_preset === "low"
+                                  ? "border-emerald-300 text-emerald-700 bg-emerald-50"
+                                  : "border-purple-300 text-purple-700 bg-purple-50"
+                          }`}
+                        >
+                          {simulation.heterogeneity_preset
+                            .charAt(0)
+                            .toUpperCase() +
+                            simulation.heterogeneity_preset.slice(1)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="h-4 w-px bg-slate-200" />
+                    <div>
+                      <span className="text-slate-400 text-xs">Rounds</span>{" "}
+                      <span className="font-semibold text-slate-700">
+                        {simulation.configs.num_server_rounds}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-xs">Epochs</span>{" "}
+                      <span className="font-semibold text-slate-700">
+                        {simulation.configs.local_epochs}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-xs">LR</span>{" "}
+                      <span className="font-semibold text-slate-700">
+                        {simulation.configs.lr}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-xs">LR Decay</span>{" "}
+                      <span className="font-semibold text-slate-700">
+                        {simulation.configs.lr_decay}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-xs">Batch</span>{" "}
+                      <span className="font-semibold text-slate-700">
+                        {simulation.configs.batch_size}
+                      </span>
+                    </div>
+                    {simulation.configs.dirichlet_alpha != null && (
+                      <div>
+                        <span className="text-slate-400 text-xs">
+                          Dirichlet &alpha;
+                        </span>{" "}
+                        <span className="font-semibold text-slate-700">
+                          {simulation.configs.dirichlet_alpha}
+                        </span>
+                      </div>
+                    )}
+                    {simulation.configs.temperature != null && (
+                      <div>
+                        <span className="text-slate-400 text-xs">Temp</span>{" "}
+                        <span className="font-semibold text-slate-700">
+                          {simulation.configs.temperature}
+                        </span>
+                      </div>
+                    )}
+                    {simulation.duration != null && (
+                      <>
+                        <div className="h-4 w-px bg-slate-200" />
+                        <div>
+                          <span className="text-slate-400 text-xs">
+                            Duration
+                          </span>{" "}
+                          <span className="font-semibold text-slate-700">
+                            {formatDuration(simulation.duration)}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {/* ── Section: Data Heterogeneity (all clients view) ── */}
+              {selectedClient === "all" && dataHetChart && (
+                <section>
+                  <div className="flex items-center justify-between mb-5">
+                    <h2 className="text-xl font-bold text-slate-900">
+                      Data Heterogeneity
+                    </h2>
+                    <span className="text-xs font-medium bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-200">
+                      Dirichlet &alpha; ={" "}
+                      {simulation?.heterogeneity_preset === "moderate"
+                        ? "2.5"
+                        : simulation?.heterogeneity_preset === "high"
+                          ? "1.0"
+                          : "5.0"}
                     </span>
                   </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
 
-      {/* ── Simulation Config Summary ── */}
-      {simulation.configs && (
-        <section className="bg-white rounded-2xl border border-slate-200 p-5">
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
-            {simulation.heterogeneity_preset && (
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">
-                  Preset
-                </span>
-                <span
-                  className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-                    simulation.heterogeneity_preset === "high"
-                      ? "border-red-300 text-red-700 bg-red-50"
-                      : simulation.heterogeneity_preset === "moderate"
-                        ? "border-amber-300 text-amber-700 bg-amber-50"
-                        : simulation.heterogeneity_preset === "low"
-                          ? "border-emerald-300 text-emerald-700 bg-emerald-50"
-                          : "border-purple-300 text-purple-700 bg-purple-50"
-                  }`}
-                >
-                  {simulation.heterogeneity_preset.charAt(0).toUpperCase() +
-                    simulation.heterogeneity_preset.slice(1)}
-                </span>
-              </div>
-            )}
-            <div className="h-4 w-px bg-slate-200" />
-            <div>
-              <span className="text-slate-400 text-xs">Rounds</span>{" "}
-              <span className="font-semibold text-slate-700">
-                {simulation.configs.num_server_rounds}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-400 text-xs">Epochs</span>{" "}
-              <span className="font-semibold text-slate-700">
-                {simulation.configs.local_epochs}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-400 text-xs">LR</span>{" "}
-              <span className="font-semibold text-slate-700">
-                {simulation.configs.lr}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-400 text-xs">LR Decay</span>{" "}
-              <span className="font-semibold text-slate-700">
-                {simulation.configs.lr_decay}
-              </span>
-            </div>
-            <div>
-              <span className="text-slate-400 text-xs">Batch</span>{" "}
-              <span className="font-semibold text-slate-700">
-                {simulation.configs.batch_size}
-              </span>
-            </div>
-            {simulation.configs.dirichlet_alpha != null && (
-              <div>
-                <span className="text-slate-400 text-xs">
-                  Dirichlet &alpha;
-                </span>{" "}
-                <span className="font-semibold text-slate-700">
-                  {simulation.configs.dirichlet_alpha}
-                </span>
-              </div>
-            )}
-            {simulation.configs.temperature != null && (
-              <div>
-                <span className="text-slate-400 text-xs">Temp</span>{" "}
-                <span className="font-semibold text-slate-700">
-                  {simulation.configs.temperature}
-                </span>
-              </div>
-            )}
-            {simulation.duration != null && (
-              <>
-                <div className="h-4 w-px bg-slate-200" />
-                <div>
-                  <span className="text-slate-400 text-xs">Duration</span>{" "}
-                  <span className="font-semibold text-slate-700">
-                    {formatDuration(simulation.duration)}
-                  </span>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Bar chart */}
+                    <div className="bg-white p-6 rounded-2xl border border-slate-200">
+                      <h3 className="text-sm font-semibold text-slate-700 mb-3">
+                        Class Distribution per Client
+                      </h3>
+                      <div className="h-72">
+                        <Bar data={dataHetChart} options={dataHetOptions} />
+                      </div>
+                    </div>
+
+                    {/* Table */}
+                    <div className="bg-white p-6 rounded-2xl border border-slate-200">
+                      <h3 className="text-sm font-semibold text-slate-700 mb-3">
+                        Client Breakdown
+                      </h3>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-left">
+                            <th className="py-2.5 font-semibold text-slate-600">
+                              Client
+                            </th>
+                            <th className="py-2.5 font-semibold text-slate-600 text-right">
+                              Samples
+                            </th>
+                            <th className="py-2.5 font-semibold text-slate-600 text-right">
+                              Ratio
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {clients.map((c, idx) => {
+                            const cm = clientMetricsMap.get(c.id);
+                            const dh = cm?.data_heterogeneity;
+                            return (
+                              <tr
+                                key={c.id}
+                                className="border-b border-slate-100 hover:bg-slate-50"
+                              >
+                                <td className="py-2.5 font-medium text-slate-900 flex items-center gap-2">
+                                  <div
+                                    className="w-2 h-2 rounded-full"
+                                    style={{
+                                      backgroundColor:
+                                        CLIENT_COLORS[
+                                          idx % CLIENT_COLORS.length
+                                        ],
+                                    }}
+                                  />
+                                  {c.client_name}
+                                </td>
+                                <td className="py-2.5 text-right text-slate-700">
+                                  {dh?.total_samples?.toLocaleString() ?? "—"}
+                                </td>
+                                <td className="py-2.5 text-right">
+                                  {dh ? (
+                                    <span
+                                      className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+                                        dh.imbalance_ratio <= 1.5
+                                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                          : dh.imbalance_ratio <= 5
+                                            ? "bg-amber-50 text-amber-700 border-amber-200"
+                                            : "bg-red-50 text-red-700 border-red-200"
+                                      }`}
+                                    >
+                                      {dh.imbalance_ratio.toFixed(1)}:1
+                                    </span>
+                                  ) : (
+                                    "—"
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* ── Section: Training Convergence ── */}
+              <section>
+                <h2 className="text-xl font-bold text-slate-900 mb-5">
+                  Training Convergence
+                </h2>
+                <div className="flex flex-wrap items-start gap-6">
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 w-full lg:w-[calc(33.333%-1rem)]">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-1">
+                      {selectedClient === "all"
+                        ? "Avg Validation Loss"
+                        : "Validation Loss"}
+                    </h3>
+                    <p className="text-xs text-slate-400 mb-3">
+                      {selectedClient === "all"
+                        ? "Average validation loss across all clients"
+                        : "The loss value calculated on the validation set after local training rounds"}
+                    </p>
+                    <div className="h-72">
+                      <Line data={lossChartData} options={lossOptions} />
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 w-full lg:w-[calc(33.333%-1rem)]">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-1">
+                      {selectedClient === "all"
+                        ? "Avg Validation Accuracy"
+                        : "Validation Accuracy"}
+                    </h3>
+                    <p className="text-xs text-slate-400 mb-3">
+                      {selectedClient === "all"
+                        ? "Average validation accuracy across all clients"
+                        : "Validation accuracy each round"}
+                    </p>
+                    <div className="h-72">
+                      <Line data={accChartData} options={accOptions} />
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 w-full lg:w-[calc(33.333%-1rem)]">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-1">
+                      {selectedClient === "all"
+                        ? "Avg Accuracy Delta"
+                        : "Accuracy Delta"}
+                    </h3>
+                    <p className="text-xs text-slate-400 mb-3">
+                      Round-to-round accuracy change (positive = improving)
+                    </p>
+                    <div className="h-72">
+                      <Line
+                        data={accDeltaChartData}
+                        options={accDeltaOptions}
+                      />
+                    </div>
+                  </div>
                 </div>
-              </>
-            )}
-          </div>
-        </section>
-      )}
+              </section>
 
-      {/* ── Section: Data Heterogeneity (all clients view) ── */}
-      {selectedClient === "all" && dataHetChart && (
-        <section>
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-xl font-bold text-slate-900">
-              Data Heterogeneity
-            </h2>
-            <span className="text-xs font-medium bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-200">
-              Dirichlet &alpha; ={" "}
-              {simulation?.heterogeneity_preset === "moderate"
-                ? "2.5"
-                : simulation?.heterogeneity_preset === "high"
-                  ? "1.0"
-                  : "5.0"}
-            </span>
-          </div>
+              {/* ── Section: Post-FL Results — Overall (all clients view) ── */}
+              {selectedClient === "all" && (
+                <section>
+                  <h2 className="text-xl font-bold text-slate-900 mb-5">
+                    Post-FL Evaluation
+                    <span className="text-xs font-normal text-slate-400 ml-2">
+                      on balanced test set (50/50)
+                    </span>
+                  </h2>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Bar chart */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">
-                Class Distribution per Client
-              </h3>
-              <div className="h-72">
-                <Bar data={dataHetChart} options={dataHetOptions} />
-              </div>
-            </div>
+                  {/* Summary cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <MetricCard
+                      label="Avg Accuracy"
+                      value={pct(postFlStats.avgAcc)}
+                      accent="text-slate-900"
+                    />
+                    <MetricCard
+                      label="Avg Class Gap"
+                      value={pct(postFlStats.avgGap)}
+                      sub={gapLabel(postFlStats.avgGap)}
+                      accent={
+                        postFlStats.avgGap <= 0.1
+                          ? "text-emerald-700"
+                          : postFlStats.avgGap <= 0.2
+                            ? "text-amber-700"
+                            : "text-red-700"
+                      }
+                    />
+                    <MetricCard
+                      label="Avg F1 Score"
+                      value={postFlStats.avgF1.toFixed(3)}
+                    />
+                    <MetricCard
+                      label="Weakest Client"
+                      value={pct(postFlStats.worst.acc)}
+                      sub={postFlStats.worst.name}
+                    />
+                  </div>
 
-            {/* Table */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">
-                Client Breakdown
-              </h3>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-left">
-                    <th className="py-2.5 font-semibold text-slate-600">
-                      Client
-                    </th>
-                    <th className="py-2.5 font-semibold text-slate-600 text-right">
-                      Samples
-                    </th>
-                    <th className="py-2.5 font-semibold text-slate-600 text-right">
-                      Ratio
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clients.map((c, idx) => {
-                    const cm = clientMetricsMap.get(c.id);
-                    const dh = cm?.data_heterogeneity;
-                    return (
-                      <tr
-                        key={c.id}
-                        className="border-b border-slate-100 hover:bg-slate-50"
-                      >
-                        <td className="py-2.5 font-medium text-slate-900 flex items-center gap-2">
-                          <div
-                            className="w-2 h-2 rounded-full"
-                            style={{
-                              backgroundColor:
-                                CLIENT_COLORS[idx % CLIENT_COLORS.length],
-                            }}
-                          />
-                          {c.client_name}
-                        </td>
-                        <td className="py-2.5 text-right text-slate-700">
-                          {dh?.total_samples?.toLocaleString() ?? "—"}
-                        </td>
-                        <td className="py-2.5 text-right">
-                          {dh ? (
+                  {/* Comparison table */}
+                  <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                          <th className="py-3 px-4 text-left font-semibold text-slate-600">
+                            Client
+                          </th>
+                          <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                            Accuracy
+                          </th>
+                          <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                            Class Gap
+                          </th>
+                          <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                            Leukemia Acc
+                          </th>
+                          <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                            Healthy Acc
+                          </th>
+                          <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                            F1
+                          </th>
+                          <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                            Precision
+                          </th>
+                          <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                            Recall
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {clients.map((c, idx) => {
+                          const pf = clientMetricsMap.get(c.id)?.global
+                            ?.post_fl;
+                          if (!pf) return null;
+                          const gap = pf.class_gap ?? 0;
+                          return (
+                            <tr
+                              key={c.id}
+                              className="border-b border-slate-100 hover:bg-slate-50"
+                            >
+                              <td className="py-3 px-4 font-medium text-slate-900 flex items-center gap-2">
+                                <div
+                                  className="w-2 h-2 rounded-full flex-shrink-0"
+                                  style={{
+                                    backgroundColor:
+                                      CLIENT_COLORS[idx % CLIENT_COLORS.length],
+                                  }}
+                                />
+                                <span>{c.client_name}</span>
+                                <span className="text-xs text-slate-400">
+                                  {c.model_type}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-right font-semibold text-slate-900">
+                                {pct(pf.accuracy)}
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <span
+                                  className={`text-xs font-medium px-2 py-0.5 rounded-full border ${gapBadge(gap)}`}
+                                >
+                                  {pct(gap)}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-right text-slate-700">
+                                {pct(pf.leukemia_accuracy)}
+                              </td>
+                              <td className="py-3 px-4 text-right text-slate-700">
+                                {pct(pf.healthy_accuracy)}
+                              </td>
+                              <td className="py-3 px-4 text-right text-slate-700">
+                                {pf.f1_score.toFixed(3)}
+                              </td>
+                              <td className="py-3 px-4 text-right text-slate-700">
+                                {pct(pf.precision)}
+                              </td>
+                              <td className="py-3 px-4 text-right text-slate-700">
+                                {pct(pf.recall)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
+              {/* ── Section: Individual Client Detail ── */}
+              {selectedClient !== "all" && selectedCM && (
+                <section>
+                  <div className="flex items-center justify-between mb-5">
+                    <h2 className="text-xl font-bold text-slate-900">
+                      Post-FL Evaluation
+                      <span className="text-xs font-normal text-slate-400 ml-2">
+                        on balanced test set (50/50)
+                      </span>
+                    </h2>
+                    <span className="text-sm font-medium text-slate-500">
+                      {selectedInfo?.client_name}{" "}
+                      <span className="text-slate-400">|</span>{" "}
+                      {selectedInfo?.model_type}
+                    </span>
+                  </div>
+
+                  {/* Metric cards — row 1 */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <MetricCard
+                      label="Accuracy"
+                      value={pct(selectedCM.global.post_fl.accuracy)}
+                      accent="text-slate-900"
+                    />
+                    <MetricCard
+                      label="Class Gap"
+                      value={pct(selectedCM.global.post_fl.class_gap ?? 0)}
+                      sub={gapLabel(selectedCM.global.post_fl.class_gap ?? 0)}
+                      accent={
+                        (selectedCM.global.post_fl.class_gap ?? 0) <= 0.1
+                          ? "text-emerald-700"
+                          : (selectedCM.global.post_fl.class_gap ?? 0) <= 0.2
+                            ? "text-amber-700"
+                            : "text-red-700"
+                      }
+                    />
+                    <MetricCard
+                      label="Leukemia Accuracy"
+                      value={pct(selectedCM.global.post_fl.leukemia_accuracy)}
+                      sub="Sensitivity"
+                    />
+                    <MetricCard
+                      label="Healthy Accuracy"
+                      value={pct(selectedCM.global.post_fl.healthy_accuracy)}
+                      sub="Specificity"
+                    />
+                  </div>
+
+                  {/* Metric cards — row 2 */}
+                  <div className="grid grid-cols-3 gap-4 mb-6">
+                    <MetricCard
+                      label="Precision"
+                      value={pct(selectedCM.global.post_fl.precision)}
+                    />
+                    <MetricCard
+                      label="Recall"
+                      value={pct(selectedCM.global.post_fl.recall)}
+                    />
+                    <MetricCard
+                      label="F1 Score"
+                      value={selectedCM.global.post_fl.f1_score.toFixed(3)}
+                    />
+                  </div>
+
+                  {/* Confusion matrix + data heterogeneity */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white p-6 rounded-2xl border border-slate-200">
+                      <h3 className="text-sm font-semibold text-slate-700 mb-4">
+                        Confusion Matrix
+                      </h3>
+                      <ConfusionMatrixCard
+                        confusionMatrix={
+                          selectedCM.global.post_fl.confusion_matrix
+                        }
+                        accuracy={selectedCM.global.post_fl.accuracy}
+                      />
+                    </div>
+
+                    {selectedCM.data_heterogeneity && (
+                      <div className="bg-white p-6 rounded-2xl border border-slate-200">
+                        <h3 className="text-sm font-semibold text-slate-700 mb-4">
+                          Data Partition
+                        </h3>
+                        <div className="space-y-4">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-500">
+                              Total Samples
+                            </span>
+                            <span className="font-semibold text-slate-900">
+                              {selectedCM.data_heterogeneity.total_samples.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-500">Train / Val</span>
+                            <span className="text-slate-700">
+                              {selectedCM.data_heterogeneity.train_samples.toLocaleString()}{" "}
+                              /{" "}
+                              {selectedCM.data_heterogeneity.val_samples.toLocaleString()}
+                            </span>
+                          </div>
+
+                          {/* Class bars */}
+                          <div className="pt-2 space-y-3">
+                            <div>
+                              <div className="flex justify-between text-xs mb-1">
+                                <span className="text-red-600 font-medium">
+                                  Leukemia (ALL)
+                                </span>
+                                <span className="text-slate-500">
+                                  {selectedCM.data_heterogeneity.class_distribution.leukemia.toLocaleString()}{" "}
+                                  (
+                                  {selectedCM.data_heterogeneity.class_distribution.leukemia_pct.toFixed(
+                                    1,
+                                  )}
+                                  %)
+                                </span>
+                              </div>
+                              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-red-500 rounded-full"
+                                  style={{
+                                    width: `${selectedCM.data_heterogeneity.class_distribution.leukemia_pct}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <div className="flex justify-between text-xs mb-1">
+                                <span className="text-emerald-600 font-medium">
+                                  Healthy
+                                </span>
+                                <span className="text-slate-500">
+                                  {selectedCM.data_heterogeneity.class_distribution.healthy.toLocaleString()}{" "}
+                                  (
+                                  {selectedCM.data_heterogeneity.class_distribution.healthy_pct.toFixed(
+                                    1,
+                                  )}
+                                  %)
+                                </span>
+                              </div>
+                              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-emerald-500 rounded-full"
+                                  style={{
+                                    width: `${selectedCM.data_heterogeneity.class_distribution.healthy_pct}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                            <span className="text-sm text-slate-500">
+                              Imbalance Ratio
+                            </span>
                             <span
-                              className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-                                dh.imbalance_ratio <= 1.5
+                              className={`text-xs font-medium px-2.5 py-0.5 rounded-full border ${
+                                selectedCM.data_heterogeneity.imbalance_ratio <=
+                                1.5
                                   ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                  : dh.imbalance_ratio <= 5
+                                  : selectedCM.data_heterogeneity
+                                        .imbalance_ratio <= 5
                                     ? "bg-amber-50 text-amber-700 border-amber-200"
                                     : "bg-red-50 text-red-700 border-red-200"
                               }`}
                             >
-                              {dh.imbalance_ratio.toFixed(1)}:1
+                              {selectedCM.data_heterogeneity.imbalance_ratio.toFixed(
+                                1,
+                              )}
+                              :1
                             </span>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ── Section: Training Convergence ── */}
-      <section>
-        <h2 className="text-xl font-bold text-slate-900 mb-5">
-          Training Convergence
-        </h2>
-        <div className="flex flex-wrap items-start gap-6">
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 w-full lg:w-[calc(33.333%-1rem)]">
-            <h3 className="text-sm font-semibold text-slate-700 mb-1">
-              {selectedClient === "all"
-                ? "Avg Validation Loss"
-                : "Validation Loss"}
-            </h3>
-            <p className="text-xs text-slate-400 mb-3">
-              {selectedClient === "all"
-                ? "Average validation loss across all clients"
-                : "The loss value calculated on the validation set after local training rounds"}
-            </p>
-            <div className="h-72">
-              <Line data={lossChartData} options={lossOptions} />
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 w-full lg:w-[calc(33.333%-1rem)]">
-            <h3 className="text-sm font-semibold text-slate-700 mb-1">
-              {selectedClient === "all"
-                ? "Avg Validation Accuracy"
-                : "Validation Accuracy"}
-            </h3>
-            <p className="text-xs text-slate-400 mb-3">
-              {selectedClient === "all"
-                ? "Average validation accuracy across all clients"
-                : "Validation accuracy each round"}
-            </p>
-            <div className="h-72">
-              <Line data={accChartData} options={accOptions} />
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 w-full lg:w-[calc(33.333%-1rem)]">
-            <h3 className="text-sm font-semibold text-slate-700 mb-1">
-              {selectedClient === "all"
-                ? "Avg Accuracy Delta"
-                : "Accuracy Delta"}
-            </h3>
-            <p className="text-xs text-slate-400 mb-3">
-              Round-to-round accuracy change (positive = improving)
-            </p>
-            <div className="h-72">
-              <Line data={accDeltaChartData} options={accDeltaOptions} />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Section: Post-FL Results — Overall (all clients view) ── */}
-      {selectedClient === "all" && (
-        <section>
-          <h2 className="text-xl font-bold text-slate-900 mb-5">
-            Post-FL Evaluation
-            <span className="text-xs font-normal text-slate-400 ml-2">
-              on balanced test set (50/50)
-            </span>
-          </h2>
-
-          {/* Summary cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <MetricCard
-              label="Avg Accuracy"
-              value={pct(postFlStats.avgAcc)}
-              accent="text-slate-900"
-            />
-            <MetricCard
-              label="Avg Class Gap"
-              value={pct(postFlStats.avgGap)}
-              sub={gapLabel(postFlStats.avgGap)}
-              accent={
-                postFlStats.avgGap <= 0.1
-                  ? "text-emerald-700"
-                  : postFlStats.avgGap <= 0.2
-                    ? "text-amber-700"
-                    : "text-red-700"
-              }
-            />
-            <MetricCard
-              label="Avg F1 Score"
-              value={postFlStats.avgF1.toFixed(3)}
-            />
-            <MetricCard
-              label="Weakest Client"
-              value={pct(postFlStats.worst.acc)}
-              sub={postFlStats.worst.name}
-            />
-          </div>
-
-          {/* Comparison table */}
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="py-3 px-4 text-left font-semibold text-slate-600">
-                    Client
-                  </th>
-                  <th className="py-3 px-4 text-right font-semibold text-slate-600">
-                    Accuracy
-                  </th>
-                  <th className="py-3 px-4 text-right font-semibold text-slate-600">
-                    Class Gap
-                  </th>
-                  <th className="py-3 px-4 text-right font-semibold text-slate-600">
-                    Leukemia Acc
-                  </th>
-                  <th className="py-3 px-4 text-right font-semibold text-slate-600">
-                    Healthy Acc
-                  </th>
-                  <th className="py-3 px-4 text-right font-semibold text-slate-600">
-                    F1
-                  </th>
-                  <th className="py-3 px-4 text-right font-semibold text-slate-600">
-                    Precision
-                  </th>
-                  <th className="py-3 px-4 text-right font-semibold text-slate-600">
-                    Recall
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {clients.map((c, idx) => {
-                  const pf = clientMetricsMap.get(c.id)?.global?.post_fl;
-                  if (!pf) return null;
-                  const gap = pf.class_gap ?? 0;
-                  return (
-                    <tr
-                      key={c.id}
-                      className="border-b border-slate-100 hover:bg-slate-50"
-                    >
-                      <td className="py-3 px-4 font-medium text-slate-900 flex items-center gap-2">
-                        <div
-                          className="w-2 h-2 rounded-full flex-shrink-0"
-                          style={{
-                            backgroundColor:
-                              CLIENT_COLORS[idx % CLIENT_COLORS.length],
-                          }}
-                        />
-                        <span>{c.client_name}</span>
-                        <span className="text-xs text-slate-400">
-                          {c.model_type}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right font-semibold text-slate-900">
-                        {pct(pf.accuracy)}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <span
-                          className={`text-xs font-medium px-2 py-0.5 rounded-full border ${gapBadge(gap)}`}
-                        >
-                          {pct(gap)}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right text-slate-700">
-                        {pct(pf.leukemia_accuracy)}
-                      </td>
-                      <td className="py-3 px-4 text-right text-slate-700">
-                        {pct(pf.healthy_accuracy)}
-                      </td>
-                      <td className="py-3 px-4 text-right text-slate-700">
-                        {pf.f1_score.toFixed(3)}
-                      </td>
-                      <td className="py-3 px-4 text-right text-slate-700">
-                        {pct(pf.precision)}
-                      </td>
-                      <td className="py-3 px-4 text-right text-slate-700">
-                        {pct(pf.recall)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
-      {/* ── Section: Individual Client Detail ── */}
-      {selectedClient !== "all" && selectedCM && (
-        <section>
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-xl font-bold text-slate-900">
-              Post-FL Evaluation
-              <span className="text-xs font-normal text-slate-400 ml-2">
-                on balanced test set (50/50)
-              </span>
-            </h2>
-            <span className="text-sm font-medium text-slate-500">
-              {selectedInfo?.client_name}{" "}
-              <span className="text-slate-400">|</span>{" "}
-              {selectedInfo?.model_type}
-            </span>
-          </div>
-
-          {/* Metric cards — row 1 */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-            <MetricCard
-              label="Accuracy"
-              value={pct(selectedCM.global.post_fl.accuracy)}
-              accent="text-slate-900"
-            />
-            <MetricCard
-              label="Class Gap"
-              value={pct(selectedCM.global.post_fl.class_gap ?? 0)}
-              sub={gapLabel(selectedCM.global.post_fl.class_gap ?? 0)}
-              accent={
-                (selectedCM.global.post_fl.class_gap ?? 0) <= 0.1
-                  ? "text-emerald-700"
-                  : (selectedCM.global.post_fl.class_gap ?? 0) <= 0.2
-                    ? "text-amber-700"
-                    : "text-red-700"
-              }
-            />
-            <MetricCard
-              label="Leukemia Accuracy"
-              value={pct(selectedCM.global.post_fl.leukemia_accuracy)}
-              sub="Sensitivity"
-            />
-            <MetricCard
-              label="Healthy Accuracy"
-              value={pct(selectedCM.global.post_fl.healthy_accuracy)}
-              sub="Specificity"
-            />
-          </div>
-
-          {/* Metric cards — row 2 */}
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            <MetricCard
-              label="Precision"
-              value={pct(selectedCM.global.post_fl.precision)}
-            />
-            <MetricCard
-              label="Recall"
-              value={pct(selectedCM.global.post_fl.recall)}
-            />
-            <MetricCard
-              label="F1 Score"
-              value={selectedCM.global.post_fl.f1_score.toFixed(3)}
-            />
-          </div>
-
-          {/* Confusion matrix + data heterogeneity */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white p-6 rounded-2xl border border-slate-200">
-              <h3 className="text-sm font-semibold text-slate-700 mb-4">
-                Confusion Matrix
-              </h3>
-              <ConfusionMatrixCard
-                confusionMatrix={selectedCM.global.post_fl.confusion_matrix}
-                accuracy={selectedCM.global.post_fl.accuracy}
-              />
-            </div>
-
-            {selectedCM.data_heterogeneity && (
-              <div className="bg-white p-6 rounded-2xl border border-slate-200">
-                <h3 className="text-sm font-semibold text-slate-700 mb-4">
-                  Data Partition
-                </h3>
-                <div className="space-y-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Total Samples</span>
-                    <span className="font-semibold text-slate-900">
-                      {selectedCM.data_heterogeneity.total_samples.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Train / Val</span>
-                    <span className="text-slate-700">
-                      {selectedCM.data_heterogeneity.train_samples.toLocaleString()}{" "}
-                      /{" "}
-                      {selectedCM.data_heterogeneity.val_samples.toLocaleString()}
-                    </span>
-                  </div>
-
-                  {/* Class bars */}
-                  <div className="pt-2 space-y-3">
-                    <div>
-                      <div className="flex justify-between text-xs mb-1">
-                        <span className="text-red-600 font-medium">
-                          Leukemia (ALL)
-                        </span>
-                        <span className="text-slate-500">
-                          {selectedCM.data_heterogeneity.class_distribution.leukemia.toLocaleString()}{" "}
-                          (
-                          {selectedCM.data_heterogeneity.class_distribution.leukemia_pct.toFixed(
-                            1,
-                          )}
-                          %)
-                        </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-red-500 rounded-full"
-                          style={{
-                            width: `${selectedCM.data_heterogeneity.class_distribution.leukemia_pct}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-xs mb-1">
-                        <span className="text-emerald-600 font-medium">
-                          Healthy
-                        </span>
-                        <span className="text-slate-500">
-                          {selectedCM.data_heterogeneity.class_distribution.healthy.toLocaleString()}{" "}
-                          (
-                          {selectedCM.data_heterogeneity.class_distribution.healthy_pct.toFixed(
-                            1,
-                          )}
-                          %)
-                        </span>
-                      </div>
-                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-emerald-500 rounded-full"
-                          style={{
-                            width: `${selectedCM.data_heterogeneity.class_distribution.healthy_pct}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
+                    )}
                   </div>
-
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                    <span className="text-sm text-slate-500">
-                      Imbalance Ratio
-                    </span>
-                    <span
-                      className={`text-xs font-medium px-2.5 py-0.5 rounded-full border ${
-                        selectedCM.data_heterogeneity.imbalance_ratio <= 1.5
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          : selectedCM.data_heterogeneity.imbalance_ratio <= 5
-                            ? "bg-amber-50 text-amber-700 border-amber-200"
-                            : "bg-red-50 text-red-700 border-red-200"
-                      }`}
-                    >
-                      {selectedCM.data_heterogeneity.imbalance_ratio.toFixed(1)}
-                      :1
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
+                </section>
+              )}
+            </div>
+          );
+        })()
       )}
     </div>
   );

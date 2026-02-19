@@ -4,7 +4,6 @@ from supabase import Client as SupabaseClient
 from app.config import get_supabase_client
 from app.schemas.system_config import (
     SystemConfig, SystemConfigUpdate, SystemConfigData,
-    DEFAULT_HETEROGENEITY_PRESETS,
 )
 from datetime import datetime
 import logging
@@ -175,11 +174,15 @@ async def list_presets(
             presets = response.data[0]["config"].get("presets")
             if presets:
                 return presets
-        # Fallback to defaults if not in DB
-        return DEFAULT_HETEROGENEITY_PRESETS
+        raise HTTPException(
+            status_code=500,
+            detail="No presets found in system_config. Please run database migrations (db.sql)."
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error fetching presets: {e}")
-        return DEFAULT_HETEROGENEITY_PRESETS
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @router.get("/system_config/presets/{preset_name}")
@@ -191,20 +194,19 @@ async def get_preset(
     try:
         response = supabase.from_("system_config").select("config").limit(1).execute()
         if response.data and len(response.data) > 0:
-            presets = response.data[0]["config"].get("presets")
-            if presets and preset_name in presets:
+            presets = response.data[0]["config"].get("presets", {})
+            if preset_name in presets:
                 return presets[preset_name]
-        # Fallback to defaults
-        if preset_name in DEFAULT_HETEROGENEITY_PRESETS:
-            return DEFAULT_HETEROGENEITY_PRESETS[preset_name]
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unknown preset '{preset_name}'. Valid presets: {list(presets.keys())}"
+            )
         raise HTTPException(
-            status_code=404,
-            detail=f"Unknown preset '{preset_name}'. Valid presets: {list(DEFAULT_HETEROGENEITY_PRESETS.keys())}"
+            status_code=500,
+            detail="System configuration not found. Please run database migrations (db.sql)."
         )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error fetching preset '{preset_name}': {e}")
-        if preset_name in DEFAULT_HETEROGENEITY_PRESETS:
-            return DEFAULT_HETEROGENEITY_PRESETS[preset_name]
-        raise HTTPException(status_code=404, detail=f"Unknown preset '{preset_name}'")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")

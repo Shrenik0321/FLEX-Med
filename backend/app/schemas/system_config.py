@@ -1,51 +1,7 @@
 """Pydantic schemas for system configuration."""
 from pydantic import BaseModel, Field
-from typing import Optional, Dict
+from typing import Dict
 from datetime import datetime
-
-
-# Default presets (fallback if not found in database)
-DEFAULT_HETEROGENEITY_PRESETS: Dict[str, dict] = {
-    "low": {
-        "dirichlet_alpha": 5.0,
-        "minority_boost": 1.0,
-        "focal_alpha": 0.50,
-        "focal_gamma": 2.0,
-        "consensus_momentum": 0.10,
-        "distill_weight_base": 0.55,
-        "distill_decay_rate": 0.30,
-        "train_loss_weight": 0.65,
-        "distill_loss_weight": 0.35,
-        "lr_decay": 0.92,
-        "learning_rate": 0.001,
-    },
-    "moderate": {
-        "dirichlet_alpha": 2.5,
-        "minority_boost": 0.70,
-        "focal_alpha": 0.50,
-        "focal_gamma": 2.0,
-        "consensus_momentum": 0.40,
-        "distill_weight_base": 0.45,
-        "distill_decay_rate": 0.20,
-        "train_loss_weight": 0.70,
-        "distill_loss_weight": 0.30,
-        "lr_decay": 0.95,
-        "learning_rate": 0.001,
-    },
-    "high": {
-        "dirichlet_alpha": 1.0,
-        "minority_boost": 0.65,
-        "focal_alpha": 0.50,
-        "focal_gamma": 2.5,
-        "consensus_momentum": 0.30,
-        "distill_weight_base": 0.35,
-        "distill_decay_rate": 0.15,
-        "train_loss_weight": 0.75,
-        "distill_loss_weight": 0.25,
-        "lr_decay": 0.97,
-        "learning_rate": 0.001,
-    },
-}
 
 
 class SystemConfigData(BaseModel):
@@ -66,7 +22,7 @@ class SystemConfigData(BaseModel):
 
     # Heterogeneity Presets (stored in DB, editable via API)
     presets: Dict[str, dict] = Field(
-        default=DEFAULT_HETEROGENEITY_PRESETS,
+        default_factory=dict,
         description="Heterogeneity preset configurations keyed by name (low, moderate, high, custom)"
     )
 
@@ -106,15 +62,15 @@ class SystemConfigData(BaseModel):
 
     def get_active_preset_config(self) -> dict:
         """Resolve the active preset config values.
-        
+
         Returns the preset dict for the active heterogeneity_preset.
-        Falls back to the 'moderate' preset if the preset key is not found.
+        Falls back to the 'moderate' preset if the active key is not found.
         """
         preset = self.presets.get(self.heterogeneity_preset)
         if preset is not None:
             return preset
-        # Fallback to moderate
-        return self.presets.get("moderate", DEFAULT_HETEROGENEITY_PRESETS["moderate"])
+        # Fallback to moderate preset from DB
+        return self.presets.get("moderate", {})
 
 
 class SystemConfig(BaseModel):

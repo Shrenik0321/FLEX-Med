@@ -12,6 +12,7 @@ import {
   formatDateTime,
 } from "@/types/fl-simulation";
 import { Loading } from "../ui/loading";
+import { EmptyState } from "../ui/empty-state";
 
 interface FLHistoryPageProps {
   onStartClick: () => void;
@@ -146,10 +147,6 @@ export default function FLHistoryPage({
     );
   });
 
-  if (loading) {
-    return <Loading fullScreen text="Synchronizing client database..." />;
-  }
-
   return (
     <div className="p-8">
       {/* Search */}
@@ -169,146 +166,160 @@ export default function FLHistoryPage({
         </div>
       </div>
 
-      {/* Simulations Table */}
-      <div className="bg-card rounded-lg shadow-sm border border-border">
-        {filteredSimulations.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground">
-            No simulations found.{" "}
-            <Button
-              variant="link"
-              onClick={onStartClick}
-              className="p-0 h-auto font-medium"
-            >
-              Start your first simulation
-            </Button>
-          </div>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                  Simulation ID
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                  Heterogeneity
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                  Rounds
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                  Clients
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                  Avg Accuracy
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                  Duration
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                  Started At
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                  Action
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredSimulations.map((simulation) => {
-                const metrics = parseMetrics(simulation.aggregate_metrics);
-                const avgAccuracy = metrics?.aggregate?.post_fl?.avg_accuracy;
-                const numClients = metrics?.total_clients || 0;
-                const preset = simulation.heterogeneity_preset ?? simulation.configs?.heterogeneity_preset;
-                const alpha = simulation.configs?.dirichlet_alpha;
+      {/* Simulations Table or Loading */}
+      {loading ? (
+        <Loading
+          className="min-h-[400px]"
+          text="Synchronizing client database..."
+        />
+      ) : (
+        <div className="bg-card rounded-lg shadow-sm border border-border">
+          {filteredSimulations.length === 0 ? (
+            <EmptyState
+              title="No simulations found"
+              description={
+                searchTerm
+                  ? "No simulations match your search criteria."
+                  : "Get started by running your first federated learning simulation."
+              }
+              action={
+                !searchTerm
+                  ? { label: "Start Simulation", onClick: onStartClick }
+                  : undefined
+              }
+            />
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
+                    Simulation ID
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
+                    Heterogeneity
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
+                    Rounds
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
+                    Clients
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
+                    Avg Accuracy
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
+                    Duration
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
+                    Started At
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSimulations.map((simulation) => {
+                  const metrics = parseMetrics(simulation.aggregate_metrics);
+                  const avgAccuracy = metrics?.aggregate?.post_fl?.avg_accuracy;
+                  const numClients = metrics?.total_clients || 0;
+                  const preset =
+                    simulation.heterogeneity_preset ??
+                    simulation.configs?.heterogeneity_preset;
+                  const alpha = simulation.configs?.dirichlet_alpha;
 
-                return (
-                  <tr
-                    key={simulation.id}
-                    onClick={() => onSelectSimulation(simulation)}
-                    className="cursor-pointer border-b border-border hover:bg-[rgba(184,0,40,0.03)] transition-colors"
-                  >
-                    <td className="px-6 py-4 text-sm font-medium text-foreground">
-                      Simulation #{simulation.id}
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <span
-                        className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${
-                          simulation.status === "completed"
-                            ? "border-green-500 text-green-700 bg-green-50"
-                            : simulation.status === "running"
-                              ? "border-blue-500 text-blue-700 bg-blue-50"
-                              : simulation.status === "pending"
-                                ? "border-yellow-500 text-yellow-700 bg-yellow-50"
-                                : "border-red-500 text-red-700 bg-red-50"
-                        }`}
-                      >
-                        {simulation.status.charAt(0).toUpperCase() +
-                          simulation.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      {preset ? (
-                        <div className="flex flex-col">
-                          <span
-                            className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium border w-fit ${
-                              preset === "high"
-                                ? "border-red-300 text-red-700 bg-red-50"
-                                : preset === "moderate"
-                                  ? "border-amber-300 text-amber-700 bg-amber-50"
-                                  : preset === "low"
-                                    ? "border-emerald-300 text-emerald-700 bg-emerald-50"
-                                    : "border-purple-300 text-purple-700 bg-purple-50"
-                            }`}
-                          >
-                            {preset.charAt(0).toUpperCase() + preset.slice(1)}
-                          </span>
-                          {alpha != null && (
-                            <span className="text-[10px] text-muted-foreground mt-0.5">
-                              &alpha;={alpha}
+                  return (
+                    <tr
+                      key={simulation.id}
+                      onClick={() => onSelectSimulation(simulation)}
+                      className="cursor-pointer border-b border-border hover:bg-[rgba(184,0,40,0.03)] transition-colors"
+                    >
+                      <td className="px-6 py-4 text-sm font-medium text-foreground">
+                        Simulation #{simulation.id}
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        <span
+                          className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${
+                            simulation.status === "completed"
+                              ? "border-green-500 text-green-700 bg-green-50"
+                              : simulation.status === "running"
+                                ? "border-blue-500 text-blue-700 bg-blue-50"
+                                : simulation.status === "pending"
+                                  ? "border-yellow-500 text-yellow-700 bg-yellow-50"
+                                  : "border-red-500 text-red-700 bg-red-50"
+                          }`}
+                        >
+                          {simulation.status.charAt(0).toUpperCase() +
+                            simulation.status.slice(1)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        {preset ? (
+                          <div className="flex flex-col">
+                            <span
+                              className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium border w-fit ${
+                                preset === "high"
+                                  ? "border-red-300 text-red-700 bg-red-50"
+                                  : preset === "moderate"
+                                    ? "border-amber-300 text-amber-700 bg-amber-50"
+                                    : preset === "low"
+                                      ? "border-emerald-300 text-emerald-700 bg-emerald-50"
+                                      : "border-purple-300 text-purple-700 bg-purple-50"
+                              }`}
+                            >
+                              {preset.charAt(0).toUpperCase() + preset.slice(1)}
                             </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-foreground">
-                      {metrics?.total_rounds_completed ?? "?"}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-foreground">
-                      {numClients || "—"}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-foreground">
-                      {avgAccuracy ? `${(avgAccuracy * 100).toFixed(1)}%` : "—"}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-foreground">
-                      {simulation.duration
-                        ? formatDuration(simulation.duration)
-                        : simulation.started_at
-                          ? "In progress..."
+                            {alpha != null && (
+                              <span className="text-[10px] text-muted-foreground mt-0.5">
+                                &alpha;={alpha}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-foreground">
+                        {metrics?.total_rounds_completed ?? "?"}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-foreground">
+                        {numClients || "—"}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-foreground">
+                        {avgAccuracy
+                          ? `${(avgAccuracy * 100).toFixed(1)}%`
                           : "—"}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-foreground">
-                      {simulation.started_at
-                        ? formatDateTime(simulation.started_at)
-                        : "Not started"}
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <ActionDropdown
-                        simulation={simulation}
-                        onView={handleView}
-                        onDelete={handleDelete}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-foreground">
+                        {simulation.duration
+                          ? formatDuration(simulation.duration)
+                          : simulation.started_at
+                            ? "In progress..."
+                            : "—"}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-foreground">
+                        {simulation.started_at
+                          ? formatDateTime(simulation.started_at)
+                          : "Not started"}
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        <ActionDropdown
+                          simulation={simulation}
+                          onView={handleView}
+                          onDelete={handleDelete}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
     </div>
   );
 }

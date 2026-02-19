@@ -6,6 +6,7 @@ import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Loading } from "@/components/ui/loading";
+import { EmptyState } from "@/components/ui/empty-state";
 
 // Helper to format ISO date strings to dd/mm/yy
 function formatDate(dateString: string): string {
@@ -222,10 +223,6 @@ export default function ClientsListPage({
     setDeleteModal({ isOpen: false, clientId: null, clientName: "" });
   };
 
-  if (isLoading) {
-    return <Loading fullScreen text="Synchronizing client database..." />;
-  }
-
   const filteredClients = clients.filter((client) => {
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
@@ -256,67 +253,90 @@ export default function ClientsListPage({
       </div>
 
       {/* Clients Table */}
-      <div className="bg-card rounded-lg shadow-sm border border-border">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                Name
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                Models
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                Created At
-              </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                Action
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredClients.map((client) => (
-              <tr
-                key={client.id}
-                onClick={() => onSelectClient(client)}
-                className="cursor-pointer border-b border-border hover:bg-[rgba(184,0,40,0.03)] transition-colors"
-              >
-                <td className="px-6 py-4 text-sm font-medium text-foreground">
-                  {client.client_name}
-                </td>
-                <td className="px-6 py-4 text-sm">
-                  <span
-                    className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${
-                      client.status === "Training"
-                        ? "border-primary text-primary bg-[rgba(184,0,40,0.05)]"
-                        : client.status === "Completed"
-                          ? "border-green-500 text-green-700 bg-green-50"
-                          : "border-[#718096] text-muted-foreground bg-gray-50"
-                    }`}
+      {isLoading ? (
+        <Loading
+          className="min-h-[400px]"
+          text="Synchronizing client database..."
+        />
+      ) : (
+        <div className="bg-card rounded-lg shadow-sm border border-border">
+          {filteredClients.length === 0 ? (
+            <EmptyState
+              title="No clients found"
+              description={
+                searchTerm
+                  ? "No clients match your search criteria."
+                  : "There are no clients connected to the network."
+              }
+              action={
+                !searchTerm
+                  ? { label: "Add Client", onClick: onAddClick }
+                  : undefined
+              }
+            />
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
+                    Name
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
+                    Models
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
+                    Created At
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredClients.map((client) => (
+                  <tr
+                    key={client.id}
+                    onClick={() => onSelectClient(client)}
+                    className="cursor-pointer border-b border-border hover:bg-[rgba(184,0,40,0.03)] transition-colors"
                   >
-                    {client.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm text-foreground">
-                  {client.model_type}
-                </td>
-                <td className="px-6 py-4 text-sm text-foreground">
-                  {formatDate(client.created_at)}
-                </td>
-                <td className="px-6 py-4 text-sm">
-                  <ActionDropdown
-                    client={client}
-                    onDelete={handleDeleteClick}
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                    <td className="px-6 py-4 text-sm font-medium text-foreground">
+                      {client.client_name}
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      <span
+                        className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${
+                          client.status === "Training"
+                            ? "border-primary text-primary bg-[rgba(184,0,40,0.05)]"
+                            : client.status === "Completed"
+                              ? "border-green-500 text-green-700 bg-green-50"
+                              : "border-[#718096] text-muted-foreground bg-gray-50"
+                        }`}
+                      >
+                        {client.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-foreground">
+                      {client.model_type}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-foreground">
+                      {formatDate(client.created_at)}
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      <ActionDropdown
+                        client={client}
+                        onDelete={handleDeleteClick}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       <DeleteConfirmationModal

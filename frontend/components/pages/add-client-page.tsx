@@ -4,26 +4,27 @@ import { API_BASE_PATH } from "@/utils";
 import { Upload, Check, X, FileJson, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Loading } from "@/components/ui/loading";
 
 interface AddClientPageProps {
   onBack: () => void;
 }
 
+import { toast } from "sonner";
+// ...
+
 export default function AddClientPage({ onBack }: AddClientPageProps) {
   const [clientName, setClientName] = useState("");
   const [modelType, setModelType] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (!clientName || !modelType) {
-      setError("Please fill in all required fields");
+      toast.error("Please fill in all required fields");
       return;
     }
 
     setIsLoading(true);
-    setError(null);
+    const toastId = toast.loading("Registering client...");
 
     try {
       const response = await fetch(`${API_BASE_PATH}/clients`, {
@@ -41,26 +42,24 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
         throw new Error("Failed to register client");
       }
 
-      const data = await response.json();
-      console.log("Client registered:", data);
+      toast.success("Client registered successfully!", { id: toastId });
 
       // Navigate back to clients list after successful registration
       onBack();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "An error occurred", {
+        id: toastId,
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (isLoading) {
-    return <Loading fullScreen text="Synchronizing client database..." />;
-  }
-
   return (
     <div className="p-8">
       {/* Form */}
-      <div className="max-w-2xl">
+      <div className="w-full">
         <div className="bg-card rounded-lg p-8 shadow-sm border border-border space-y-6">
           {/* Organization Info */}
           <div>
@@ -155,13 +154,6 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
               )}
             </div>
           </div>
-
-          {/* Error Message */}
-          {error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-600">{error}</p>
-            </div>
-          )}
 
           {/* Actions */}
           <div className="flex gap-3 pt-4">
