@@ -733,6 +733,7 @@ export default function FLSimulationDetailsPage({
 
   const dataHetOptions = useMemo(
     () => ({
+      indexAxis: "y" as const,
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
@@ -762,9 +763,9 @@ export default function FLSimulationDetailsPage({
         },
       },
       scales: {
-        y: {
-          beginAtZero: true,
+        x: {
           stacked: true,
+          beginAtZero: true,
           grid: { color: "rgba(0,0,0,0.04)" },
           title: {
             display: true,
@@ -772,7 +773,7 @@ export default function FLSimulationDetailsPage({
             font: { weight: "bold" as const, size: 11 },
           },
         },
-        x: {
+        y: {
           stacked: true,
           grid: { display: false },
         },
