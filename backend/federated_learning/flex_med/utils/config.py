@@ -1,21 +1,15 @@
 import os
 import sys
 from pathlib import Path
-
-# Try to import from app.config (assuming running from backend root)
 try:
     from app.config import get_settings
 except ImportError:
-    # If app is not found, maybe we are running inside federated_learning or backend is top level
-    # Add backend root to path
     current_file = Path(__file__).resolve()
-    # utils -> flex_med -> federated_learning -> backend
     backend_root = current_file.parent.parent.parent.parent
     sys.path.append(str(backend_root))
     try:
         from app.config import get_settings
     except ImportError:
-        # Last resort: try importing backend.app.config
         try:
              from backend.app.config import get_settings
         except ImportError:
@@ -74,3 +68,6 @@ MINORITY_BOOST = _settings.minority_boost
 # Knowledge distillation configuration (for extreme heterogeneity)
 DISTILL_WEIGHT_BASE = _settings.distill_weight_base
 DISTILL_DECAY_RATE = _settings.distill_decay_rate
+
+# Weight decay for model training
+WEIGHT_DECAY=0.02

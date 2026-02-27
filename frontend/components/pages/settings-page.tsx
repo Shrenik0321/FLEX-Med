@@ -71,19 +71,19 @@ const PRESET_DESCRIPTIONS: Record<
     label: "Low Heterogeneity",
     description:
       "Nearly uniform data distribution across clients. Suitable for baseline experiments.",
-    alpha: "alpha ~ 5.0",
+    alpha: "alpha ~ 2.0",
   },
   moderate: {
     label: "Moderate Heterogeneity",
     description:
       "Balanced non-IID distribution. Recommended default for most experiments.",
-    alpha: "alpha ~ 2.5",
+    alpha: "alpha ~ 1.0",
   },
   high: {
     label: "High Heterogeneity",
     description:
       "Highly skewed data distribution. Tests robustness under extreme non-IID conditions.",
-    alpha: "alpha ~ 1.0",
+    alpha: "alpha ~ 0.5",
   },
 };
 

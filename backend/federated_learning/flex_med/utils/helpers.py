@@ -1,25 +1,16 @@
-"""
-Helper utilities for FLEX-Med federated learning.
-Contains data utilities, evaluation functions, and database persistence helpers.
-"""
-
 import os
 import json
-import numpy as np
-import torch
-import torch.nn as nn
-from collections import Counter
 from datetime import datetime
 from typing import Dict, List, Optional
+import torch
+import torch.nn as nn
+from torchvision import models
 from pathlib import Path
-
 from flex_med.utils.config import (
-    LOCAL_TRAIN_DATASET_PATH, DIRICHLET_ALPHA, DIRICHLET_SEED, DIRICHLET_MIN_PARTITION_SIZE)
+    LOCAL_TRAIN_DATASET_PATH, DIRICHLET_ALPHA, DIRICHLET_SEED, CLIENT_INFO_FILE_PATH, NUM_CLASSES,
+    MINORITY_BOOST)
 
-# ============================================================================
-# SUPABASE CLIENT
-# ============================================================================
-
+# <----------------------------- CONSTANTS & GLOBAL VARIABLES ----------------------------->
 try:
     from supabase import create_client, Client
     SUPABASE_AVAILABLE = True
@@ -38,7 +29,6 @@ def get_supabase_client() -> Optional['Client']:
         return create_client(supabase_url, supabase_key)
     except Exception:
         return None
-
 
 def get_simulation_id() -> Optional[int]:
     """Get simulation ID from environment or config file."""
@@ -60,14 +50,10 @@ def get_simulation_id() -> Optional[int]:
         pass
     return None
 
-
 SUPABASE_CLIENT = get_supabase_client()
 SIMULATION_ID = get_simulation_id()
 
-# ============================================================================
-# PATH UTILITIES
-# ============================================================================
-
+# <----------------------------- PATH UTILITIES ----------------------------->
 def sanitize_client_paths(clients: List[Dict]) -> List[Dict]:
     """Sanitize model paths to work in current environment."""
     backend_root = Path(__file__).parent.parent.parent
@@ -79,10 +65,86 @@ def sanitize_client_paths(clients: List[Dict]) -> List[Dict]:
                 client['model_path'] = str(backend_root / "models" / relative_part)
     return clients
 
+# <----------------------------- CLIENT CONFIGURATION ----------------------------->
+# Load client configuration from database.
+def load_client_config(config_path: str = CLIENT_INFO_FILE_PATH) -> List[Dict]:
+    if SUPABASE_CLIENT is not None and SIMULATION_ID is not None:
+        try:
+            response = SUPABASE_CLIENT.from_('client_simulation_metrics') \
+                .select('client_id, clients(*)') \
+                .eq('simulation_id', SIMULATION_ID) \
+                .order('client_id') \
+                .execute()
+            if response.data:
+                clients = [r.get('clients') for r in response.data if r.get('clients')]
+                if clients:
+                    return sanitize_client_paths(clients)
+        except Exception:
+            pass
 
-# ============================================================================
-# DATA UTILITIES
-# ============================================================================
+    env_config_path = os.getenv('FLEX_MED_CONFIG_FILE')
+    if env_config_path:
+        config_path = env_config_path
+
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Configuration file not found at {config_path}")
+
+    with open(config_path, 'r') as f:
+        config_data = json.load(f)
+
+    clients = config_data.get("clients", config_data) if isinstance(config_data, dict) else config_data
+    return sanitize_client_paths(clients)
+
+# Retrieve individual client config by partition ID.
+def get_client_by_partition_id(partition_id: int, config_path: str = CLIENT_INFO_FILE_PATH) -> Dict:
+    from flwr.common import log
+    from logging import WARNING
+
+    clients = load_client_config(config_path)
+    if partition_id >= len(clients):
+        # Fallback: Cycle through available clients using modulo
+        effective_id = partition_id % len(clients)
+        log(WARNING, f"[WARNING] Partition ID {partition_id} exceeds clients ({len(clients)}). "
+              f"Using client {effective_id} (Modulo fallback).")
+        return clients[effective_id]
+    return clients[partition_id]
+    return clients[partition_id]
+
+def get_display_id(partition_id: int, client_config: Dict) -> str:
+    """Get display ID for logging."""
+    return client_config.get('client_name') or f"Client {client_config.get('id', partition_id + 1)}"
+
+def save_model(model: torch.nn.Module, model_path: str, model_type: str):
+    """Save model weights with minimal metadata."""
+    torch.save({
+        'model_type': model_type,
+        'num_classes': NUM_CLASSES,
+        'state_dict': model.state_dict(),
+    }, model_path)
+
+def load_model_for_client(partition_id: int, config_path: str = CLIENT_INFO_FILE_PATH):
+    """Load client config and create model architecture."""
+    client_config = get_client_by_partition_id(partition_id, config_path)
+    model = get_model_by_type(client_config['model_type'])
+    return model, client_config['model_path'], client_config
+
+# <----------------------------- DATA UTILITIES ----------------------------->
+def compute_dynamic_focal_alpha(class_counts: dict, minority_boost: float = MINORITY_BOOST) -> float:
+    """Compute focal alpha to counteract WeightedRandomSampler's residual imbalance."""
+    n0 = max(class_counts.get(0, 1), 1)
+    n1 = max(class_counts.get(1, 1), 1)
+
+    # After sampler: majority effective weight = 1.0, minority = MINORITY_BOOST
+    if n0 <= n1:
+        eff_0, eff_1 = minority_boost, 1.0
+    else:
+        eff_0, eff_1 = 1.0, minority_boost
+
+    total_eff = eff_0 + eff_1
+    # alpha applies to class 0 in FocalLoss; set to other class's frequency
+    # so the under-sampled class gets more focal weight
+    alpha = eff_1 / total_eff
+    return max(0.35, min(0.65, alpha))
 
 def get_partition_stats(partition_id: int, num_partitions: int, partitioner_cache: dict) -> Dict:
     """Get data heterogeneity statistics for a client's partition."""
@@ -242,25 +304,76 @@ def print_client_data_distribution_summary(client_configs: List[Dict], partition
     else:
         log(INFO, "Partitioner not initialized yet")
 
+# <----------------------------- MODEL UTILITIES - Freeze/Unfreeze for Gradual Training ----------------------------->
+def get_model_by_type(model_type: str, use_pretrained: bool = True, dropout_rate: float = None):
+    """Create a model instance by type with dropout-enhanced classifier."""
+    model_type = model_type.lower()
+    if dropout_rate is None:
+        dropout_rate = get_initial_dropout_rate(model_type)
 
-# ============================================================================
-# MODEL UTILITIES - Freeze/Unfreeze for Gradual Training
-# ============================================================================
+    model_map = {
+        'resnet50': models.resnet50, 'resnet18': models.resnet18,
+        'mobilenet_v2': models.mobilenet_v2, 'densenet121': models.densenet121,
+        'efficientnet_b0': models.efficientnet_b0,
+    }
 
+    if model_type not in model_map:
+        raise ValueError(f"Unsupported model type: {model_type}. Supported: {list(model_map.keys())}")
+
+    if use_pretrained:
+        weights = "DEFAULT"
+    else:
+        weights = None
+
+    model = model_map[model_type](weights=weights)
+    return add_dropout_to_classifier(model, model_type, dropout_rate)
+
+def get_initial_dropout_rate(model_type: str) -> float:
+    """Get default dropout rate for model architecture."""
+    rates = {'resnet50': 0.35, 'mobilenet_v2': 0.45, 'densenet121': 0.35}
+    return rates.get(model_type.lower(), 0.3)
+
+def add_dropout_to_classifier(model, model_type: str, dropout_rate: float = 0.3):
+    """Add/update dropout layer before the final classifier head (idempotent)."""
+    model_type = model_type.lower()
+
+    match model_type:
+        case 'resnet50':
+            if isinstance(model.fc, nn.Sequential) and isinstance(model.fc[0], nn.Dropout):
+                model.fc[0].p = dropout_rate
+            else:
+                in_features = model.fc.in_features
+                model.fc = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
+
+        case 'mobilenet_v2':
+            if isinstance(model.classifier[1], nn.Sequential) and isinstance(model.classifier[1][0], nn.Dropout):
+                model.classifier[1][0].p = dropout_rate
+            else:
+                in_features = model.classifier[1].in_features
+                model.classifier[1] = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
+
+        case 'densenet121':
+            if isinstance(model.classifier, nn.Sequential) and isinstance(model.classifier[0], nn.Dropout):
+                model.classifier[0].p = dropout_rate
+            else:
+                in_features = model.classifier.in_features
+                model.classifier = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
+
+    return model
+
+def load_model_weights(model, model_path, device):
+    """Load model weights from file (handles legacy and new formats)."""
+    checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+    if isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
+        model.load_state_dict(checkpoint['state_dict'])
+    else:
+        model.load_state_dict(checkpoint)
+    return model
+
+# <----------------------------- MODEL FREEZE/UNFREEZE FOR GRADUAL TRAINING ----------------------------->
+# Freeze all backbone layers, keeping only the classifier trainable.
+# Use in early FL rounds (1-2) to prevent biased gradients from corrupting
 def freeze_backbone(model, model_type: str):
-    """
-    Freeze all backbone layers, keeping only the classifier trainable.
-
-    Use in early FL rounds (1-2) to prevent biased gradients from corrupting
-    pretrained ImageNet features. Only the classifier head will be updated.
-
-    Args:
-        model: PyTorch model instance
-        model_type: Model architecture name (resnet50, mobilenet_v2, etc.)
-
-    Returns:
-        model with frozen backbone
-    """
     model_type = model_type.lower()
 
     # First, freeze all parameters
@@ -286,21 +399,9 @@ def freeze_backbone(model, model_type: str):
 
     return model
 
-
+# Unfreeze the last backbone block in addition to the classifier.
+# Use in early FL rounds (1-2) to prevent biased gradients from corrupting
 def unfreeze_last_block(model, model_type: str):
-    """
-    Unfreeze the last backbone block in addition to the classifier.
-
-    Use in mid FL rounds (3-4) after classifier has stabilized.
-    Allows fine-tuning of high-level features while preserving lower layers.
-
-    Args:
-        model: PyTorch model instance
-        model_type: Model architecture name
-
-    Returns:
-        model with last block unfrozen
-    """
     model_type = model_type.lower()
 
     if model_type in ('resnet50', 'resnet18'):
@@ -331,24 +432,6 @@ def unfreeze_last_block(model, model_type: str):
                 param.requires_grad = True
 
     return model
-
-
-def unfreeze_all(model):
-    """
-    Unfreeze all model parameters for full fine-tuning.
-
-    Use in later FL rounds (5+) after model has stabilized.
-
-    Args:
-        model: PyTorch model instance
-
-    Returns:
-        model with all parameters trainable
-    """
-    for param in model.parameters():
-        param.requires_grad = True
-    return model
-
 
 def apply_freeze_strategy(model, model_type: str, server_round: int, total_rounds: int = 10):
     """
@@ -396,147 +479,7 @@ def apply_freeze_strategy(model, model_type: str, server_round: int, total_round
 
     return model, lr_multiplier
 
-
-def get_trainable_params_count(model) -> int:
-    """Get count of trainable parameters in model."""
-    return sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-
-def get_frozen_params_count(model) -> int:
-    """Get count of frozen parameters in model."""
-    return sum(p.numel() for p in model.parameters() if not p.requires_grad)
-
-
-# ============================================================================
-# EVALUATION UTILITIES
-# ============================================================================
-
-def evaluate_client_on_public_test(client_id: int, model_path: str, model_type: str, device: torch.device,
-                                    get_model_fn, load_model_fn, test_fn, load_test_dataset_fn) -> Dict:
-    """Evaluate a client model on the public test dataset."""
-    model = get_model_fn(model_type)
-    if os.path.exists(model_path):
-        try:
-            model, _ = load_model_fn(model, model_path, device)
-        except Exception:
-            pass
-    model.to(device)
-    test_loader = load_test_dataset_fn(batch_size=64)
-    metrics = test_fn(model, test_loader, device, return_detailed=True)
-    metrics["evaluated_at"] = datetime.now().isoformat()
-    return metrics
-
-
-def evaluate_all_clients(client_configs: List[Dict], device: torch.device,
-                          get_model_fn, load_model_fn, test_fn, load_test_dataset_fn) -> Dict:
-    """Evaluate all clients on the public test dataset."""
-    client_metrics = {}
-    for i, client in enumerate(client_configs):
-        try:
-            metrics = evaluate_client_on_public_test(
-                i, client['model_path'], client['model_type'], device,
-                get_model_fn, load_model_fn, test_fn, load_test_dataset_fn
-            )
-            client_metrics[str(i)] = metrics
-        except Exception as e:
-            client_metrics[str(i)] = {"accuracy": None, "loss": None, "error": str(e)}
-    return client_metrics
-
-
-def evaluate_all_clients_on_public_test(client_configs: List[Dict], device: torch.device,
-                                         get_model_fn, load_model_fn, test_fn, load_test_dataset_fn) -> Dict:
-    """Evaluate all clients on public test dataset (for Pre/Post-FL comparison)."""
-    client_metrics = {}
-    for i, client in enumerate(client_configs):
-        try:
-            model = get_model_fn(client['model_type'])
-            if os.path.exists(client['model_path']):
-                try:
-                    model, _ = load_model_fn(model, client['model_path'], device)
-                except Exception:
-                    pass
-            model.to(device)
-            test_loader = load_test_dataset_fn(batch_size=64)
-            metrics = test_fn(model, test_loader, device, return_detailed=True)
-            metrics.update({
-                'dataset': 'public_test', 'evaluation_type': 'global',
-                'num_samples': len(test_loader.dataset), 'evaluated_at': datetime.now().isoformat()
-            })
-            client_metrics[str(i)] = metrics
-        except Exception as e:
-            client_metrics[str(i)] = {"accuracy": None, "loss": None, "error": str(e)}
-    return client_metrics
-
-
-def evaluate_all_clients_on_validation(client_configs: List[Dict], device: torch.device, num_partitions: int,
-                                        get_model_fn, load_model_fn, load_private_dataset_fn, load_test_dataset_fn) -> Dict:
-    """Evaluate all clients on their private validation sets (per-round tracking)."""
-    from sklearn.metrics import precision_recall_fscore_support
-
-    client_metrics = {}
-    for i, client in enumerate(client_configs):
-        try:
-            model = get_model_fn(client['model_type'])
-            if os.path.exists(client['model_path']):
-                try:
-                    model, _ = load_model_fn(model, client['model_path'], device)
-                except Exception:
-                    pass
-            model.to(device)
-            _, valloader, _ = load_private_dataset_fn(i, num_partitions, batch_size=64)
-
-            if valloader is not None:
-                dataset_type = 'validation'
-                num_samples = len(valloader.dataset)
-            else:
-                valloader = load_test_dataset_fn(batch_size=64)
-                dataset_type = 'public_test_proxy'
-                num_samples = len(valloader.dataset)
-
-            model.eval()
-            all_preds, all_labels = [], []
-            total_loss = 0.0
-            criterion = nn.CrossEntropyLoss()
-
-            with torch.no_grad():
-                for images, labels in valloader:
-                    images, labels = images.to(device), labels.to(device)
-                    outputs = model(images)
-                    loss = criterion(outputs, labels)
-                    total_loss += loss.item() * images.size(0)
-                    _, preds = torch.max(outputs, 1)
-                    all_preds.extend(preds.cpu().numpy())
-                    all_labels.extend(labels.cpu().numpy())
-
-            all_preds, all_labels = np.array(all_preds), np.array(all_labels)
-            accuracy = (all_preds == all_labels).mean()
-            loss = total_loss / len(all_labels)
-            precision, recall, f1, _ = precision_recall_fscore_support(all_labels, all_preds, average='binary', zero_division=0)
-
-            leukemia_mask = (all_labels == 0)
-            healthy_mask = (all_labels == 1)
-            leukemia_acc = (all_preds[leukemia_mask] == all_labels[leukemia_mask]).mean() if leukemia_mask.any() else 0
-            healthy_acc = (all_preds[healthy_mask] == all_labels[healthy_mask]).mean() if healthy_mask.any() else 0
-            class_gap = abs(leukemia_acc - healthy_acc)
-
-            metrics = {
-                'loss': float(loss), 'accuracy': float(accuracy),
-                'precision': float(precision), 'recall': float(recall), 'f1_score': float(f1),
-                'class_gap': float(class_gap),
-                'leukemia_accuracy': float(leukemia_acc), 'healthy_accuracy': float(healthy_acc),
-                'num_samples': num_samples, 'dataset': dataset_type,
-                'evaluation_type': 'per_round', 'evaluated_at': datetime.now().isoformat()
-            }
-            client_metrics[str(i)] = metrics
-        except Exception as e:
-            client_metrics[str(i)] = {"accuracy": None, "loss": None, "error": str(e)}
-    return client_metrics
-
-
-# ============================================================================
-# DATABASE PERSISTENCE UTILITIES
-# ============================================================================
-
+# <----------------------------- DATABASE PERSISTENCE UTILITIES ----------------------------->
 def extract_training_metrics_for_persistence(client_metrics_list: List[Dict], aggregation_metadata: Dict, client_configs: List[Dict]) -> Dict:
     """Extract training metrics for persistence."""
     training_metrics = {}
@@ -550,7 +493,6 @@ def extract_training_metrics_for_persistence(client_metrics_list: List[Dict], ag
             "consensus_weight": consensus_weight
         }
     return training_metrics
-
 
 def save_global_post_fl_metrics(metrics: Dict, client_configs: List[Dict]):
     """Save Post-FL metrics to database and compute aggregates."""
@@ -599,7 +541,6 @@ def save_global_post_fl_metrics(metrics: Dict, client_configs: List[Dict]):
             SUPABASE_CLIENT.from_('fl_simulations').update(update_data).eq('id', SIMULATION_ID).execute()
     except Exception:
         pass
-
 
 def compute_aggregate_metrics_local(all_metrics: List[dict]) -> dict:
     """Compute aggregate metrics from all client metrics."""
@@ -681,7 +622,6 @@ def compute_aggregate_metrics_local(all_metrics: List[dict]) -> dict:
         "total_rounds_completed": len(rounds_aggregate), "total_clients": len(all_metrics)
     }
 
-
 def save_round_training_metrics(round_num: int, training_metrics: Dict, client_configs: List[Dict], partitioner_cache: dict):
     """Save per-round training metrics to database."""
     if SUPABASE_CLIENT is None or SIMULATION_ID is None:
@@ -737,7 +677,6 @@ def save_round_training_metrics(round_num: int, training_metrics: Dict, client_c
         from logging import WARNING
         log(WARNING, f"[METRICS] Error saving round training metrics: {e}")
 
-
 def save_round_validation_metrics(round_num: int, metrics: Dict, client_configs: List[Dict]):
     """Save per-round validation metrics to database."""
     if SUPABASE_CLIENT is None or SIMULATION_ID is None:
@@ -771,7 +710,6 @@ def save_round_validation_metrics(round_num: int, metrics: Dict, client_configs:
                 .eq('simulation_id', SIMULATION_ID).eq('client_id', db_client_id).execute()
     except Exception:
         pass
-
 
 def check_for_degradation_warnings(current_metrics: Dict, round_num: int, client_history: Dict):
     """Check validation metrics and log warnings if degradation detected."""

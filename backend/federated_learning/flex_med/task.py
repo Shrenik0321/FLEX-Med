@@ -7,19 +7,17 @@ import uuid
 import torch.nn as nn
 import torch.nn.functional as F
 from PIL import Image
-from torchvision import models, datasets, transforms
+from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchvision.transforms import Compose, ToTensor, Normalize
 from typing import Tuple, Optional, Iterable, Dict, List
-
 from flwr.common import Message, Metadata, RecordDict, ArrayRecord, ConfigRecord, log
 from logging import INFO, WARNING
 from flwr.serverapp.strategy import Strategy
 from flwr.server import Grid
 from flwr_datasets.partitioner import DirichletPartitioner
 from datasets import Dataset
-
 from flex_med.utils.config import (
     BASE_PATH, CLIENT_INFO_FILE_PATH, DATASET_FILE_PATH,
     PUBLIC_ANCHOR_DATASET_PATH, PUBLIC_TEST_DATASET_PATH, LOCAL_TRAIN_DATASET_PATH,
@@ -27,25 +25,23 @@ from flex_med.utils.config import (
     TRAIN_LOSS_WEIGHT, DISTILL_LOSS_WEIGHT, CONSENSUS_MOMENTUM,
     DIRICHLET_ALPHA, DIRICHLET_SEED, DIRICHLET_MIN_PARTITION_SIZE,
     FOCAL_ALPHA_DEFAULT, FOCAL_GAMMA, MINORITY_BOOST,
-    DISTILL_WEIGHT_BASE, DISTILL_DECAY_RATE,
+    DISTILL_WEIGHT_BASE, DISTILL_DECAY_RATE, WEIGHT_DECAY
 )
-
 from flex_med.utils.helpers import (
     sanitize_client_paths,
     get_partition_stats, print_client_data_distribution_summary,
     extract_training_metrics_for_persistence, save_global_post_fl_metrics,
     save_round_training_metrics, save_round_validation_metrics,
     check_for_degradation_warnings, SUPABASE_CLIENT, SIMULATION_ID,
-    apply_freeze_strategy, save_all_clients_data_heterogeneity,
+    save_all_clients_data_heterogeneity,
+    load_client_config, get_client_by_partition_id,
+    get_model_by_type, load_model_weights
 )
 
 # <----------------------------- CONSTANTS & GLOBAL VARIABLES ----------------------------->
-
-# Partitioner cache for Dirichlet data distribution
-_PARTITIONER_CACHE = {}
+PARTITIONER_CACHE = {}
 
 # <----------------------------- DATA TRANSFORMS ----------------------------->
-
 COMMON_TRANSFORM = Compose([
     transforms.Resize((IMG_SIZE, IMG_SIZE)),
     ToTensor(),
@@ -57,11 +53,11 @@ PRIVATE_TRAIN_TRANSFORM = Compose([
     transforms.RandomHorizontalFlip(p=0.5),
     transforms.RandomVerticalFlip(p=0.3),
     transforms.RandomRotation(15),
+    transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
     transforms.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.1, hue=0.05),
     ToTensor(),
     Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
-
 
 class TransformOverrideSubset(torch.utils.data.Dataset):
     """Wraps a nested Subset to apply a different transform (e.g. no augmentation for val)."""
@@ -92,159 +88,29 @@ class TransformOverrideSubset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.subset)
 
+# <----------------------------- LOSS FUNCTIONS ----------------------------->
+class FocalLoss(nn.Module):
+    """Focal Loss: FL(pt) = -alpha * (1 - pt)^gamma * log(pt). Focuses on hard examples."""
 
-# <----------------------------- CLIENT CONFIGURATION ----------------------------->
+    def __init__(self, alpha: float = 0.35, gamma: float = 2.0, label_smoothing: float = 0.05):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.label_smoothing = label_smoothing
 
-def load_client_config(config_path: str = CLIENT_INFO_FILE_PATH) -> List[Dict]:
-    """Load client configuration from database (preferred) or file (fallback)."""
-    if SUPABASE_CLIENT is not None and SIMULATION_ID is not None:
-        try:
-            response = SUPABASE_CLIENT.from_('client_simulation_metrics') \
-                .select('client_id, clients(*)') \
-                .eq('simulation_id', SIMULATION_ID) \
-                .order('client_id') \
-                .execute()
-            if response.data:
-                clients = [r.get('clients') for r in response.data if r.get('clients')]
-                if clients:
-                    return sanitize_client_paths(clients)
-        except Exception:
-            pass
-
-    env_config_path = os.getenv('FLEX_MED_CONFIG_FILE')
-    if env_config_path:
-        config_path = env_config_path
-
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Configuration file not found at {config_path}")
-
-    with open(config_path, 'r') as f:
-        config_data = json.load(f)
-
-    clients = config_data.get("clients", config_data) if isinstance(config_data, dict) else config_data
-    return sanitize_client_paths(clients)
-
-
-def get_client_by_partition_id(partition_id: int, config_path: str = CLIENT_INFO_FILE_PATH) -> Dict:
-    """Retrieve individual client config by partition ID."""
-    clients = load_client_config(config_path)
-    if partition_id >= len(clients):
-        # Fallback: Cycle through available clients using modulo
-        effective_id = partition_id % len(clients)
-        log(WARNING, f"[WARNING] Partition ID {partition_id} exceeds clients ({len(clients)}). "
-              f"Using client {effective_id} (Modulo fallback).")
-        return clients[effective_id]
-    return clients[partition_id]
-
-
-# <----------------------------- MODEL CREATION & MANAGEMENT ----------------------------->
-
-def get_model_by_type(model_type: str, use_pretrained: bool = True, dropout_rate: float = None):
-    """Create a model instance by type with dropout-enhanced classifier."""
-    model_type = model_type.lower()
-    if dropout_rate is None:
-        dropout_rate = get_initial_dropout_rate(model_type)
-
-    model_map = {
-        'resnet50': models.resnet50, 'resnet18': models.resnet18,
-        'mobilenet_v2': models.mobilenet_v2, 'densenet121': models.densenet121,
-        'efficientnet_b0': models.efficientnet_b0,
-    }
-
-    if model_type not in model_map:
-        raise ValueError(f"Unsupported model type: {model_type}. Supported: {list(model_map.keys())}")
-
-    if use_pretrained:
-        weights = "DEFAULT"
-    else:
-        weights = None
-
-    model = model_map[model_type](weights=weights)
-    return add_dropout_to_classifier(model, model_type, dropout_rate)
-
-
-def get_initial_dropout_rate(model_type: str) -> float:
-    """Get default dropout rate for model architecture."""
-    rates = {'resnet50': 0.35, 'mobilenet_v2': 0.45, 'densenet121': 0.35, 'efficientnet_b0': 0.40, 'resnet18': 0.35}
-    return rates.get(model_type.lower(), 0.3)
-
-
-def add_dropout_to_classifier(model, model_type: str, dropout_rate: float = 0.3):
-    """Add/update dropout layer before the final classifier head (idempotent)."""
-    model_type = model_type.lower()
-
-    if model_type in ('resnet50', 'resnet18'):
-        if isinstance(model.fc, nn.Sequential) and isinstance(model.fc[0], nn.Dropout):
-            model.fc[0].p = dropout_rate
-        else:
-            in_features = model.fc.in_features
-            model.fc = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
-
-    elif model_type == 'mobilenet_v2':
-        if isinstance(model.classifier[1], nn.Sequential) and isinstance(model.classifier[1][0], nn.Dropout):
-            model.classifier[1][0].p = dropout_rate
-        else:
-            in_features = model.classifier[1].in_features
-            model.classifier[1] = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
-
-    elif model_type == 'densenet121':
-        if isinstance(model.classifier, nn.Sequential) and isinstance(model.classifier[0], nn.Dropout):
-            model.classifier[0].p = dropout_rate
-        else:
-            in_features = model.classifier.in_features
-            model.classifier = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
-
-    elif model_type == 'efficientnet_b0':
-        if isinstance(model.classifier[1], nn.Sequential) and isinstance(model.classifier[1][0], nn.Dropout):
-            model.classifier[1][0].p = dropout_rate
-        else:
-            in_features = model.classifier[1].in_features
-            model.classifier[1] = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
-
-    return model
-
-
-def update_dropout_rate(model, model_type: str, new_dropout_rate: float):
-    """Update dropout rate in existing model architecture."""
-    model_type = model_type.lower()
-    try:
-        if model_type in ('resnet50', 'resnet18'):
-            if isinstance(model.fc, nn.Sequential) and isinstance(model.fc[0], nn.Dropout):
-                model.fc[0].p = new_dropout_rate
-        elif model_type in ('mobilenet_v2', 'efficientnet_b0'):
-            if isinstance(model.classifier[1], nn.Sequential) and isinstance(model.classifier[1][0], nn.Dropout):
-                model.classifier[1][0].p = new_dropout_rate
-        elif model_type == 'densenet121':
-            if isinstance(model.classifier, nn.Sequential) and isinstance(model.classifier[0], nn.Dropout):
-                model.classifier[0].p = new_dropout_rate
-    except Exception:
-        pass
-    return model
-
-
-def load_existing_model(model, model_path, device):
-    """Load model from checkpoint (handles legacy and new formats)."""
-    checkpoint = torch.load(model_path, map_location=device)
-    if isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
-        model.load_state_dict(checkpoint['state_dict'])
-        metadata = {
-            'model_type': checkpoint.get('model_type'), 'num_classes': checkpoint.get('num_classes'),
-            'round': checkpoint.get('round'), 'adaptive_state': checkpoint.get('adaptive_state'),
-            'scheduler_state': checkpoint.get('scheduler_state')
-        }
-        return model, metadata
-    else:
-        model.load_state_dict(checkpoint)
-        return model, {}
-
+    def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        ce_loss = F.cross_entropy(inputs, targets, reduction='none', label_smoothing=self.label_smoothing)
+        pt = torch.exp(-ce_loss)
+        focal_term = (1 - pt) ** self.gamma
+        alpha_t = torch.where(targets == 0, self.alpha, 1 - self.alpha)
+        return (alpha_t * focal_term * ce_loss).mean()
 
 # <----------------------------- LOAD DATA ----------------------------->
-
+# Create a Dirichlet partitioner for heterogeneous data distribution.
 def create_dirichlet_partitioner(
     dataset_path: str, num_partitions: int, alpha: float = DIRICHLET_ALPHA,
     seed: int = DIRICHLET_SEED, min_partition_size: int = DIRICHLET_MIN_PARTITION_SIZE
 ) -> Tuple[DirichletPartitioner, datasets.ImageFolder]:
-    """Create a Dirichlet partitioner for heterogeneous data distribution."""
     full_dataset = datasets.ImageFolder(root=dataset_path, transform=None)
     image_paths = [path for path, _ in full_dataset.samples]
     labels = [label for _, label in full_dataset.samples]
@@ -257,9 +123,8 @@ def create_dirichlet_partitioner(
     partitioner.dataset = hf_dataset
     return partitioner, full_dataset
 
-
-def load_public_dataset(batch_size=64, round_num=1, total_rounds=10):
-    """Load public anchor dataset for consensus generation."""
+# Load the public anchor dataset for consensus generation.
+def load_public_dataset(batch_size=32, round_num=1, total_rounds=10):
     if not os.path.exists(PUBLIC_ANCHOR_DATASET_PATH):
         raise FileNotFoundError(f"Public data not found at {PUBLIC_ANCHOR_DATASET_PATH}")
 
@@ -269,22 +134,21 @@ def load_public_dataset(batch_size=64, round_num=1, total_rounds=10):
     subset = torch.utils.data.Subset(full_dataset, indices)
     return DataLoader(subset, batch_size=batch_size, shuffle=False, num_workers=2)
 
-
+# Load and assign the data distribution to client models using Dirichlet partioning.
 def load_private_dataset(partition_id: int, num_partitions: int, batch_size=64,
                          config_path: str = CLIENT_INFO_FILE_PATH):
-    """Load private dataset for a client using Dirichlet partitioning."""
     if not os.path.exists(LOCAL_TRAIN_DATASET_PATH):
         raise FileNotFoundError(f"Shared training dataset not found at {LOCAL_TRAIN_DATASET_PATH}")
 
     cache_key = (LOCAL_TRAIN_DATASET_PATH, num_partitions, DIRICHLET_ALPHA, DIRICHLET_SEED)
 
-    if cache_key not in _PARTITIONER_CACHE:
+    if cache_key not in PARTITIONER_CACHE:
         partitioner, full_dataset = create_dirichlet_partitioner(
             LOCAL_TRAIN_DATASET_PATH, num_partitions, DIRICHLET_ALPHA, DIRICHLET_SEED
         )
-        _PARTITIONER_CACHE[cache_key] = (partitioner, full_dataset)
+        PARTITIONER_CACHE[cache_key] = (partitioner, full_dataset)
     else:
-        partitioner, full_dataset = _PARTITIONER_CACHE[cache_key]
+        partitioner, full_dataset = PARTITIONER_CACHE[cache_key]
 
     partition_dataset = partitioner.load_partition(partition_id)
     partition_paths = partition_dataset["image_path"]
@@ -345,17 +209,15 @@ def load_private_dataset(partition_id: int, num_partitions: int, batch_size=64,
     
     return trainloader, testloader, class_counts
 
-
+# Load public test dataset for post_fl evaluation.
 def load_public_test_dataset(batch_size=64):
-    """Load public test dataset for evaluation."""
     if not os.path.exists(PUBLIC_TEST_DATASET_PATH):
         raise FileNotFoundError(f"Public test data not found at {PUBLIC_TEST_DATASET_PATH}")
     dataset = datasets.ImageFolder(root=PUBLIC_TEST_DATASET_PATH, transform=COMMON_TRANSFORM)
     return DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=2)
 
-
+# Generate logits on the public anchor dataset for consensus computation.
 def get_public_logits(model, public_loader, device):
-    """Generate logits on the public dataset for consensus computation."""
     if public_loader is None:
         raise ValueError("public_loader is None.")
     model.to(device)
@@ -368,184 +230,45 @@ def get_public_logits(model, public_loader, device):
             all_logits.append(outputs.cpu().numpy())
     return np.concatenate(all_logits)
 
-
-# <----------------------------- CHECKPOINT MANAGEMENT ----------------------------->
-
-def save_checkpoint(checkpoint_dir: str, current_round: int, consensus_logits: np.ndarray,
-                    eval_history: List[Dict], training_metrics: Dict):
-    """Save FL training checkpoint with consensus logits and metrics."""
-    os.makedirs(checkpoint_dir, exist_ok=True)
-    checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_round_{current_round}.pt")
-    latest_path = os.path.join(checkpoint_dir, "latest_checkpoint.pt")
-
-    checkpoint = {
-        'round': current_round, 'consensus_logits': consensus_logits,
-        'eval_history': eval_history, 'training_metrics': training_metrics,
-        'timestamp': time.time()
-    }
-    torch.save(checkpoint, checkpoint_path)
-    torch.save(checkpoint, latest_path)
-
-
-def load_checkpoint(checkpoint_dir: str) -> Optional[Dict]:
-    """Load the latest FL training checkpoint for resumption."""
-    latest_path = os.path.join(checkpoint_dir, "latest_checkpoint.pt")
-    if not os.path.exists(latest_path):
-        return None
-    try:
-        return torch.load(latest_path, map_location='cpu', weights_only=False)
-    except Exception:
-        return None
-
-
-# <----------------------------- ADAPTIVE TRAINING STATE ----------------------------->
-
-class AdaptiveTrainingState:
-    """Manages per-client adaptive dropout based on validation loss trends."""
-
-    def __init__(self, client_id: int, model_type: str, initial_dropout: float = 0.3,
-                 max_dropout: float = 0.6, min_dropout: float = 0.2,
-                 dropout_increment: float = 0.05, patience_rounds: int = 3):
-        self.client_id = client_id
-        self.model_type = model_type
-        self.dropout_rate = initial_dropout
-        self.max_dropout = max_dropout
-        self.min_dropout = min_dropout
-        self.dropout_increment = dropout_increment
-        self.patience_rounds = patience_rounds
-        self.val_loss_history = []
-        self.scheduler_state = None
-
-    def should_increase_dropout(self) -> bool:
-        if len(self.val_loss_history) < 3:
-            return False
-        recent = self.val_loss_history[-3:]
-        return recent[1] > recent[0] and recent[2] > recent[1]
-
-    def should_decrease_dropout(self) -> bool:
-        if len(self.val_loss_history) < 3:
-            return False
-        recent = self.val_loss_history[-3:]
-        return recent[1] < recent[0] and recent[2] < recent[1]
-
-    def update_dropout(self, model) -> float:
-        old_dropout = self.dropout_rate
-        if self.should_increase_dropout() and self.dropout_rate < self.max_dropout:
-            self.dropout_rate = min(self.max_dropout, self.dropout_rate + self.dropout_increment)
-        elif self.should_decrease_dropout() and self.dropout_rate > self.min_dropout:
-            self.dropout_rate = max(self.min_dropout, self.dropout_rate - self.dropout_increment)
-
-        if self.dropout_rate != old_dropout:
-            update_dropout_rate(model, self.model_type, self.dropout_rate)
-        return self.dropout_rate
-
-    def add_val_loss(self, val_loss: float):
-        self.val_loss_history.append(val_loss)
-        if len(self.val_loss_history) > 5:
-            self.val_loss_history.pop(0)
-
-    def to_dict(self) -> dict:
-        return {
-            'client_id': self.client_id, 'model_type': self.model_type,
-            'dropout_rate': self.dropout_rate, 'max_dropout': self.max_dropout,
-            'min_dropout': self.min_dropout, 'dropout_increment': self.dropout_increment,
-            'patience_rounds': self.patience_rounds, 'val_loss_history': self.val_loss_history,
-            'scheduler_state': self.scheduler_state
-        }
-
-    @classmethod
-    def from_dict(cls, state_dict: dict) -> 'AdaptiveTrainingState':
-        state = cls(
-            client_id=state_dict['client_id'], model_type=state_dict['model_type'],
-            initial_dropout=state_dict['dropout_rate'],
-            max_dropout=state_dict.get('max_dropout', 0.6),
-            min_dropout=state_dict.get('min_dropout', 0.2),
-            dropout_increment=state_dict.get('dropout_increment', 0.1),
-            patience_rounds=state_dict.get('patience_rounds', 2)
-        )
-        state.val_loss_history = state_dict.get('val_loss_history', [])
-        state.scheduler_state = state_dict.get('scheduler_state')
-        return state
-
-
-# <----------------------------- LOSS FUNCTIONS ----------------------------->
-
-class FocalLoss(nn.Module):
-    """Focal Loss: FL(pt) = -alpha * (1 - pt)^gamma * log(pt). Focuses on hard examples."""
-
-    def __init__(self, alpha: float = 0.35, gamma: float = 2.0, label_smoothing: float = 0.05):
-        super().__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-        self.label_smoothing = label_smoothing
-
-    def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        ce_loss = F.cross_entropy(inputs, targets, reduction='none', label_smoothing=self.label_smoothing)
-        pt = torch.exp(-ce_loss)
-        focal_term = (1 - pt) ** self.gamma
-        alpha_t = torch.where(targets == 0, self.alpha, 1 - self.alpha)
-        return (alpha_t * focal_term * ce_loss).mean()
-
-
-# <----------------------------- TRAINING & EVALUATION ----------------------------->
-
-def _validate_epoch(model, valloader, criterion, device):
-    """Perform validation for a single epoch, returns average loss."""
+# <----------------------------- LOCAL MODEL Training : Train client model with Focal Loss and gradual unfreeze strategy. ----------------------------->
+# Validation function during local training
+def validate_training(model, valloader, criterion, device):
     model.eval()
     val_loss, val_batches = 0.0, 0
+    correct, total = 0, 0
     with torch.no_grad():
         for images, labels in valloader:
             images, labels = images.to(device), labels.to(device)
-            val_loss += criterion(model(images), labels).item()
+            outputs = model(images)
+            val_loss += criterion(outputs, labels).item()
             val_batches += 1
+            
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
     model.train()
-    return val_loss / val_batches if val_batches > 0 else 0.0
+    
+    avg_loss = val_loss / val_batches if val_batches > 0 else 0.0
+    accuracy = correct / total if total > 0 else 0.0
+    return avg_loss, accuracy
 
-
-def train(model, trainloader, epochs, lr, device, model_type: str = None,
-          valloader=None, adaptive_state=None, server_round: int = 1, total_rounds: int = 10,
+def train(model, trainloader, epochs, lr, device,
+          valloader=None, server_round: int = 1, total_rounds: int = 10,
           focal_alpha=None):
-    """Train model with Focal Loss and gradual unfreeze strategy.
 
-    Args:
-        model: PyTorch model to train
-        trainloader: Training data loader
-        epochs: Number of local epochs
-        lr: Learning rate
-        device: Device to train on
-        model_type: Model architecture name (for freeze strategy)
-        valloader: Optional validation data loader
-        adaptive_state: Optional adaptive training state
-        server_round: Current FL round (1-indexed, for freeze strategy)
-        total_rounds: Total number of FL rounds (for freeze strategy)
-        focal_alpha: Optional dynamic alpha for Focal Loss (overrides default)
-
-    Returns:
-        (avg_train_loss, avg_val_loss, train_accuracy, scheduler_state)
-    """
     if trainloader is None:
-        return 0.0, 0.0, 0.0, None
+        return 0.0, 0.0, 0.0
 
     model.to(device)
 
-    # Apply freeze/unfreeze strategy based on current round
-    lr_multiplier = 1.0
-    if model_type is not None:
-        model, lr_multiplier = apply_freeze_strategy(model, model_type, server_round, total_rounds)
-
-    # Apply LR multiplier (reduced in Phase 3 for "polish" fine-tuning)
-    effective_lr = lr * lr_multiplier
-
-    # Use passed focal_alpha or default to balanced 0.50
     if focal_alpha is None:
         focal_alpha = FOCAL_ALPHA_DEFAULT
-        
     criterion = FocalLoss(alpha=focal_alpha, gamma=FOCAL_GAMMA)
 
-    # Only optimize parameters that require gradients (respects freeze strategy)
+    # Only optimize parameters that require gradients (respects freeze strategy applied in client_app.py)
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()),
-        lr=effective_lr, betas=(0.9, 0.999), weight_decay=0.01
+        lr=lr, betas=(0.9, 0.999), weight_decay=WEIGHT_DECAY
     )
     
     # Cosine Annealing Scheduler for local epochs
@@ -556,6 +279,7 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
     total_train_loss, total_val_loss = 0.0, 0.0
     total_train_batches, total_val_epochs = 0, 0
     total_train_correct, total_train_samples = 0, 0
+    total_val_accuracy = 0.0
 
     model.train()
     for epoch in range(epochs):
@@ -583,8 +307,9 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
         total_train_samples += epoch_samples
 
         if has_validation:
-            epoch_val_loss = _validate_epoch(model, valloader, criterion, device)
+            epoch_val_loss, epoch_val_acc = validate_training(model, valloader, criterion, device)
             total_val_loss += epoch_val_loss
+            total_val_accuracy += epoch_val_acc
             total_val_epochs += 1
             
         # Cosine Annealing per epoch
@@ -594,14 +319,12 @@ def train(model, trainloader, epochs, lr, device, model_type: str = None,
     avg_train_loss = total_train_loss / total_train_batches if total_train_batches > 0 else 0.0
     avg_val_loss = total_val_loss / total_val_epochs if total_val_epochs > 0 else 0.0
     train_accuracy = total_train_correct / total_train_samples if total_train_samples > 0 else 0.0
+    val_accuracy = total_val_accuracy / total_val_epochs if total_val_epochs > 0 else 0.0
     
-    # Return empty dict for scheduler_state as it's no longer used
-    return avg_train_loss, avg_val_loss, train_accuracy, {}
+    return avg_train_loss, avg_val_loss, train_accuracy, val_accuracy
 
-
-
+# <----------------------------- LOCAL MODEL Testing & Evaluation : Post FL testing of each client model with public test dataset. ----------------------------->
 def test(model, testloader, device, return_detailed=False):
-    """Evaluate model with comprehensive metrics. Returns (loss, acc) or detailed dict."""
     from flwr.common import log
     from logging import INFO, WARNING
 
@@ -628,6 +351,7 @@ def test(model, testloader, device, return_detailed=False):
     loss = total_loss / len(testloader) if len(testloader) > 0 else 0.0
     all_preds, all_labels, all_probs = torch.tensor(all_preds), torch.tensor(all_labels), torch.tensor(all_probs)
 
+    # Calculate confusion matrix
     TP = ((all_preds == 0) & (all_labels == 0)).sum().item()
     FP = ((all_preds == 0) & (all_labels == 1)).sum().item()
     FN = ((all_preds == 1) & (all_labels == 0)).sum().item()
@@ -666,20 +390,14 @@ def test(model, testloader, device, return_detailed=False):
         }
     return loss, accuracy
 
-
-# <----------------------------- KNOWLEDGE DISTILLATION ----------------------------->
-
+# <----------------------------- KNOWLEDGE DISTILLATION : Distill consensus knowledge into local model using KL divergence with adaptive weighting. ----------------------------->
 def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr, temperature,
                       current_round=1, total_rounds=10, adaptive=True):
-    """Distill consensus knowledge into local model using KL divergence with adaptive weighting.
+    base_weight = DISTILL_WEIGHT_BASE
+    decay_rate = DISTILL_DECAY_RATE
+    weight_decay = WEIGHT_DECAY
 
-    Uses configurable DISTILL_WEIGHT_BASE and DISTILL_DECAY_RATE from config.
-    Higher weights and slower decay help combat extreme data heterogeneity.
-    """
-    # Use configurable distillation parameters (default: 0.60 base, 0.3 decay)
-    base_weight = DISTILL_WEIGHT_BASE  # Was hardcoded 0.40
-    decay_rate = DISTILL_DECAY_RATE    # Was hardcoded 0.5
-
+    
     if adaptive and total_rounds > 1:
         progress = (current_round - 1) / (total_rounds - 1)
         adaptive_factor = np.exp(-decay_rate * progress)
@@ -691,7 +409,7 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
     model.train()
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()),
-        lr=lr, betas=(0.9, 0.999), weight_decay=0.02
+        lr=lr, betas=(0.9, 0.999), weight_decay=weight_decay
     )
     consensus_tensor = torch.from_numpy(consensus_logits).float()
 
@@ -704,7 +422,11 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
                 break
 
             batch_consensus = consensus_tensor[idx:idx+batch_size].to(device)
+
+            # Run the public anchor dataset through the client model to obtain the student logits
             student_logits = model(images)
+
+            # Kullback Leibler Divergence
             kl_loss = F.kl_div(
                 F.log_softmax(student_logits / temperature, dim=1),
                 F.softmax(batch_consensus / temperature, dim=1),
@@ -712,6 +434,7 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
             ) * (temperature ** 2)
             loss = DISTILL_WEIGHT * kl_loss
 
+            # Backpropagate and update
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -721,99 +444,21 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
 
     return total_loss / (len(public_loader) * epochs)
 
-
 # <----------------------------- CONSENSUS COMPUTATION ----------------------------->
-
 def compute_consensus(
     logits_list: List[np.ndarray], client_metrics: List[Dict], client_configs: List[Dict],
     server_round: int, last_consensus: Optional[np.ndarray] = None,
-    eval_history: Optional[List[Dict]] = None, momentum: float = CONSENSUS_MOMENTUM,
+    momentum: float = CONSENSUS_MOMENTUM,
 ) -> Tuple[Optional[np.ndarray], Dict]:
-    """Compute weighted consensus from client logits with momentum and class reweighting."""
     if not logits_list:
         return None, {"error": "No client logits provided"}
     if len(logits_list) != len(client_metrics) or len(logits_list) != len(client_configs):
         return None, {"error": "Mismatched input lengths"}
 
-    # ========== QUALITY GATING: Filter poorly performing clients ==========
-    ACCURACY_THRESHOLD = 0.55  # Minimum accuracy to contribute to consensus
-    GAP_THRESHOLD = 0.80       # Maximum prediction gap (class imbalance in predictions)
-
-    def calculate_prediction_gap(logits: np.ndarray) -> float:
-        """Calculate how skewed a client's predictions are towards one class."""
-        probs = np.exp(logits) / np.sum(np.exp(logits), axis=1, keepdims=True)
-        predicted_classes = np.argmax(probs, axis=1)
-        unique, counts = np.unique(predicted_classes, return_counts=True)
-        if len(counts) < 2:
-            return 1.0  # All predictions same class = 100% gap
-        total = sum(counts)
-        majority_ratio = max(counts) / total
-        minority_ratio = min(counts) / total
-        return majority_ratio - minority_ratio  # Range: 0.0 (balanced) to 1.0 (all one class)
-
-    # Evaluate each client for quality gating
-    qualified_indices = []
-    excluded_clients = []
-
-    for i in range(len(logits_list)):
-        metrics = client_metrics[i]
-        config = client_configs[i]
-        client_name = config.get("client_name", f"client_{i}")
-
-        # Get accuracy (prefer eval_acc, fallback to train_accuracy)
-        accuracy = metrics.get("eval_acc", metrics.get("train_accuracy", 0.5))
-
-        # Calculate prediction gap from logits
-        pred_gap = calculate_prediction_gap(logits_list[i])
-
-        exclusion_reasons = []
-        if accuracy < ACCURACY_THRESHOLD:
-            exclusion_reasons.append(f"accuracy={accuracy:.2%} < {ACCURACY_THRESHOLD:.0%}")
-        if pred_gap > GAP_THRESHOLD:
-            exclusion_reasons.append(f"pred_gap={pred_gap:.2%} > {GAP_THRESHOLD:.0%}")
-
-        if exclusion_reasons:
-            excluded_clients.append({
-                "client_name": client_name,
-                "index": i,
-                "accuracy": accuracy,
-                "prediction_gap": pred_gap,
-                "reasons": exclusion_reasons
-            })
-            log(INFO, f"[Consensus] EXCLUDED {client_name}: {', '.join(exclusion_reasons)}")
-        else:
-            qualified_indices.append(i)
-            log(INFO, f"[Consensus] QUALIFIED {client_name}: acc={accuracy:.2%}, gap={pred_gap:.2%}")
-
-    # Fallback: If all clients excluded, use the best one
-    if not qualified_indices:
-        log(WARNING, "[Consensus] WARNING: All clients excluded! Falling back to best client.")
-        # Score = accuracy - prediction_gap (higher is better)
-        best_idx = max(
-            range(len(logits_list)),
-            key=lambda i: client_metrics[i].get("eval_acc", client_metrics[i].get("train_accuracy", 0.5))
-                          - calculate_prediction_gap(logits_list[i])
-        )
-        qualified_indices = [best_idx]
-        best_name = client_configs[best_idx].get("client_name", f"client_{best_idx}")
-        log(INFO, f"[Consensus] Using fallback client: {best_name}")
-
-    # Filter to qualified clients only
-    logits_list = [logits_list[i] for i in qualified_indices]
-    client_metrics = [client_metrics[i] for i in qualified_indices]
-    client_configs = [client_configs[i] for i in qualified_indices]
-
-    gating_info = {
-        "accuracy_threshold": ACCURACY_THRESHOLD,
-        "gap_threshold": GAP_THRESHOLD,
-        "total_clients": len(qualified_indices) + len(excluded_clients),
-        "qualified_clients": len(qualified_indices),
-        "excluded_clients": excluded_clients,
-    }
-    # ========== END QUALITY GATING ==========
-
+    # <----------------------------- WEIGHT CALCULATION ----------------------------->
     num_clients = len(logits_list)
-    weights, weight_breakdown = [], []
+    weights = []
+    weight_breakdown = [], 
 
     for i in range(num_clients):
         metrics, config = client_metrics[i], client_configs[i]
@@ -823,13 +468,27 @@ def compute_consensus(
         model_type = config.get("model_type", "unknown").lower()
         client_name = config.get("client_name", f"client_{i}")
 
+        # based on the clients number of local training samples
         base_weight = max(num_samples, 1)
+
+        # quality multiplier calculation combining the local training loss and knowledge distillation loss. Lower the loss, higher the quality multiplier
         combined_loss = TRAIN_LOSS_WEIGHT * train_loss + DISTILL_LOSS_WEIGHT * distill_loss
         quality_multiplier = 1.0 / (1.0 + combined_loss)
-        val_acc = metrics.get("eval_acc", metrics.get("train_accuracy", 0.5))
-        accuracy_factor = 0.5 + val_acc
+
+        # accuracy factor calculation based on the clients validation accuracy
+        baseline_accuracy_factor = 0.5 # so that every client has a chance even if it performs badly it will have a baseline of 0.5 accuracy since this is binary classification
+        val_acc = metrics.get("val_accuracy", metrics.get("train_accuracy", 0.5))
+        accuracy_factor = baseline_accuracy_factor + val_acc
+
+        # round trust calculation based on the server round
+        # 5.0 -> the half way point of the total rounds
+        # 1.0 -> the maximum cap for the how much trust can be given
         round_trust = min(server_round / 5.0, 1.0)
+
+        # stabilized quality calculation combining the round trust and quality multiplier
         stabilized_quality = 0.5 + 0.5 * round_trust * quality_multiplier
+
+        # final weight calculation combining the base weight, stabilized quality and accuracy factor
         final_weight = base_weight * stabilized_quality * accuracy_factor
 
         weights.append(final_weight)
@@ -841,23 +500,22 @@ def compute_consensus(
             "stabilized_quality": stabilized_quality, "final_weight": final_weight,
         })
 
+    # calculates the total weight of all the client weights combined
     total_weight = sum(weights)
     if total_weight == 0:
         return None, {"error": "All clients have zero weight", "weight_breakdown": weight_breakdown}
 
+    # normalizes the weights so that they sum to 1
     normalized_weights = [w / total_weight for w in weights]
     for i, breakdown in enumerate(weight_breakdown):
         breakdown["normalized_weight"] = normalized_weights[i]
 
+    # calculates the new consensus by taking the weighted average of the client logits
+    
     new_consensus = np.average(logits_list, axis=0, weights=normalized_weights)
-
-    # Class-based reweighting DISABLED: was causing oscillation feedback loop.
-    # Reweighting based on PREDICTED distribution creates a cycle where consensus
-    # overcorrects toward minority class, then clients learn that bias, then
-    # consensus swings back. The quality-weighted average above is sufficient.
     class_weighting_info = {"status": "disabled", "reason": "prevents oscillation feedback loop"}
 
-    # Momentum smoothing across FL rounds
+    # <----------------------------- CONSENSUS MOMENTUM SMOOTHING ----------------------------->
     smoothing_applied = False
     if last_consensus is not None and server_round > 1:
         if last_consensus.shape != new_consensus.shape:
@@ -889,133 +547,25 @@ def compute_consensus(
             "std": float(np.std(normalized_weights)) if normalized_weights else 0,
         },
         "class_weighting": class_weighting_info,
-        "quality_gating": gating_info,
         "parameters": {"train_loss_weight": TRAIN_LOSS_WEIGHT, "distill_loss_weight": DISTILL_LOSS_WEIGHT}
     }
+
     return consensus_logits, aggregation_metadata
 
-
 # <----------------------------- FL STRATEGY ----------------------------->
-
 class FLEXMedStrategy(Strategy):
-    """Coordinates federated learning rounds with model-agnostic knowledge distillation."""
-
-    def __init__(self, config_path: str = CLIENT_INFO_FILE_PATH, checkpoint_dir: str = MODEL_CHECKPOINT_FILE_PATH, batch_size: int = 32):
+    def __init__(self, config_path: str = CLIENT_INFO_FILE_PATH, batch_size: int = 32):
         super().__init__()
         self.config_path = config_path
-        self.checkpoint_dir = checkpoint_dir
         self.batch_size = batch_size
         self.client_configs = load_client_config(config_path)
         self.num_clients = len(self.client_configs)
-        self.eval_history = []
-        self.start_round = 1
         self.last_consensus_logits = None
-        self.early_stopping_enabled = True
-        self.patience = 2
-        self.best_round = 0
-        self.best_avg_val_loss = float('inf')
-        self.best_avg_val_acc = 0.0
-        self.degradation_count = 0
-        self.best_checkpoints_saved = False
         self.client_history = {}
 
-        checkpoint = load_checkpoint(checkpoint_dir)
-        if checkpoint:
-            self.start_round = checkpoint['round'] + 1
-            self.eval_history = checkpoint['eval_history']
-            self.last_consensus_logits = checkpoint['consensus_logits']
-
-    def start(self, grid: Grid, initial_arrays: ArrayRecord, num_rounds: int = 3,
-              timeout: float = 14400, train_config: Optional[ConfigRecord] = None,
-              evaluate_config: Optional[ConfigRecord] = None, evaluate_fn=None):
-        """Execute FL with resume support and per-round evaluation."""
-        from flwr.common import log
-        from flwr.serverapp.strategy.result import Result
-        from logging import INFO, WARNING
-
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-        if self.start_round > 1:
-            remaining = num_rounds - (self.start_round - 1)
-            if remaining <= 0:
-                result = Result()
-                result.arrays = initial_arrays
-                return result
-
-        train_config = ConfigRecord() if train_config is None else train_config
-        evaluate_config = ConfigRecord() if evaluate_config is None else evaluate_config
-
-        result = Result()
-        arrays = initial_arrays
-        t_start = time.time()
-        self.round_metrics_history = {}
-
-        # Pre-initialize the partitioner cache before FL rounds begin
-        # This ensures data heterogeneity can be captured for visualization
-        try:
-            log(INFO, "[FL] Pre-initializing Dirichlet partitioner...")
-            cache_key = (LOCAL_TRAIN_DATASET_PATH, self.num_clients, DIRICHLET_ALPHA, DIRICHLET_SEED)
-            if cache_key not in _PARTITIONER_CACHE:
-                partitioner, full_dataset = create_dirichlet_partitioner(
-                    LOCAL_TRAIN_DATASET_PATH, self.num_clients, DIRICHLET_ALPHA, DIRICHLET_SEED
-                )
-                _PARTITIONER_CACHE[cache_key] = (partitioner, full_dataset)
-                log(INFO, f"[FL] Partitioner initialized: {self.num_clients} partitions, alpha={DIRICHLET_ALPHA}")
-            
-            # Save data heterogeneity for all clients at FL start
-            save_all_clients_data_heterogeneity(self.client_configs, _PARTITIONER_CACHE)
-        except Exception as e:
-            log(WARNING, f"[FL] Failed to pre-initialize partitioner: {e}")
-
-        print_client_data_distribution_summary(self.client_configs, _PARTITIONER_CACHE)
-
-        for current_round in range(self.start_round, num_rounds + 1):
-            log(INFO, f"\n{'='*70}\n[ROUND {current_round}/{num_rounds}]\n{'='*70}")
-
-            train_msgs = self.configure_train(current_round, arrays, train_config, grid)
-            train_replies = grid.send_and_receive(messages=train_msgs, timeout=timeout)
-            agg_arrays, agg_metrics, training_metrics = self.aggregate_train(current_round, train_replies)
-
-            if agg_arrays is not None:
-                result.arrays = agg_arrays
-                arrays = agg_arrays
-            if agg_metrics:
-                result.train_metrics_clientapp[current_round] = agg_metrics
-            if training_metrics:
-                save_round_training_metrics(current_round, training_metrics, self.client_configs, _PARTITIONER_CACHE)
-
-            try:
-                round_val_metrics = self._evaluate_all_clients_on_validation(device)
-                save_round_validation_metrics(current_round, round_val_metrics, self.client_configs)
-                self.round_metrics_history[f"round_{current_round}_validation"] = round_val_metrics
-
-                for client_id, metrics in round_val_metrics.items():
-                    if client_id not in self.client_history:
-                        self.client_history[client_id] = []
-                    self.client_history[client_id].append({'round': current_round, 'metrics': metrics})
-
-                check_for_degradation_warnings(round_val_metrics, current_round, self.client_history)
-            except Exception as e:
-                log(WARNING, f"[ROUND {current_round}] Validation evaluation failed: {e}")
-
-            eval_msgs = self.configure_evaluate(current_round, arrays, evaluate_config, grid)
-            eval_replies = grid.send_and_receive(messages=eval_msgs, timeout=timeout)
-            eval_metrics = self.aggregate_evaluate(current_round, eval_replies)
-            if eval_metrics:
-                result.evaluate_metrics_clientapp[current_round] = eval_metrics
-
-        log(INFO, f"\n{'='*70}\n[GLOBAL] Final Federated Model Evaluation\n{'='*70}")
-
-        try:
-            global_post_fl_metrics = self._evaluate_all_clients_on_public_test(device)
-            save_global_post_fl_metrics(global_post_fl_metrics, self.client_configs)
-        except Exception as e:
-            log(WARNING, f"[GLOBAL] Post-FL Evaluation failed: {e}")
-
-        log(INFO, f"Strategy execution finished in {time.time() - t_start:.2f}s")
-        return result
-
-    def _evaluate_all_clients_on_validation(self, device: torch.device) -> Dict:
+# <----------------------------- HELPER METHODS ----------------------------->
+    # Evaluate all clients on their private validation sets
+    def evaluate_all_clients_on_validation(self, device: torch.device) -> Dict:
         """Evaluate all clients on their private validation sets."""
         from sklearn.metrics import precision_recall_fscore_support
 
@@ -1023,13 +573,12 @@ class FLEXMedStrategy(Strategy):
         for i, client in enumerate(self.client_configs):
             try:
                 model = get_model_by_type(client['model_type'])
-                if os.path.exists(client['model_path']):
-                    model, _ = load_existing_model(model, client['model_path'], device)
+                model = load_model_weights(model, client['model_path'], device)
                 model.to(device)
                 _, valloader, _ = load_private_dataset(i, len(self.client_configs), batch_size=self.batch_size)
 
                 if valloader is None:
-                    valloader = load_public_test_dataset(batch_size=self.batch_size)
+                    raise ValueError(f"Validation loader for client {i} is None")
 
                 model.eval()
                 all_preds, all_labels = [], []
@@ -1065,14 +614,13 @@ class FLEXMedStrategy(Strategy):
                 client_metrics[str(i)] = {"accuracy": None, "loss": None, "error": str(e)}
         return client_metrics
 
-    def _evaluate_all_clients_on_public_test(self, device: torch.device) -> Dict:
-        """Evaluate all clients on public test dataset."""
+    # Called only once, for the post FL evaluation on unseen test data to evaluate all clients on public test dataset
+    def evaluate_all_clients_on_public_test(self, device: torch.device) -> Dict:
         client_metrics = {}
         for i, client in enumerate(self.client_configs):
             try:
                 model = get_model_by_type(client['model_type'])
-                if os.path.exists(client['model_path']):
-                    model, _ = load_existing_model(model, client['model_path'], device)
+                model = load_model_weights(model, client['model_path'], device)
                 model.to(device)
                 test_loader = load_public_test_dataset(batch_size=self.batch_size)
                 metrics = test(model, test_loader, device, return_detailed=True)
@@ -1081,56 +629,85 @@ class FLEXMedStrategy(Strategy):
                 client_metrics[str(i)] = {"accuracy": None, "loss": None, "error": str(e)}
         return client_metrics
 
-    def configure_evaluate(self, server_round: int, arrays: Optional[ArrayRecord],
-                           config: ConfigRecord, grid: Grid) -> Iterable[Message]:
-        messages = []
-        for node_id in grid.get_node_ids():
-            msg = Message(
-                metadata=Metadata(run_id=0, message_id=str(uuid.uuid4()), src_node_id=0, dst_node_id=node_id,
-                                  reply_to_message_id="", group_id=str(server_round), ttl=86400.0,
-                                  message_type="evaluate", created_at=time.time()),
-                content=RecordDict({"config": ConfigRecord({"round": server_round})}),
-            )
-            messages.append(msg)
-        return messages
+# <----------------------------- Start FL simulation ----------------------------->
+    def start(self, grid: Grid, initial_arrays: ArrayRecord, num_rounds: int = 3,
+              timeout: float = 14400, train_config: Optional[ConfigRecord] = None):
 
-    def aggregate_evaluate(self, server_round: int, results: Iterable[Message], **kwargs):
-        results_list = list(results)
-        if not results_list:
-            return {"loss": None, "metrics": {}}
+        from flwr.common import log
+        from flwr.serverapp.strategy.result import Result
+        from logging import INFO, WARNING
 
-        clients_with_data = []
-        total_loss, total_acc, total_examples = 0.0, 0.0, 0
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-        for i, msg in enumerate(results_list):
-            if not msg.has_content():
-                continue
-            metrics = msg.content.get("metrics", {})
-            eval_loss = metrics.get("eval_loss", 0.0)
-            eval_acc = metrics.get("eval_acc", 0.0)
-            num_examples = metrics.get("num-examples", 0)
-            clients_with_data.append({"client_id": metrics.get("client_id", -1), "loss": eval_loss, "acc": eval_acc, "examples": num_examples})
-            total_loss += eval_loss * num_examples
-            total_acc += eval_acc * num_examples
-            total_examples += num_examples
+        train_config = ConfigRecord() if train_config is None else train_config
 
-        if total_examples == 0:
-            return {"loss": None, "metrics": {}}
+        result = Result()
+        arrays = initial_arrays
+        t_start = time.time()
+        self.round_metrics_history = {}
 
-        avg_loss, avg_acc = total_loss / total_examples, total_acc / total_examples
-        round_metrics = {"round": server_round, "avg_loss": avg_loss, "avg_acc": avg_acc,
-                         "total_examples": total_examples, "clients_with_data": clients_with_data}
-        self.eval_history.append(round_metrics)
+        # <----------------------------- Simulating and recording the data distributions across clients ----------------------------->
+        try:
+            log(INFO, "[FL] Pre-initializing Dirichlet partitioner...")
+            cache_key = (LOCAL_TRAIN_DATASET_PATH, self.num_clients, DIRICHLET_ALPHA, DIRICHLET_SEED)
+            if cache_key not in PARTITIONER_CACHE:
+                partitioner, full_dataset = create_dirichlet_partitioner(
+                    LOCAL_TRAIN_DATASET_PATH, self.num_clients, DIRICHLET_ALPHA, DIRICHLET_SEED
+                )
+                PARTITIONER_CACHE[cache_key] = (partitioner, full_dataset)
+                log(INFO, f"[FL] Partitioner initialized: {self.num_clients} partitions, alpha={DIRICHLET_ALPHA}")
+            
+            # Save data heterogeneity for all clients at FL start
+            save_all_clients_data_heterogeneity(self.client_configs, PARTITIONER_CACHE)
+        except Exception as e:
+            log(WARNING, f"[FL] Failed to pre-initialize partitioner: {e}")
 
-        if self.last_consensus_logits is not None:
+        print_client_data_distribution_summary(self.client_configs, PARTITIONER_CACHE)
+
+        for current_round in range(1, num_rounds + 1):
+            log(INFO, f"\n{'='*70}\n[ROUND {current_round}/{num_rounds}]\n{'='*70}")
+
+            # <----------------------------- Configure and aggregate training ----------------------------->
+            train_msgs = self.configure_train(current_round, arrays, train_config, grid)
+            train_replies = grid.send_and_receive(messages=train_msgs, timeout=timeout)
+            agg_arrays, agg_metrics, training_metrics = self.aggregate_train(current_round, train_replies) # agg_arrays is the new consensus which will then be passed back to the clients
+
+            if agg_arrays is not None:
+                result.arrays = agg_arrays
+                arrays = agg_arrays
+            if agg_metrics:
+                result.train_metrics_clientapp[current_round] = agg_metrics
+            if training_metrics:
+                save_round_training_metrics(current_round, training_metrics, self.client_configs, PARTITIONER_CACHE)
+
             try:
-                save_checkpoint(self.checkpoint_dir, server_round, self.last_consensus_logits, self.eval_history, round_metrics)
-            except Exception:
-                pass
+                # <----------------------------- Evaluate model on validation set ----------------------------->
+                round_val_metrics = self.evaluate_all_clients_on_validation(device)
+                save_round_validation_metrics(current_round, round_val_metrics, self.client_configs)
+                self.round_metrics_history[f"round_{current_round}_validation"] = round_val_metrics
 
-        return {"loss": avg_loss, "metrics": {"eval_acc": avg_acc, "num_clients": len(results_list),
-                                               "total_examples": total_examples, "clients_with_data": len(clients_with_data)}}
+                for client_id, metrics in round_val_metrics.items():
+                    if client_id not in self.client_history:
+                        self.client_history[client_id] = []
+                    self.client_history[client_id].append({'round': current_round, 'metrics': metrics})
 
+                check_for_degradation_warnings(round_val_metrics, current_round, self.client_history)
+            except Exception as e:
+                log(WARNING, f"[ROUND {current_round}] Validation evaluation failed: {e}")
+
+        log(INFO, f"\n{'='*70}\n[GLOBAL] Final Federated Model Evaluation\n{'='*70}")
+
+        try:
+            # <----------------------------- Evaluate model on public test set (unseen data) ----------------------------->
+            global_post_fl_metrics = self.evaluate_all_clients_on_public_test(device)
+            save_global_post_fl_metrics(global_post_fl_metrics, self.client_configs)
+        except Exception as e:
+            log(WARNING, f"[GLOBAL] Post-FL Evaluation failed: {e}")
+
+        log(INFO, f"Strategy execution finished in {time.time() - t_start:.2f}s")
+        return result
+
+    # <----------------------------- Aggregate training results ----------------------------->
     def aggregate_train(self, server_round: int, results: Iterable[Message], **kwargs):
         results_list = list(results)
         if not results_list:
@@ -1152,7 +729,7 @@ class FLEXMedStrategy(Strategy):
 
         consensus_logits, aggregation_metadata = compute_consensus(
             logits_list, client_metrics_list, self.client_configs[:len(logits_list)],
-            server_round, self.last_consensus_logits, self.eval_history, CONSENSUS_MOMENTUM
+            server_round, self.last_consensus_logits, CONSENSUS_MOMENTUM
         )
 
         if consensus_logits is None:
@@ -1169,9 +746,9 @@ class FLEXMedStrategy(Strategy):
         training_metrics_for_persistence = extract_training_metrics_for_persistence(
             client_metrics_list, aggregation_metadata, self.client_configs
         )
+
         return ArrayRecord([consensus_logits]), metrics_aggregated, training_metrics_for_persistence
 
-    # Configure the training process for each client and passes it to each client as a message
     def configure_train(self, server_round: int, arrays: Optional[ArrayRecord],
         config: ConfigRecord, grid: Grid) -> Iterable[Message]:
         messages = []
@@ -1185,8 +762,11 @@ class FLEXMedStrategy(Strategy):
             messages.append(msg)
         return messages
 
-    def save_evaluation_history(self):
-        return None
+    def configure_evaluate(self, server_round: int, arrays, config, grid) -> Iterable[Message]:
+        return []
+
+    def aggregate_evaluate(self, server_round: int, results: Iterable[Message], **kwargs):
+        return None, None
 
     def summary(self) -> str:
         return ""

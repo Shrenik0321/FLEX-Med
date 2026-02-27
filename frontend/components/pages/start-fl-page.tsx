@@ -33,21 +33,21 @@ const HETEROGENEITY_PRESETS: Record<
     label: "Low",
     description:
       "Nearly uniform data distribution. Suitable for baseline experiments.",
-    alpha: "\u03B1 ~ 5.0",
+    alpha: "\u03B1 ~ 2.0",
     color: "border-emerald-500 bg-emerald-50 text-emerald-700",
   },
   moderate: {
     label: "Moderate",
     description:
       "Balanced non-IID distribution. Recommended for most experiments.",
-    alpha: "\u03B1 ~ 2.5",
+    alpha: "\u03B1 ~ 1.0",
     color: "border-amber-500 bg-amber-50 text-amber-700",
   },
   high: {
     label: "High",
     description:
       "Highly skewed distribution. Tests robustness under extreme non-IID.",
-    alpha: "\u03B1 ~ 1.0",
+    alpha: "\u03B1 ~ 0.5",
     color: "border-red-500 bg-red-50 text-red-700",
   },
 };

@@ -7,51 +7,40 @@ from flwr.server import Grid
 from flex_med.utils.config import CLIENT_INFO_FILE_PATH, MODEL_CHECKPOINT_FILE_PATH
 from flex_med.task import (
     FLEXMedStrategy, load_public_dataset, NUM_CLASSES,
-    load_checkpoint, save_checkpoint, load_client_config
+    load_client_config
 )
 
 app = ServerApp()
 
 @app.main()
 def main(grid: Grid, context: Context) -> None:
-    # FL hyperparameters from pyproject.toml
+
+    # <-------------------------------------- LOAD CONFIGURATIONS -------------------------------------->
     num_rounds: int = context.run_config["num-server-rounds"]
     lr: float = context.run_config["lr"]
     local_epochs: int = context.run_config.get("local-epochs", 1)
     server_round: int = context.run_config.get("round", 1)
+    batch_size: int = context.run_config.get("batch-size", 32)
 
-    # Load checkpoint for potential resume
-    resume_mode = os.getenv("FLEX_MED_RESUME", "auto").lower()
-    checkpoint = load_checkpoint(MODEL_CHECKPOINT_FILE_PATH)
+    print(f"\n[SERVER] Starting FL ({num_rounds} rounds, lr={lr})")
 
-    if checkpoint and resume_mode != "false":
-        start_round = checkpoint['round'] + 1
-        print(f"\n[SERVER] Resuming from round {start_round}/{num_rounds} (lr={lr})")
-    else:
-        checkpoint = None  # Force fresh start if resume disabled
-        print(f"\n[SERVER] Starting FL ({num_rounds} rounds, lr={lr})")
-
-    # Load client configurations
+    # <-------------------------------------- LOAD CLIENT CONFIGURATIONS -------------------------------------->
     client_configs = load_client_config()
     print(f"[SERVER] {len(client_configs)} clients loaded")
 
-    # Initialize consensus matrix for FedMD knowledge distillation
+    # <-------------------------------------- LOAD PUBLIC ANCHOR DATASET -------------------------------------->
     public_loader = load_public_dataset(batch_size=1, round_num=server_round, total_rounds=num_rounds)
     num_samples = len(public_loader.dataset)
 
-    if checkpoint:
-        initial_consensus = checkpoint['consensus_logits']
-    else:
-        initial_consensus = np.zeros((num_samples, NUM_CLASSES), dtype=np.float32)
+    initial_consensus = np.zeros((num_samples, NUM_CLASSES), dtype=np.float32)
 
-    # Initialize strategy and execute FL
-    batch_size = context.run_config.get("batch-size", 32)
+    # <-------------------------------------- LOAD FL STRATEGY -------------------------------------->
     strategy = FLEXMedStrategy(
-        config_path=CLIENT_INFO_FILE_PATH, 
-        checkpoint_dir=MODEL_CHECKPOINT_FILE_PATH,
+        config_path=CLIENT_INFO_FILE_PATH,
         batch_size=batch_size
     )
 
+    # <-------------------------------------- EXECUTE FL SIMULATION -------------------------------------->
     print(f"\n{'='*60}")
     print(f"[SERVER] Executing Federated Learning")
     print(f"{'='*60}\n")
@@ -63,7 +52,7 @@ def main(grid: Grid, context: Context) -> None:
         num_rounds=num_rounds,
     )
 
-    # Save results
+    # <-------------------------------------- SAVE RESULTS -------------------------------------->
     print(f"\n{'='*60}")
     print(f"[SERVER] Federated Learning Complete")
     print(f"{'='*60}\n")
@@ -100,18 +89,4 @@ def main(grid: Grid, context: Context) -> None:
     except Exception as e:
         print(f"  Error saving summary: {e}")
 
-    if final_logits is not None and strategy.eval_history:
-        try:
-            save_checkpoint(
-                checkpoint_dir=MODEL_CHECKPOINT_FILE_PATH,
-                current_round=num_rounds,
-                consensus_logits=final_logits,
-                eval_history=strategy.eval_history,
-                training_metrics=summary
-            )
-            print(f"  Checkpoint saved: {MODEL_CHECKPOINT_FILE_PATH}")
-        except Exception as e:
-            print(f"  Error saving checkpoint: {e}")
-
     print(f"\n[SERVER] Training complete!\n")
-    

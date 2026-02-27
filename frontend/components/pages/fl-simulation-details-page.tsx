@@ -313,7 +313,7 @@ function MetricCard({
 // ---------------------------------------------------------------------------
 
 function makeLineOptions(
-  limits: { min: number; max: number },
+  limits: { min: number; max: number; stepSize?: number },
   isPercentage: boolean = false,
 ) {
   return {
@@ -350,6 +350,7 @@ function makeLineOptions(
         max: limits.max,
         grid: { color: "rgba(0,0,0,0.04)" },
         ticks: {
+          stepSize: limits.stepSize,
           font: { size: 11 },
           callback: (v: any) =>
             isPercentage
@@ -379,8 +380,6 @@ export default function FLSimulationDetailsPage({
   const [selectedClient, setSelectedClient] = useState<string>("all");
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-
-  console.log(simulation);
 
   // ---- Fetch data ----
   useEffect(() => {
@@ -450,10 +449,16 @@ export default function FLSimulationDetailsPage({
     [maxRounds],
   );
 
-  // Loss chart
+  // Accuracy x-axis
+  const accRoundLabels = useMemo(
+    () => Array.from({ length: maxRounds }, (_, i) => `${i + 1}`),
+    [maxRounds],
+  );
+
+  // Loss chart (validation + training loss)
   const lossChartData = useMemo(() => {
     if (selectedClient === "all") {
-      const avgData = roundLabels.map((_, ri) => {
+      const avgValData = roundLabels.map((_, ri) => {
         const vals: number[] = [];
         clients.forEach((c) => {
           const v = clientMetricsMap.get(c.id)?.rounds?.[ri]?.training
@@ -464,86 +469,43 @@ export default function FLSimulationDetailsPage({
           ? vals.reduce((a, b) => a + b, 0) / vals.length
           : null;
       });
-      return {
-        labels: roundLabels,
-        datasets: [
-          {
-            label: "Avg Validation Loss",
-            data: avgData,
-            borderColor: CLIENT_COLORS[0],
-            backgroundColor: "rgba(184, 0, 40, 0.08)",
-            tension: 0.3,
-            pointRadius: 4,
-            borderWidth: 2.5,
-            fill: true,
-            spanGaps: true,
-          },
-        ],
-      };
-    } else {
-      const cm = clientMetricsMap.get(parseInt(selectedClient));
-      const rounds = cm?.rounds ?? [];
-      const labels = rounds.map((r) => `${r.round}`);
-      return {
-        labels,
-        datasets: [
-          {
-            label: "Val Loss",
-            data: rounds.map((r) => r.training?.val_loss ?? null),
-            borderColor: CLIENT_COLORS[0],
-            backgroundColor: "rgba(184, 0, 40, 0.08)",
-            tension: 0.3,
-            pointRadius: 4,
-            borderWidth: 2.5,
-            fill: true,
-            spanGaps: true,
-          },
-        ],
-      };
-    }
-  }, [clients, clientMetricsMap, roundLabels, selectedClient]);
 
-  const lossValues = useMemo(() => {
-    const vals: number[] = [];
-    lossChartData.datasets.forEach((ds) =>
-      ds.data.forEach((v) => {
-        if (v != null) vals.push(v);
-      }),
-    );
-    return vals;
-  }, [lossChartData]);
-
-  const lossOptions = useMemo(
-    () => makeLineOptions(smartYLimit(lossValues)),
-    [lossValues],
-  );
-
-  // Accuracy chart
-  const accChartData = useMemo(() => {
-    if (selectedClient === "all") {
-      const avgData = roundLabels.map((_, ri) => {
+      const avgTrainData = roundLabels.map((_, ri) => {
         const vals: number[] = [];
         clients.forEach((c) => {
-          const rd = clientMetricsMap.get(c.id)?.rounds?.[ri];
-          const v = rd?.validation?.accuracy ?? rd?.training?.train_accuracy;
+          const v = clientMetricsMap.get(c.id)?.rounds?.[ri]?.training
+            ?.train_loss;
           if (v != null) vals.push(v);
         });
         return vals.length > 0
           ? vals.reduce((a, b) => a + b, 0) / vals.length
           : null;
       });
+
       return {
         labels: roundLabels,
         datasets: [
           {
-            label: "Avg Validation Accuracy",
-            data: avgData,
-            borderColor: CLIENT_COLORS[1],
-            backgroundColor: "rgba(59, 130, 246, 0.08)",
+            label: "Avg Val Loss",
+            data: avgValData,
+            borderColor: CLIENT_COLORS[0],
+            backgroundColor: "rgba(184, 0, 40, 0.08)",
             tension: 0.3,
             pointRadius: 4,
             borderWidth: 2.5,
             fill: true,
+            spanGaps: true,
+          },
+          {
+            label: "Avg Train Loss",
+            data: avgTrainData,
+            borderColor: CLIENT_COLORS[6],
+            backgroundColor: "rgba(20, 184, 166, 0.08)",
+            tension: 0.3,
+            pointRadius: 4,
+            borderWidth: 2.5,
+            borderDash: [4, 4],
+            fill: false,
             spanGaps: true,
           },
         ],
@@ -557,8 +519,85 @@ export default function FLSimulationDetailsPage({
         labels,
         datasets: [
           {
-            label: cInfo?.client_name ?? "Val Accuracy",
-            data: rounds.map((r) => r.validation?.accuracy ?? null),
+            label: cInfo?.client_name
+              ? `${cInfo.client_name} (Val)`
+              : "Val Loss",
+            data: rounds.map((r) => r.training?.val_loss ?? null),
+            borderColor: CLIENT_COLORS[0],
+            backgroundColor: "rgba(184, 0, 40, 0.08)",
+            tension: 0.3,
+            pointRadius: 4,
+            borderWidth: 2.5,
+            fill: true,
+            spanGaps: true,
+          },
+          {
+            label: cInfo?.client_name
+              ? `${cInfo.client_name} (Train)`
+              : "Train Loss",
+            data: rounds.map((r) => r.training?.train_loss ?? null),
+            borderColor: CLIENT_COLORS[6],
+            backgroundColor: "rgba(20, 184, 166, 0.08)",
+            tension: 0.3,
+            pointRadius: 4,
+            borderWidth: 2.5,
+            borderDash: [4, 4],
+            fill: false,
+            spanGaps: true,
+          },
+        ],
+      };
+    }
+  }, [clients, clientMetricsMap, roundLabels, selectedClient]);
+
+  const lossValues = useMemo(() => {
+    const vals: number[] = [];
+    lossChartData.datasets.forEach((ds) =>
+      ds.data.forEach((v) => {
+        if (v != null) vals.push(v as number);
+      }),
+    );
+    return vals;
+  }, [lossChartData]);
+
+  const lossOptions = useMemo(
+    () => makeLineOptions(smartYLimit(lossValues)),
+    [lossValues],
+  );
+
+  // Accuracy chart — average only in overview, anchored at (0, 0%)
+  const accChartData = useMemo(() => {
+    if (selectedClient === "all") {
+      const avgData = roundLabels.map((_, ri) => {
+        const vals: number[] = [];
+        clients.forEach((c) => {
+          const v = clientMetricsMap.get(c.id)?.rounds?.[ri]?.validation
+            ?.accuracy;
+          if (v != null) vals.push(v);
+        });
+        return vals.length > 0
+          ? vals.reduce((a, b) => a + b, 0) / vals.length
+          : null;
+      });
+
+      const avgTrainData = roundLabels.map((_, ri) => {
+        const vals: number[] = [];
+        clients.forEach((c) => {
+          const v = clientMetricsMap.get(c.id)?.rounds?.[ri]?.training
+            ?.train_accuracy;
+          if (v != null) vals.push(v);
+        });
+        return vals.length > 0
+          ? vals.reduce((a, b) => a + b, 0) / vals.length
+          : null;
+      });
+
+      return {
+        labels: accRoundLabels,
+        datasets: [
+          {
+            label: "Avg Accuracy",
+            data: avgData,
             borderColor: CLIENT_COLORS[1],
             backgroundColor: "rgba(59, 130, 246, 0.08)",
             tension: 0.3,
@@ -567,24 +606,66 @@ export default function FLSimulationDetailsPage({
             fill: true,
             spanGaps: true,
           },
+          {
+            label: "Avg Train Accuracy",
+            data: avgTrainData,
+            borderColor: CLIENT_COLORS[6],
+            backgroundColor: "rgba(20, 184, 166, 0.08)",
+            tension: 0.3,
+            pointRadius: 4,
+            borderWidth: 2.5,
+            borderDash: [4, 4],
+            fill: false,
+            spanGaps: true,
+          },
+        ],
+      };
+    } else {
+      const cm = clientMetricsMap.get(parseInt(selectedClient));
+      const rounds = cm?.rounds ?? [];
+      const cInfo = clients.find((c) => c.id === parseInt(selectedClient));
+      const idx = clients.findIndex((c) => c.id === parseInt(selectedClient));
+      const clientColor =
+        CLIENT_COLORS[Math.max(0, idx) % CLIENT_COLORS.length];
+      return {
+        labels: rounds.map((r) => `${r.round}`),
+        datasets: [
+          {
+            label: cInfo?.client_name
+              ? `${cInfo.client_name} Val`
+              : "Val Accuracy",
+            data: rounds.map((r) => r.validation?.accuracy ?? null),
+            borderColor: clientColor,
+            backgroundColor: `${clientColor}14`,
+            tension: 0.3,
+            pointRadius: 4,
+            borderWidth: 2.5,
+            fill: true,
+            spanGaps: true,
+          },
+          {
+            label: cInfo?.client_name
+              ? `${cInfo.client_name} Train`
+              : "Train Accuracy",
+            data: rounds.map((r) => r.training?.train_accuracy ?? null),
+            borderColor: CLIENT_COLORS[6],
+            backgroundColor: "rgba(20, 184, 166, 0.08)",
+            tension: 0.3,
+            pointRadius: 4,
+            borderWidth: 2.5,
+            borderDash: [4, 4],
+            fill: false,
+            spanGaps: true,
+          },
         ],
       };
     }
-  }, [clients, clientMetricsMap, roundLabels, selectedClient]);
+  }, [clients, clientMetricsMap, roundLabels, accRoundLabels, selectedClient]);
 
-  const accValues = useMemo(() => {
-    const vals: number[] = [];
-    accChartData.datasets.forEach((ds) =>
-      ds.data.forEach((v) => {
-        if (v != null) vals.push(v as number);
-      }),
-    );
-    return vals;
-  }, [accChartData]);
-
+  // Accuracy y-axis: start from 70% and go by 5%
   const accOptions = useMemo(
-    () => makeLineOptions(smartYLimit(accValues, 0.15), true),
-    [accValues],
+    () => makeLineOptions({ min: 0.7, max: 1, stepSize: 0.05 }, true),
+    [],
   );
 
   // Accuracy difference (round-to-round delta) chart
@@ -602,6 +683,7 @@ export default function FLSimulationDetailsPage({
           ? vals.reduce((a, b) => a + b, 0) / vals.length
           : null;
       });
+      console.log("avgAccs", avgAccs);
       const deltas = avgAccs.slice(1).map((v, i) => {
         const prev = avgAccs[i];
         return v != null && prev != null ? v - prev : null;
@@ -665,6 +747,78 @@ export default function FLSimulationDetailsPage({
   const accDeltaOptions = useMemo(
     () => makeLineOptions(smartYLimit(accDeltaValues, 0.25, true), true),
     [accDeltaValues],
+  );
+
+  // F1 Score chart
+  const f1ChartData = useMemo(() => {
+    if (selectedClient === "all") {
+      const avgF1Data = roundLabels.map((_, ri) => {
+        const vals: number[] = [];
+        clients.forEach((c) => {
+          const v = clientMetricsMap.get(c.id)?.rounds?.[ri]?.validation
+            ?.f1_score;
+          if (v != null) vals.push(v);
+        });
+        return vals.length > 0
+          ? vals.reduce((a, b) => a + b, 0) / vals.length
+          : null;
+      });
+
+      return {
+        labels: roundLabels,
+        datasets: [
+          {
+            label: "Avg F1 Score",
+            data: avgF1Data,
+            borderColor: CLIENT_COLORS[4],
+            backgroundColor: "rgba(139, 92, 246, 0.08)",
+            tension: 0.3,
+            pointRadius: 4,
+            borderWidth: 2.5,
+            fill: true,
+            spanGaps: true,
+          },
+        ],
+      };
+    } else {
+      const cm = clientMetricsMap.get(parseInt(selectedClient));
+      const rounds = cm?.rounds ?? [];
+      const labels = rounds.map((r) => `${r.round}`);
+      const cInfo = clients.find((c) => c.id === parseInt(selectedClient));
+      return {
+        labels,
+        datasets: [
+          {
+            label: cInfo?.client_name
+              ? `${cInfo.client_name} (F1)`
+              : "F1 Score",
+            data: rounds.map((r) => r.validation?.f1_score ?? null),
+            borderColor: CLIENT_COLORS[4],
+            backgroundColor: "rgba(139, 92, 246, 0.08)",
+            tension: 0.3,
+            pointRadius: 4,
+            borderWidth: 2.5,
+            fill: true,
+            spanGaps: true,
+          },
+        ],
+      };
+    }
+  }, [clients, clientMetricsMap, roundLabels, selectedClient]);
+
+  const f1Values = useMemo(() => {
+    const vals: number[] = [];
+    f1ChartData.datasets.forEach((ds) =>
+      ds.data.forEach((v) => {
+        if (v != null) vals.push(v as number);
+      }),
+    );
+    return vals;
+  }, [f1ChartData]);
+
+  const f1Options = useMemo(
+    () => makeLineOptions(smartYLimit(f1Values, 0.15)),
+    [f1Values],
   );
 
   // ---- Post-FL aggregate stats ----
@@ -1008,10 +1162,10 @@ export default function FLSimulationDetailsPage({
                     <span className="text-xs font-medium bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-200">
                       Dirichlet &alpha; ={" "}
                       {simulation?.heterogeneity_preset === "moderate"
-                        ? "2.5"
+                        ? "1.0"
                         : simulation?.heterogeneity_preset === "high"
-                          ? "1.0"
-                          : "5.0"}
+                          ? "0.5"
+                          : "2.0"}
                     </span>
                   </div>
 
@@ -1101,27 +1255,39 @@ export default function FLSimulationDetailsPage({
                 <h2 className="text-xl font-bold text-slate-900 mb-5">
                   Training Convergence
                 </h2>
-                <div className="flex flex-wrap items-start gap-6">
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 w-full lg:w-[calc(33.333%-1rem)]">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200">
                     <h3 className="text-sm font-semibold text-slate-700 mb-1">
-                      {selectedClient === "all"
-                        ? "Avg Validation Loss"
-                        : "Validation Loss"}
+                      {selectedClient === "all" ? "Avg Loss" : "Loss History"}
                     </h3>
                     <p className="text-xs text-slate-400 mb-3">
                       {selectedClient === "all"
-                        ? "Average validation loss across all clients"
-                        : "The loss value calculated on the validation set after local training rounds"}
+                        ? "Average validation and training loss across all clients"
+                        : "Validation and training loss each round"}
                     </p>
                     <div className="h-72">
                       <Line data={lossChartData} options={lossOptions} />
                     </div>
                   </div>
 
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 w-full lg:w-[calc(33.333%-1rem)]">
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-1">
+                      {selectedClient === "all" ? "Avg F1 Score" : "F1 Score"}
+                    </h3>
+                    <p className="text-xs text-slate-400 mb-3">
+                      {selectedClient === "all"
+                        ? "Average F1 score progression across all clients"
+                        : "F1 score progression each round"}
+                    </p>
+                    <div className="h-72">
+                      <Line data={f1ChartData} options={f1Options} />
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200">
                     <h3 className="text-sm font-semibold text-slate-700 mb-1">
                       {selectedClient === "all"
-                        ? "Avg Validation Accuracy"
+                        ? "Avg Accuracy"
                         : "Validation Accuracy"}
                     </h3>
                     <p className="text-xs text-slate-400 mb-3">
@@ -1134,7 +1300,7 @@ export default function FLSimulationDetailsPage({
                     </div>
                   </div>
 
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200 w-full lg:w-[calc(33.333%-1rem)]">
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200">
                     <h3 className="text-sm font-semibold text-slate-700 mb-1">
                       {selectedClient === "all"
                         ? "Avg Accuracy Delta"
