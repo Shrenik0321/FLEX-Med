@@ -381,7 +381,7 @@ def freeze_backbone(model, model_type: str):
         param.requires_grad = False
 
     # Then unfreeze only the classifier head
-    if model_type in ('resnet50', 'resnet18'):
+    if model_type in ('resnet50'):
         for param in model.fc.parameters():
             param.requires_grad = True
 
@@ -393,10 +393,6 @@ def freeze_backbone(model, model_type: str):
         for param in model.classifier.parameters():
             param.requires_grad = True
 
-    elif model_type == 'efficientnet_b0':
-        for param in model.classifier.parameters():
-            param.requires_grad = True
-
     return model
 
 # Unfreeze the last backbone block in addition to the classifier.
@@ -404,7 +400,7 @@ def freeze_backbone(model, model_type: str):
 def unfreeze_last_block(model, model_type: str):
     model_type = model_type.lower()
 
-    if model_type in ('resnet50', 'resnet18'):
+    if model_type in ('resnet50'):
         # Unfreeze layer4 (last residual block)
         for param in model.layer4.parameters():
             param.requires_grad = True
@@ -424,13 +420,6 @@ def unfreeze_last_block(model, model_type: str):
             for param in model.features.transition3.parameters():
                 param.requires_grad = True
 
-    elif model_type == 'efficientnet_b0':
-        # Unfreeze last 3 blocks
-        features_list = list(model.features.children())
-        for block in features_list[-3:]:
-            for param in block.parameters():
-                param.requires_grad = True
-
     return model
 
 def apply_freeze_strategy(model, model_type: str, server_round: int, total_rounds: int = 10):
@@ -440,18 +429,8 @@ def apply_freeze_strategy(model, model_type: str, server_round: int, total_round
     Strategy (Optimized for Heterogeneity):
         - Phase 1 (20%): Freeze backbone, train only classifier - fast initial learning
         - Phase 2 (80%): Unfreeze last block + classifier - distillation-friendly
-        - Removed Phase 3 (Unfreeze All) to prevent catastrophic forgetting of generic features.
 
     For 10 rounds: Phase 1 = 1-2, Phase 2 = 3-10
-
-    Args:
-        model: PyTorch model instance
-        model_type: Model architecture name
-        server_round: Current FL round number (1-indexed)
-        total_rounds: Total number of FL rounds
-
-    Returns:
-        Tuple of (model, lr_multiplier) where lr_multiplier is applied to learning rate
     """
     from flwr.common import log
     from logging import INFO

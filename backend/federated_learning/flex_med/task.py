@@ -9,7 +9,6 @@ import torch.nn.functional as F
 from PIL import Image
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, WeightedRandomSampler
-from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchvision.transforms import Compose, ToTensor, Normalize
 from typing import Tuple, Optional, Iterable, Dict, List
 from flwr.common import Message, Metadata, RecordDict, ArrayRecord, ConfigRecord, log
@@ -135,7 +134,7 @@ def load_public_dataset(batch_size=32, round_num=1, total_rounds=10):
     return DataLoader(subset, batch_size=batch_size, shuffle=False, num_workers=2)
 
 # Load and assign the data distribution to client models using Dirichlet partioning.
-def load_private_dataset(partition_id: int, num_partitions: int, batch_size=64,
+def load_private_dataset(partition_id: int, num_partitions: int, batch_size=32,
                          config_path: str = CLIENT_INFO_FILE_PATH):
     if not os.path.exists(LOCAL_TRAIN_DATASET_PATH):
         raise FileNotFoundError(f"Shared training dataset not found at {LOCAL_TRAIN_DATASET_PATH}")
@@ -271,8 +270,9 @@ def train(model, trainloader, epochs, lr, device,
         lr=lr, betas=(0.9, 0.999), weight_decay=WEIGHT_DECAY
     )
     
-    # Cosine Annealing Scheduler for local epochs
-    scheduler = CosineAnnealingLR(optimizer, T_max=epochs)
+    # With local-epochs=1, CosineAnnealingLR serves no purpose (steps after all batches).
+    # Cross-round LR decay in client_app.py handles round-to-round reduction.
+    scheduler = None
     
     has_validation = valloader is not None
 
@@ -458,7 +458,7 @@ def compute_consensus(
     # <----------------------------- WEIGHT CALCULATION ----------------------------->
     num_clients = len(logits_list)
     weights = []
-    weight_breakdown = [], 
+    weight_breakdown = []
 
     for i in range(num_clients):
         metrics, config = client_metrics[i], client_configs[i]
@@ -480,13 +480,8 @@ def compute_consensus(
         val_acc = metrics.get("val_accuracy", metrics.get("train_accuracy", 0.5))
         accuracy_factor = baseline_accuracy_factor + val_acc
 
-        # round trust calculation based on the server round
-        # 5.0 -> the half way point of the total rounds
-        # 1.0 -> the maximum cap for the how much trust can be given
-        round_trust = min(server_round / 5.0, 1.0)
-
-        # stabilized quality calculation combining the round trust and quality multiplier
-        stabilized_quality = 0.5 + 0.5 * round_trust * quality_multiplier
+        # stabilized quality calculation combining the quality multiplier
+        stabilized_quality = 0.5 + 0.5 * quality_multiplier
 
         # final weight calculation combining the base weight, stabilized quality and accuracy factor
         final_weight = base_weight * stabilized_quality * accuracy_factor
@@ -496,7 +491,7 @@ def compute_consensus(
             "client_name": client_name, "model_type": model_type, "num_samples": num_samples,
             "train_loss": train_loss, "distill_loss": distill_loss, "combined_loss": combined_loss,
             "base_weight": base_weight, "quality_multiplier": quality_multiplier,
-            "accuracy_factor": accuracy_factor, "round_trust": round_trust,
+            "accuracy_factor": accuracy_factor,
             "stabilized_quality": stabilized_quality, "final_weight": final_weight,
         })
 
@@ -513,7 +508,6 @@ def compute_consensus(
     # calculates the new consensus by taking the weighted average of the client logits
     
     new_consensus = np.average(logits_list, axis=0, weights=normalized_weights)
-    class_weighting_info = {"status": "disabled", "reason": "prevents oscillation feedback loop"}
 
     # <----------------------------- CONSENSUS MOMENTUM SMOOTHING ----------------------------->
     smoothing_applied = False
@@ -546,7 +540,6 @@ def compute_consensus(
             "mean": float(np.mean(normalized_weights)) if normalized_weights else 0,
             "std": float(np.std(normalized_weights)) if normalized_weights else 0,
         },
-        "class_weighting": class_weighting_info,
         "parameters": {"train_loss_weight": TRAIN_LOSS_WEIGHT, "distill_loss_weight": DISTILL_LOSS_WEIGHT}
     }
 

@@ -23,6 +23,14 @@ import { Loading } from "@/components/ui/loading";
 
 interface PresetConfig {
   dirichlet_alpha: number;
+}
+
+interface SystemConfig {
+  // Active Heterogeneity Preset
+  heterogeneity_preset: string;
+  presets: Record<string, PresetConfig>;
+
+  // Training Strategy Parameters (global — constant across presets)
   minority_boost: number;
   focal_alpha: number;
   focal_gamma: number;
@@ -33,12 +41,6 @@ interface PresetConfig {
   distill_loss_weight: number;
   lr_decay: number;
   learning_rate: number;
-}
-
-interface SystemConfig {
-  // Active Heterogeneity Preset
-  heterogeneity_preset: string;
-  presets: Record<string, PresetConfig>;
 
   // FL Training Configuration (global)
   num_rounds: number;
@@ -71,7 +73,7 @@ const PRESET_DESCRIPTIONS: Record<
     label: "Low Heterogeneity",
     description:
       "Nearly uniform data distribution across clients. Suitable for baseline experiments.",
-    alpha: "alpha ~ 2.0",
+    alpha: "alpha ~ 1.5",
   },
   moderate: {
     label: "Moderate Heterogeneity",
@@ -93,29 +95,20 @@ export default function SettingsPage() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Helper to get the active preset config values
-  const getActivePreset = (): PresetConfig | null => {
-    if (!config) return null;
-    const preset = config.presets[config.heterogeneity_preset];
-    if (preset) return preset;
-    return config.presets["moderate"] ?? null;
-  };
-
-  // Helper to update a field in the active preset
+  // Helper to update a field in a specific preset
   const handlePresetFieldChange = (
+    presetKey: string,
     field: keyof PresetConfig,
     value: number,
   ) => {
-    if (!config) return;
-    const activePresetKey = config.heterogeneity_preset;
     setConfig((prev) => {
       if (!prev) return prev;
       return {
         ...prev,
         presets: {
           ...prev.presets,
-          [activePresetKey]: {
-            ...prev.presets[activePresetKey],
+          [presetKey]: {
+            ...(prev.presets[presetKey] || { dirichlet_alpha: 1.0 }),
             [field]: value,
           },
         },
@@ -209,16 +202,6 @@ export default function SettingsPage() {
     toast.success("Settings reloaded from database", { id: toastId });
   };
 
-  const handlePresetChange = async (preset: string) => {
-    if (!config) return;
-
-    // For named presets, just switch the active preset key
-    setConfig((prev) => {
-      if (!prev) return prev;
-      return { ...prev, heterogeneity_preset: preset };
-    });
-  };
-
   // If config hasn't loaded yet, show loading/error state
   if (!config) {
     return (
@@ -240,9 +223,6 @@ export default function SettingsPage() {
       </div>
     );
   }
-
-  const activePreset = getActivePreset()!;
-  const currentPresetDesc = PRESET_DESCRIPTIONS[config.heterogeneity_preset];
 
   return (
     <div className="p-8 w-full">
@@ -276,88 +256,82 @@ export default function SettingsPage() {
               Heterogeneity Configuration
             </CardTitle>
             <CardDescription>
-              Select a preset to auto-configure training strategies.
+              Configure data heterogeneity presets and Dirichlet parameters.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="flex flex-col md:flex-row gap-6">
-              <div className="w-full md:w-1/3">
-                <Label className="mb-2 block">Heterogeneity Preset</Label>
-                <Select
-                  value={config.heterogeneity_preset}
-                  onValueChange={handlePresetChange}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a preset" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(PRESET_DESCRIPTIONS).map(
-                      ([key, { label, alpha }]) => (
-                        <SelectItem key={key} value={key}>
-                          <span className="font-medium">{label}</span>
-                          <span className="ml-2 text-muted-foreground text-xs">
-                            ({alpha})
-                          </span>
-                        </SelectItem>
-                      ),
-                    )}
-                  </SelectContent>
-                </Select>
-                {currentPresetDesc && (
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {currentPresetDesc.description}
-                  </p>
-                )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b border-border">
+              <div>
+                <Label className="mb-2 block">Min Partition Size</Label>
+                <Input
+                  type="number"
+                  value={config.dirichlet_min_partition_size}
+                  onChange={(e) =>
+                    handleInputChange(
+                      "dirichlet_min_partition_size",
+                      parseInt(e.target.value) || 0,
+                    )
+                  }
+                  min="50"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Minimum samples per client partition
+                </p>
               </div>
+              <div>
+                <Label className="mb-2 block">Dirichlet Seed</Label>
+                <Input
+                  type="number"
+                  value={config.dirichlet_seed}
+                  onChange={(e) =>
+                    handleInputChange(
+                      "dirichlet_seed",
+                      parseInt(e.target.value) || 0,
+                    )
+                  }
+                  min="0"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Seed for deterministic partitioning
+                </p>
+              </div>
+            </div>
 
-              <div className="w-full md:w-2/3 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label className="mb-2 block">Dirichlet Alpha</Label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    value={activePreset.dirichlet_alpha}
-                    onChange={(e) =>
-                      handlePresetFieldChange(
-                        "dirichlet_alpha",
-                        parseFloat(e.target.value) || 0,
-                      )
-                    }
-                    min="0.1"
-                    max="10"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Lower = more heterogeneity
-                  </p>
-                </div>
-                <div>
-                  <Label className="mb-2 block">Min Partition Size</Label>
-                  <Input
-                    type="number"
-                    value={config.dirichlet_min_partition_size}
-                    onChange={(e) =>
-                      handleInputChange(
-                        "dirichlet_min_partition_size",
-                        parseInt(e.target.value) || 0,
-                      )
-                    }
-                    min="50"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <Label className="mb-2 block">Dirichlet Seed</Label>
-                  <Input
-                    type="number"
-                    value={config.dirichlet_seed}
-                    onChange={(e) =>
-                      handleInputChange(
-                        "dirichlet_seed",
-                        parseInt(e.target.value) || 0,
-                      )
-                    }
-                    min="0"
-                  />
-                </div>
+            <div className="pt-2">
+              <Label className="text-base font-medium mb-4 block">
+                Dirichlet Alpha Presets
+              </Label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {Object.entries(PRESET_DESCRIPTIONS).map(
+                  ([key, { label, description }]) => (
+                    <div
+                      key={key}
+                      className="p-4 rounded-lg border border-border bg-card"
+                    >
+                      <Label className="mb-3 block font-semibold">
+                        {label}
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={config.presets[key]?.dirichlet_alpha || 0}
+                        onChange={(e) =>
+                          handlePresetFieldChange(
+                            key,
+                            "dirichlet_alpha",
+                            parseFloat(e.target.value) || 0,
+                          )
+                        }
+                        min="0.1"
+                        max="10"
+                        className="mb-2"
+                      />
+                      <p className="text-xs text-muted-foreground h-8 line-clamp-2">
+                        {description}
+                      </p>
+                    </div>
+                  ),
+                )}
               </div>
             </div>
           </CardContent>
@@ -423,9 +397,9 @@ export default function SettingsPage() {
                 <Input
                   type="number"
                   step="0.0001"
-                  value={activePreset.learning_rate}
+                  value={config.learning_rate}
                   onChange={(e) =>
-                    handlePresetFieldChange(
+                    handleInputChange(
                       "learning_rate",
                       parseFloat(e.target.value) || 0,
                     )
@@ -439,9 +413,9 @@ export default function SettingsPage() {
                 <Input
                   type="number"
                   step="0.01"
-                  value={activePreset.lr_decay}
+                  value={config.lr_decay}
                   onChange={(e) =>
-                    handlePresetFieldChange(
+                    handleInputChange(
                       "lr_decay",
                       parseFloat(e.target.value) || 0,
                     )
@@ -484,9 +458,9 @@ export default function SettingsPage() {
                 <Input
                   type="number"
                   step="0.05"
-                  value={activePreset.minority_boost}
+                  value={config.minority_boost}
                   onChange={(e) =>
-                    handlePresetFieldChange(
+                    handleInputChange(
                       "minority_boost",
                       parseFloat(e.target.value) || 0,
                     )
@@ -500,9 +474,9 @@ export default function SettingsPage() {
                 <Input
                   type="number"
                   step="0.05"
-                  value={activePreset.focal_alpha}
+                  value={config.focal_alpha}
                   onChange={(e) =>
-                    handlePresetFieldChange(
+                    handleInputChange(
                       "focal_alpha",
                       parseFloat(e.target.value) || 0,
                     )
@@ -516,9 +490,9 @@ export default function SettingsPage() {
                 <Input
                   type="number"
                   step="0.1"
-                  value={activePreset.focal_gamma}
+                  value={config.focal_gamma}
                   onChange={(e) =>
-                    handlePresetFieldChange(
+                    handleInputChange(
                       "focal_gamma",
                       parseFloat(e.target.value) || 0,
                     )
@@ -532,9 +506,9 @@ export default function SettingsPage() {
                 <Input
                   type="number"
                   step="0.05"
-                  value={activePreset.consensus_momentum}
+                  value={config.consensus_momentum}
                   onChange={(e) =>
-                    handlePresetFieldChange(
+                    handleInputChange(
                       "consensus_momentum",
                       parseFloat(e.target.value) || 0,
                     )
@@ -548,9 +522,9 @@ export default function SettingsPage() {
                 <Input
                   type="number"
                   step="0.05"
-                  value={activePreset.distill_weight_base}
+                  value={config.distill_weight_base}
                   onChange={(e) =>
-                    handlePresetFieldChange(
+                    handleInputChange(
                       "distill_weight_base",
                       parseFloat(e.target.value) || 0,
                     )
@@ -564,9 +538,9 @@ export default function SettingsPage() {
                 <Input
                   type="number"
                   step="0.05"
-                  value={activePreset.distill_decay_rate}
+                  value={config.distill_decay_rate}
                   onChange={(e) =>
-                    handlePresetFieldChange(
+                    handleInputChange(
                       "distill_decay_rate",
                       parseFloat(e.target.value) || 0,
                     )
@@ -580,9 +554,9 @@ export default function SettingsPage() {
                 <Input
                   type="number"
                   step="0.05"
-                  value={activePreset.train_loss_weight}
+                  value={config.train_loss_weight}
                   onChange={(e) =>
-                    handlePresetFieldChange(
+                    handleInputChange(
                       "train_loss_weight",
                       parseFloat(e.target.value) || 0,
                     )
@@ -596,9 +570,9 @@ export default function SettingsPage() {
                 <Input
                   type="number"
                   step="0.05"
-                  value={activePreset.distill_loss_weight}
+                  value={config.distill_loss_weight}
                   onChange={(e) =>
-                    handlePresetFieldChange(
+                    handleInputChange(
                       "distill_loss_weight",
                       parseFloat(e.target.value) || 0,
                     )

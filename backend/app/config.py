@@ -185,9 +185,9 @@ class Settings(BaseSettings):
     # FL Model Parameters
     num_classes: int = 2
     img_size: int = 224
-    consensus_momentum: float = float(os.getenv("FLEX_MED_CONSENSUS_MOMENTUM", "0.40"))
-    train_loss_weight: float = float(os.getenv("FLEX_MED_TRAIN_LOSS_WEIGHT", "0.70"))
-    distill_loss_weight: float = float(os.getenv("FLEX_MED_DISTILL_LOSS_WEIGHT", "0.3"))
+    consensus_momentum: float = float(os.getenv("FLEX_MED_CONSENSUS_MOMENTUM", "0.35"))
+    train_loss_weight: float = float(os.getenv("FLEX_MED_TRAIN_LOSS_WEIGHT", "0.72"))
+    distill_loss_weight: float = float(os.getenv("FLEX_MED_DISTILL_LOSS_WEIGHT", "0.28"))
 
     # Per-architecture Focal Loss alpha is now computed dynamically per client
     # fohcal_alpha_per_arch removed in favor of data-driven approach
@@ -195,11 +195,11 @@ class Settings(BaseSettings):
     focal_gamma: float = float(os.getenv("FLEX_MED_FOCAL_GAMMA", "2.0"))
 
     # Minority Class Boost (for Focal Loss clamping/adjustment)
-    minority_boost: float = float(os.getenv("FLEX_MED_MINORITY_BOOST", "0.70"))
+    minority_boost: float = float(os.getenv("FLEX_MED_MINORITY_BOOST", "0.78"))
 
     # Knowledge distillation configuration
-    distill_weight_base: float = float(os.getenv("FLEX_MED_DISTILL_WEIGHT", "0.45"))
-    distill_decay_rate: float = float(os.getenv("FLEX_MED_DISTILL_DECAY", "0.2"))
+    distill_weight_base: float = float(os.getenv("FLEX_MED_DISTILL_WEIGHT", "0.42"))
+    distill_decay_rate: float = float(os.getenv("FLEX_MED_DISTILL_DECAY", "0.18"))
 
     # ------------------------------------------------------------------------
     # Dirichlet Partitioning Configuration (Runtime Data Heterogeneity)

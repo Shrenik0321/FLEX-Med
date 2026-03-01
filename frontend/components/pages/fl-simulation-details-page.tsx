@@ -662,9 +662,9 @@ export default function FLSimulationDetailsPage({
     }
   }, [clients, clientMetricsMap, roundLabels, accRoundLabels, selectedClient]);
 
-  // Accuracy y-axis: start from 70% and go by 5%
+  // Accuracy y-axis: start from 60% and go by 5%
   const accOptions = useMemo(
-    () => makeLineOptions({ min: 0.7, max: 1, stepSize: 0.05 }, true),
+    () => makeLineOptions({ min: 0.5, max: 1, stepSize: 0.05 }, true),
     [],
   );
 

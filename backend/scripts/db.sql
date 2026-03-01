@@ -186,55 +186,30 @@ CREATE TABLE system_config (
 );
 
 -- Insert default configuration (singleton row)
--- Includes heterogeneity presets, active config, and training strategy params (v3.1)
+-- Includes heterogeneity presets, active config, and training strategy params (v4.0)
+-- Tuning params are top-level (constant across presets); presets only set dirichlet_alpha.
 INSERT INTO system_config (config) VALUES ('{
     "heterogeneity_preset": "moderate",
     "presets": {
-        "low": {
-            "dirichlet_alpha": 2.0,
-            "minority_boost": 0.70,
-            "focal_alpha": 0.50,
-            "focal_gamma": 2.0,
-            "consensus_momentum": 0.25,
-            "distill_weight_base": 0.50,
-            "distill_decay_rate": 0.25,
-            "train_loss_weight": 0.70,
-            "distill_loss_weight": 0.30,
-            "lr_decay": 0.92,
-            "learning_rate": 0.001
-        },
-        "moderate": {
-            "dirichlet_alpha": 1.0,
-            "minority_boost": 0.80,
-            "focal_alpha": 0.50,
-            "focal_gamma": 2.0,
-            "consensus_momentum": 0.40,
-            "distill_weight_base": 0.40,
-            "distill_decay_rate": 0.15,
-            "train_loss_weight": 0.72,
-            "distill_loss_weight": 0.28,
-            "lr_decay": 0.88,
-            "learning_rate": 0.001
-        },
-        "high": {
-            "dirichlet_alpha": 0.5,
-            "minority_boost": 0.85,
-            "focal_alpha": 0.50,
-            "focal_gamma": 2.5,
-            "consensus_momentum": 0.50,
-            "distill_weight_base": 0.35,
-            "distill_decay_rate": 0.10,
-            "train_loss_weight": 0.75,
-            "distill_loss_weight": 0.25,
-            "lr_decay": 0.85,
-            "learning_rate": 0.001
-        }
+        "low":      { "dirichlet_alpha": 1.5 },
+        "moderate": { "dirichlet_alpha": 1.0 },
+        "high":     { "dirichlet_alpha": 0.5 }
     },
+    "minority_boost": 0.78,
+    "focal_alpha": 0.50,
+    "focal_gamma": 2.0,
+    "consensus_momentum": 0.35,
+    "distill_weight_base": 0.42,
+    "distill_decay_rate": 0.18,
+    "train_loss_weight": 0.72,
+    "distill_loss_weight": 0.28,
+    "lr_decay": 0.90,
+    "learning_rate": 0.001,
     "num_rounds": 10,
-    "local_epochs": 2,
+    "local_epochs": 1,
     "batch_size": 32,
     "distill_lr": 0.001,
-    "distill_epochs": 2,
+    "distill_epochs": 1,
     "temperature": 4.0,
     "dirichlet_seed": 42,
     "dirichlet_min_partition_size": 400,

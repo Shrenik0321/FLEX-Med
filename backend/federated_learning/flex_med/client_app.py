@@ -65,7 +65,6 @@ def train(msg: Message, context: Context):
         phase = "Phase 1 - Backbone FROZEN" if freeze_backbone else "Phase 2 - Fine-tuning"
         print(f"[{display_id}] [Freeze] Round {server_round}/{total_rounds}: {phase}")
 
-
     # <-------------------------------------- KNOWLEDGE DISTILLATION -------------------------------------->
     distill_loss = 0.0
     if "arrays" in msg.content and msg.content["arrays"]:
@@ -111,6 +110,7 @@ def train(msg: Message, context: Context):
     dataset_len = len(trainloader.dataset)
 
     start_time = time.time()
+    # Local training strategy
     train_loss, val_loss, train_accuracy, val_accuracy = train_fn(
         model=model, trainloader=trainloader, epochs=context.run_config["local-epochs"],
         lr=decayed_lr, device=device,
@@ -147,7 +147,7 @@ def train(msg: Message, context: Context):
                 "distill_loss": distill_loss,
                 "num-examples": dataset_len,
                 "training_time": training_time,
-                "client_id": partition_id
+                "client_id": partition_id,
             })
         }),
         reply_to=msg

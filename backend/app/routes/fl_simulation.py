@@ -106,7 +106,7 @@ async def start_fl(
     if not heterogeneity_preset:
         heterogeneity_preset = system_config.get("heterogeneity_preset", "moderate")
 
-    # Resolve preset config values — all preset-specific params live inside the preset object
+    # Resolve preset config values — presets now only contain dirichlet_alpha
     presets = system_config.get("presets", {})
     preset_config = presets.get(heterogeneity_preset, {})
 
@@ -117,35 +117,35 @@ async def start_fl(
         )
 
     logger.info(f"Using heterogeneity preset: {heterogeneity_preset}")
-    logger.info(f"Preset config: dirichlet_alpha={preset_config.get('dirichlet_alpha')}, lr_decay={preset_config.get('lr_decay')}")
+    logger.info(f"Preset config: dirichlet_alpha={preset_config.get('dirichlet_alpha')}")
 
-    # Build FL configs — global params from system_config, preset-specific from preset
+    # Build FL configs — global params from top-level system_config
     configs = {
         "num_server_rounds": system_config.get("num_rounds", 10),
         "fraction_train": 1.0,
         "fraction_evaluate": 1.0,
-        "local_epochs": system_config.get("local_epochs", 5),
-        "lr": preset_config.get("learning_rate", 0.001),
-        "lr_decay": preset_config.get("lr_decay", 0.95),
+        "local_epochs": system_config.get("local_epochs", 1),
+        "lr": system_config.get("learning_rate", 0.001),
+        "lr_decay": system_config.get("lr_decay", 0.90),
         "distill_lr": system_config.get("distill_lr", 0.001),
-        "distill_epochs": system_config.get("distill_epochs", 2),
-        "temperature": system_config.get("temperature", 3.0),
+        "distill_epochs": system_config.get("distill_epochs", 1),
+        "temperature": system_config.get("temperature", 4.0),
         "batch_size": system_config.get("batch_size", 32),
     }
 
-    # Build training strategy config — all values from the resolved preset
+    # Build training strategy config — dirichlet_alpha from preset, rest from top-level
     training_config = {
-        "dirichlet_alpha": preset_config.get("dirichlet_alpha", 2.5),
+        "dirichlet_alpha": preset_config.get("dirichlet_alpha", 1.5),
         "dirichlet_seed": system_config.get("dirichlet_seed", 42),
         "dirichlet_min_partition_size": system_config.get("dirichlet_min_partition_size", 400),
-        "minority_boost": preset_config.get("minority_boost", 0.80),
-        "focal_alpha": preset_config.get("focal_alpha", 0.50),
-        "focal_gamma": preset_config.get("focal_gamma", 2.0),
-        "consensus_momentum": preset_config.get("consensus_momentum", 0.20),
-        "distill_weight_base": preset_config.get("distill_weight_base", 0.45),
-        "distill_decay_rate": preset_config.get("distill_decay_rate", 0.20),
-        "train_loss_weight": preset_config.get("train_loss_weight", 0.70),
-        "distill_loss_weight": preset_config.get("distill_loss_weight", 0.30),
+        "minority_boost": system_config.get("minority_boost", 0.78),
+        "focal_alpha": system_config.get("focal_alpha", 0.50),
+        "focal_gamma": system_config.get("focal_gamma", 2.0),
+        "consensus_momentum": system_config.get("consensus_momentum", 0.35),
+        "distill_weight_base": system_config.get("distill_weight_base", 0.42),
+        "distill_decay_rate": system_config.get("distill_decay_rate", 0.18),
+        "train_loss_weight": system_config.get("train_loss_weight", 0.72),
+        "distill_loss_weight": system_config.get("distill_loss_weight", 0.28),
     }
 
     # Build dataset paths config
