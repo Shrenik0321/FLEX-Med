@@ -58,7 +58,7 @@ def train(msg: Message, context: Context):
     # <-------------------------------------- APPLY FREEZE STRATEGY -------------------------------------->
     if model_type:
         model, _ = apply_freeze_strategy(model, model_type, server_round, total_rounds)
-        freeze_backbone = (server_round <= total_rounds // 2) # Rough approximation for logging, logic is in helper
+        freeze_backbone = (server_round <= total_rounds // 2)
         phase = "Phase 1 - Backbone FROZEN" if freeze_backbone else "Phase 2 - Fine-tuning"
         print(f"[{display_id}] [Freeze] Round {server_round}/{total_rounds}: {phase}")
 

@@ -504,7 +504,6 @@ def compute_consensus(
         breakdown["normalized_weight"] = normalized_weights[i]
 
     # calculates the new consensus by taking the weighted average of the client logits
-    
     new_consensus = np.average(logits_list, axis=0, weights=normalized_weights)
 
     # <----------------------------- CONSENSUS MOMENTUM SMOOTHING ----------------------------->
