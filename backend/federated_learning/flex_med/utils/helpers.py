@@ -122,6 +122,29 @@ def save_model(model: torch.nn.Module, model_path: str, model_type: str):
         'state_dict': model.state_dict(),
     }, model_path)
 
+def get_model_by_type(model_type: str, use_pretrained: bool = True, dropout_rate: float = None):
+    """Create a model instance by type with dropout-enhanced classifier."""
+    model_type = model_type.lower()
+    if dropout_rate is None:
+        dropout_rate = get_initial_dropout_rate(model_type)
+
+    model_map = {
+        'resnet50': models.resnet50, 'resnet18': models.resnet18,
+        'mobilenet_v2': models.mobilenet_v2, 'densenet121': models.densenet121,
+        'efficientnet_b0': models.efficientnet_b0,
+    }
+
+    if model_type not in model_map:
+        raise ValueError(f"Unsupported model type: {model_type}. Supported: {list(model_map.keys())}")
+
+    if use_pretrained:
+        weights = "DEFAULT"
+    else:
+        weights = None
+
+    model = model_map[model_type](weights=weights)
+    return add_dropout_to_classifier(model, model_type, dropout_rate)
+    
 def load_model_for_client(partition_id: int, config_path: str = CLIENT_INFO_FILE_PATH):
     """Load client config and create model architecture."""
     client_config = get_client_by_partition_id(partition_id, config_path)
@@ -304,6 +327,43 @@ def print_client_data_distribution_summary(client_configs: List[Dict], partition
     else:
         log(INFO, "Partitioner not initialized yet")
 
+# <----------------------------- MODEL EVALUATION UTILITIES ----------------------------->
+def compute_per_class_accuracy(model, valloader, device):
+    """
+    Compute per-class accuracies for balanced accuracy metric.
+    """
+    model.eval()
+    class_correct = {0: 0, 1: 0}
+    class_total = {0: 0, 1: 0}
+
+    with torch.no_grad():
+        for images, labels in valloader:
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            _, predicted = torch.max(outputs.data, 1)
+
+            for i in range(labels.size(0)):
+                label = labels[i].item()
+                class_total[label] += 1
+                if predicted[i] == label:
+                    class_correct[label] += 1
+
+    # Handle edge case: if one class has zero samples in validation set
+    if class_total[0] == 0 or class_total[1] == 0:
+        # Fall back to total accuracy
+        total_correct = class_correct[0] + class_correct[1]
+        total_samples = class_total[0] + class_total[1]
+        return total_correct / total_samples if total_samples > 0 else 0.5
+
+    # Compute per-class accuracies
+    leukemia_acc = class_correct[0] / class_total[0]
+    healthy_acc = class_correct[1] / class_total[1]
+
+    # Return only balanced accuracy (privacy-preserving)
+    balanced_accuracy = (leukemia_acc + healthy_acc) / 2.0
+
+    return balanced_accuracy
+
 # <----------------------------- MODEL UTILITIES - Freeze/Unfreeze for Gradual Training ----------------------------->
 def get_model_by_type(model_type: str, use_pretrained: bool = True, dropout_rate: float = None):
     """Create a model instance by type with dropout-enhanced classifier."""
@@ -396,7 +456,6 @@ def freeze_backbone(model, model_type: str):
     return model
 
 # Unfreeze the last backbone block in addition to the classifier.
-# Use in early FL rounds (1-2) to prevent biased gradients from corrupting
 def unfreeze_last_block(model, model_type: str):
     model_type = model_type.lower()
 

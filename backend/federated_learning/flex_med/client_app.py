@@ -18,12 +18,11 @@ from flex_med.utils.helpers import (
     apply_freeze_strategy,
     get_model_by_type, get_client_by_partition_id, load_model_weights,
     get_display_id, save_model, load_model_for_client,
-    compute_dynamic_focal_alpha
+    compute_dynamic_focal_alpha, compute_per_class_accuracy
 )
 
 app = ClientApp()
 
-# <-------------------------------------- FEDERATED TRAINING LOGIC -------------------------------------->
 @app.train()
 def train(msg: Message, context: Context):
     # <-------------------------------------- LOAD CONFIGURATIONS -------------------------------------->
@@ -57,10 +56,8 @@ def train(msg: Message, context: Context):
     model.to(device)
 
     # <-------------------------------------- APPLY FREEZE STRATEGY -------------------------------------->
-    # Apply freeze strategy before any training (distillation + private training both respect it)
     if model_type:
         model, _ = apply_freeze_strategy(model, model_type, server_round, total_rounds)
-        # Log freeze status with client name
         freeze_backbone = (server_round <= total_rounds // 2) # Rough approximation for logging, logic is in helper
         phase = "Phase 1 - Backbone FROZEN" if freeze_backbone else "Phase 2 - Fine-tuning"
         print(f"[{display_id}] [Freeze] Round {server_round}/{total_rounds}: {phase}")
@@ -122,6 +119,10 @@ def train(msg: Message, context: Context):
     print(f"[{display_id}] Train Loss: {train_loss:.4f}, Acc: {train_accuracy:.2%}, "
           f"Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.2%} ({dataset_len} samples, {training_time:.1f}s)")
 
+    # <-------------------------------------- COMPUTE BALANCED ACCURACY -------------------------------------->
+    balanced_accuracy = compute_per_class_accuracy(model, valloader, device)
+    print(f"[{display_id}] Balanced Accuracy: {balanced_accuracy:.2%}")
+
     # <-------------------------------------- SAVE MODEL -------------------------------------->
     try:
         save_model(model, model_path, model_type)
@@ -144,6 +145,7 @@ def train(msg: Message, context: Context):
                 "train_accuracy": train_accuracy,
                 "val_loss": val_loss,
                 "val_accuracy": val_accuracy,
+                "balanced_accuracy": balanced_accuracy,
                 "distill_loss": distill_loss,
                 "num-examples": dataset_len,
                 "training_time": training_time,

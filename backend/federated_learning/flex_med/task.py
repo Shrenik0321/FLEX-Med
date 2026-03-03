@@ -1,3 +1,4 @@
+import math
 import torch
 import numpy as np
 import os
@@ -53,7 +54,7 @@ PRIVATE_TRAIN_TRANSFORM = Compose([
     transforms.RandomVerticalFlip(p=0.3),
     transforms.RandomRotation(15),
     transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
-    transforms.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.1, hue=0.05),
+    transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.0, hue=0.0),
     ToTensor(),
     Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
@@ -468,31 +469,28 @@ def compute_consensus(
         model_type = config.get("model_type", "unknown").lower()
         client_name = config.get("client_name", f"client_{i}")
 
-        # based on the clients number of local training samples
-        base_weight = max(num_samples, 1)
+        base_weight = max(num_samples, 2)
 
-        # quality multiplier calculation combining the local training loss and knowledge distillation loss. Lower the loss, higher the quality multiplier
-        combined_loss = TRAIN_LOSS_WEIGHT * train_loss + DISTILL_LOSS_WEIGHT * distill_loss
-        quality_multiplier = 1.0 / (1.0 + combined_loss)
-
-        # accuracy factor calculation based on the clients validation accuracy
+        # accuracy factor calculation - use balanced accuracy if available (privacy-preserving)
         baseline_accuracy_factor = 0.5 # so that every client has a chance even if it performs badly it will have a baseline of 0.5 accuracy since this is binary classification
-        val_acc = metrics.get("val_accuracy", metrics.get("train_accuracy", 0.5))
-        accuracy_factor = baseline_accuracy_factor + val_acc
 
-        # stabilized quality calculation combining the quality multiplier
-        stabilized_quality = 0.5 + 0.5 * quality_multiplier
+        # Prefer balanced_accuracy (mean of per-class accuracies) to prevent bias from imbalanced clients
+        balanced_acc = metrics.get("balanced_accuracy", None)
+        accuracy_factor = baseline_accuracy_factor + balanced_acc
 
-        # final weight calculation combining the base weight, stabilized quality and accuracy factor
-        final_weight = base_weight * stabilized_quality * accuracy_factor
+        # final weight calculation combining the base weight and accuracy factor
+        final_weight = base_weight * accuracy_factor
 
         weights.append(final_weight)
         weight_breakdown.append({
-            "client_name": client_name, "model_type": model_type, "num_samples": num_samples,
-            "train_loss": train_loss, "distill_loss": distill_loss, "combined_loss": combined_loss,
-            "base_weight": base_weight, "quality_multiplier": quality_multiplier,
+            "client_name": client_name,
+            "model_type": model_type,
+            "num_samples": num_samples,
+            "train_loss": train_loss,
+            "distill_loss": distill_loss,
+            "base_weight": base_weight, 
             "accuracy_factor": accuracy_factor,
-            "stabilized_quality": stabilized_quality, "final_weight": final_weight,
+            "final_weight": final_weight,
         })
 
     # calculates the total weight of all the client weights combined
