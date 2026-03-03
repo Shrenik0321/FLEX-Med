@@ -142,14 +142,6 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
                       images.
                     </p>
                   )}
-                  {modelType === "efficientnet_b0" && (
-                    <p className="text-sm text-foreground">
-                      <strong>Modern Efficiency Optimizer:</strong> Uses
-                      compound scaling to balance depth, width, and resolution.
-                      Provides state-of-the-art accuracy with minimal
-                      computational overhead.
-                    </p>
-                  )}
                 </div>
               )}
             </div>

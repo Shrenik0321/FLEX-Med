@@ -27,7 +27,6 @@ BEGIN
         CREATE TYPE model_type AS ENUM (
             'resnet50',
             'densenet121',
-            'efficientnet_b0',
             'mobilenet_v2'
         );
     END IF;

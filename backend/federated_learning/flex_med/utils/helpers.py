@@ -129,9 +129,9 @@ def get_model_by_type(model_type: str, use_pretrained: bool = True, dropout_rate
         dropout_rate = get_initial_dropout_rate(model_type)
 
     model_map = {
-        'resnet50': models.resnet50, 'resnet18': models.resnet18,
-        'mobilenet_v2': models.mobilenet_v2, 'densenet121': models.densenet121,
-        'efficientnet_b0': models.efficientnet_b0,
+        'resnet50': models.resnet50,
+        'mobilenet_v2': models.mobilenet_v2,
+        'densenet121': models.densenet121,
     }
 
     if model_type not in model_map:
@@ -372,9 +372,9 @@ def get_model_by_type(model_type: str, use_pretrained: bool = True, dropout_rate
         dropout_rate = get_initial_dropout_rate(model_type)
 
     model_map = {
-        'resnet50': models.resnet50, 'resnet18': models.resnet18,
-        'mobilenet_v2': models.mobilenet_v2, 'densenet121': models.densenet121,
-        'efficientnet_b0': models.efficientnet_b0,
+        'resnet50': models.resnet50,
+        'mobilenet_v2': models.mobilenet_v2,
+        'densenet121': models.densenet121,
     }
 
     if model_type not in model_map:
@@ -482,19 +482,9 @@ def unfreeze_last_block(model, model_type: str):
     return model
 
 def apply_freeze_strategy(model, model_type: str, server_round: int, total_rounds: int = 10):
-    """
-    Apply appropriate freeze/unfreeze strategy based on current FL round.
-
-    Strategy (Optimized for Heterogeneity):
-        - Phase 1 (20%): Freeze backbone, train only classifier - fast initial learning
-        - Phase 2 (80%): Unfreeze last block + classifier - distillation-friendly
-
-    For 10 rounds: Phase 1 = 1-2, Phase 2 = 3-10
-    """
     from flwr.common import log
     from logging import INFO
 
-    # Calculate phase thresholds
     # Phase 1: 20% - classifier only (minimum 2 rounds)
     phase1_end = max(2, int(total_rounds * 0.20))
 
@@ -508,7 +498,6 @@ def apply_freeze_strategy(model, model_type: str, server_round: int, total_round
     else:
         # Phase 2: Last block + classifier - Main training phase
         # We keep the early backbone frozen to preserve ImageNet features and prevent
-        # overfitting to the highly heterogeneous local data.
         model = freeze_backbone(model, model_type)
         model = unfreeze_last_block(model, model_type)
         lr_multiplier = 1.0

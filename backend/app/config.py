@@ -195,7 +195,7 @@ class Settings(BaseSettings):
     focal_gamma: float = float(os.getenv("FLEX_MED_FOCAL_GAMMA", "2.0"))
 
     # Minority Class Boost (for Focal Loss clamping/adjustment)
-    minority_boost: float = float(os.getenv("FLEX_MED_MINORITY_BOOST", "0.78"))
+    minority_boost: float = float(os.getenv("FLEX_MED_MINORITY_BOOST", "0.80"))
 
     # Knowledge distillation configuration
     distill_weight_base: float = float(os.getenv("FLEX_MED_DISTILL_WEIGHT", "0.42"))
@@ -204,7 +204,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------------
     # Dirichlet Partitioning Configuration (Runtime Data Heterogeneity)
     # ------------------------------------------------------------------------
-    dirichlet_alpha: float = float(os.getenv("FLEX_MED_DIRICHLET_ALPHA", "2.5"))
+    dirichlet_alpha: float = float(os.getenv("FLEX_MED_DIRICHLET_ALPHA", "0.5"))
     dirichlet_seed: int = int(os.getenv("FLEX_MED_DIRICHLET_SEED", "42"))
     dirichlet_min_partition_size: int = int(os.getenv("FLEX_MED_DIRICHLET_MIN_PARTITION_SIZE", "400"))  # Minimum samples per client partition
 
