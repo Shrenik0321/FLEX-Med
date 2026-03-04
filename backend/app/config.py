@@ -200,6 +200,7 @@ class Settings(BaseSettings):
     # Knowledge distillation configuration
     distill_weight_base: float = float(os.getenv("FLEX_MED_DISTILL_WEIGHT", "0.42"))
     distill_decay_rate: float = float(os.getenv("FLEX_MED_DISTILL_DECAY", "0.18"))
+    weight_decay: float = float(os.getenv("FLEX_MED_WEIGHT_DECAY", "0.02"))
 
     # ------------------------------------------------------------------------
     # Dirichlet Partitioning Configuration (Runtime Data Heterogeneity)

@@ -29,7 +29,7 @@ def main(grid: Grid, context: Context) -> None:
     print(f"[SERVER] {len(client_configs)} clients loaded")
 
     # <-------------------------------------- LOAD PUBLIC ANCHOR DATASET -------------------------------------->
-    public_loader = load_public_dataset(batch_size=1, round_num=server_round, total_rounds=num_rounds)
+    public_loader = load_public_dataset(batch_size=batch_size, round_num=server_round, total_rounds=num_rounds)
     num_samples = len(public_loader.dataset)
 
     initial_consensus = np.zeros((num_samples, NUM_CLASSES), dtype=np.float32)

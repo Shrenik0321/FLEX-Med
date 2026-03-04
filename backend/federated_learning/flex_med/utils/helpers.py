@@ -5,6 +5,7 @@ from typing import Dict, List, Optional
 import torch
 import torch.nn as nn
 from torchvision import models
+from torchvision.models import ResNet50_Weights, MobileNet_V2_Weights, DenseNet121_Weights
 from pathlib import Path
 from flex_med.utils.config import (
     LOCAL_TRAIN_DATASET_PATH, DIRICHLET_ALPHA, DIRICHLET_SEED, CLIENT_INFO_FILE_PATH, NUM_CLASSES,
@@ -108,7 +109,6 @@ def get_client_by_partition_id(partition_id: int, config_path: str = CLIENT_INFO
               f"Using client {effective_id} (Modulo fallback).")
         return clients[effective_id]
     return clients[partition_id]
-    return clients[partition_id]
 
 def get_display_id(partition_id: int, client_config: Dict) -> str:
     """Get display ID for logging."""
@@ -122,29 +122,6 @@ def save_model(model: torch.nn.Module, model_path: str, model_type: str):
         'state_dict': model.state_dict(),
     }, model_path)
 
-def get_model_by_type(model_type: str, use_pretrained: bool = True, dropout_rate: float = None):
-    """Create a model instance by type with dropout-enhanced classifier."""
-    model_type = model_type.lower()
-    if dropout_rate is None:
-        dropout_rate = get_initial_dropout_rate(model_type)
-
-    model_map = {
-        'resnet50': models.resnet50,
-        'mobilenet_v2': models.mobilenet_v2,
-        'densenet121': models.densenet121,
-    }
-
-    if model_type not in model_map:
-        raise ValueError(f"Unsupported model type: {model_type}. Supported: {list(model_map.keys())}")
-
-    if use_pretrained:
-        weights = "DEFAULT"
-    else:
-        weights = None
-
-    model = model_map[model_type](weights=weights)
-    return add_dropout_to_classifier(model, model_type, dropout_rate)
-    
 def load_model_for_client(partition_id: int, config_path: str = CLIENT_INFO_FILE_PATH):
     """Load client config and create model architecture."""
     client_config = get_client_by_partition_id(partition_id, config_path)
@@ -372,25 +349,23 @@ def get_model_by_type(model_type: str, use_pretrained: bool = True, dropout_rate
         dropout_rate = get_initial_dropout_rate(model_type)
 
     model_map = {
-        'resnet50': models.resnet50,
-        'mobilenet_v2': models.mobilenet_v2,
-        'densenet121': models.densenet121,
+        'resnet50': (models.resnet50, ResNet50_Weights.DEFAULT),
+        'mobilenet_v2': (models.mobilenet_v2, MobileNet_V2_Weights.DEFAULT),
+        'densenet121': (models.densenet121, DenseNet121_Weights.DEFAULT),
     }
 
     if model_type not in model_map:
         raise ValueError(f"Unsupported model type: {model_type}. Supported: {list(model_map.keys())}")
 
-    if use_pretrained:
-        weights = "DEFAULT"
-    else:
-        weights = None
+    model_fn, default_weights = model_map[model_type]
+    weights = default_weights if use_pretrained else None
 
-    model = model_map[model_type](weights=weights)
+    model = model_fn(weights=weights)
     return add_dropout_to_classifier(model, model_type, dropout_rate)
 
 def get_initial_dropout_rate(model_type: str) -> float:
     """Get default dropout rate for model architecture."""
-    rates = {'resnet50': 0.35, 'mobilenet_v2': 0.45, 'densenet121': 0.35}
+    rates = {'resnet50': 0.35, 'mobilenet_v2': 0.45, 'densenet121': 0.35}   
     return rates.get(model_type.lower(), 0.3)
 
 def add_dropout_to_classifier(model, model_type: str, dropout_rate: float = 0.3):
@@ -423,7 +398,10 @@ def add_dropout_to_classifier(model, model_type: str, dropout_rate: float = 0.3)
 
 def load_model_weights(model, model_path, device):
     """Load model weights from file (handles legacy and new formats)."""
-    checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+    try:
+        checkpoint = torch.load(model_path, map_location=device, weights_only=True)
+    except Exception:
+        checkpoint = torch.load(model_path, map_location=device, weights_only=False)
     if isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
         model.load_state_dict(checkpoint['state_dict'])
     else:

@@ -8,7 +8,8 @@ import warnings
 # Suppress the specific Pillow deprecation warning heavily spamming the logs
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="torchvision.transforms._functional_pil")
 warnings.filterwarnings("ignore", message=".*'mode' parameter is deprecated.*")
-from flex_med.utils.config import CLIENT_INFO_FILE_PATH
+import random
+from flex_med.utils.config import CLIENT_INFO_FILE_PATH, DIRICHLET_SEED
 from flex_med.task import (
     load_private_dataset,
     load_public_dataset, get_public_logits, distill_knowledge,
@@ -32,10 +33,17 @@ def train(msg: Message, context: Context):
 
     try:
         server_round = int(msg.metadata.group_id)
-    except:
+    except (ValueError, TypeError, AttributeError):
         server_round = 1
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    # Deterministic seeding for reproducibility
+    random.seed(DIRICHLET_SEED)
+    np.random.seed(DIRICHLET_SEED)
+    torch.manual_seed(DIRICHLET_SEED)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(DIRICHLET_SEED)
 
     print(f"\n{'='*60}")
     
@@ -67,7 +75,7 @@ def train(msg: Message, context: Context):
     if "arrays" in msg.content and msg.content["arrays"]:
         try:
             consensus_logits = msg.content["arrays"]["0"].numpy()
-            if np.any(consensus_logits != 0):
+            if consensus_logits.shape[0] > 0:
                 print(f"[{display_id}] Phase 1: Knowledge Distillation")
                 public_loader = load_public_dataset(batch_size=context.run_config["batch-size"], round_num=server_round, total_rounds=total_rounds)
                 distill_loss = distill_knowledge(
@@ -91,13 +99,7 @@ def train(msg: Message, context: Context):
     if trainloader is None:
         raise ValueError(f"[{display_id}] No training data available")
 
-    # Get client name for better logging
-    client_name = f"Client_{partition_id}"
-    try:
-        if 'client_config' in locals() and 'client_name' in client_config:
-             client_name = client_config['client_name']
-    except Exception:
-         pass
+    client_name = client_config.get('client_name', f"Client_{partition_id}")
 
     n_leukemia = class_counts.get(0, 0)
     n_healthy = class_counts.get(1, 0)

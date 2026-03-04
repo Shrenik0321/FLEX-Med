@@ -90,8 +90,6 @@ class TransformOverrideSubset(torch.utils.data.Dataset):
 
 # <----------------------------- LOSS FUNCTIONS ----------------------------->
 class FocalLoss(nn.Module):
-    """Focal Loss: FL(pt) = -alpha * (1 - pt)^gamma * log(pt). Focuses on hard examples."""
-
     def __init__(self, alpha: float = 0.35, gamma: float = 2.0, label_smoothing: float = 0.05):
         super().__init__()
         self.alpha = alpha
@@ -475,7 +473,9 @@ def compute_consensus(
         baseline_accuracy_factor = 0.5 # so that every client has a chance even if it performs badly it will have a baseline of 0.5 accuracy since this is binary classification
 
         # Prefer balanced_accuracy (mean of per-class accuracies) to prevent bias from imbalanced clients
-        balanced_acc = metrics.get("balanced_accuracy", None)
+        balanced_acc = metrics.get("balanced_accuracy", 0.5)
+        if balanced_acc is None:
+            balanced_acc = 0.5
         accuracy_factor = baseline_accuracy_factor + balanced_acc
 
         # final weight calculation combining the base weight and accuracy factor

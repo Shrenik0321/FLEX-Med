@@ -70,4 +70,4 @@ DISTILL_WEIGHT_BASE = _settings.distill_weight_base
 DISTILL_DECAY_RATE = _settings.distill_decay_rate
 
 # Weight decay for model training
-WEIGHT_DECAY=0.02
+WEIGHT_DECAY = _settings.weight_decay
