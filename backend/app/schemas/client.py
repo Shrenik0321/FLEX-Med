@@ -9,7 +9,7 @@ class Status(str, Enum):
 
 class ModelType(str, Enum):
     # The "Big Four" Architectures for FLEX-Med
-    ResNet50 = "resnet50"             # The Industry Standard
+    EfficientNetB0 = "efficientnet_b0" # Lightweight EfficientNet
     MobileNetV2 = "mobilenet_v2"       # Mobile Optimized
     DenseNet121 = "densenet121"       # High Dense Connections
 
@@ -80,7 +80,7 @@ if __name__ == "__main__":
 
     client_create = ClientCreate(
         client_name="Hospital_A",
-        model_type=ModelType.ResNet50,
+        model_type=ModelType.EfficientNetB0,
         status=Status.Active,
         model_path="/path/to/model.pt"
     )
@@ -96,7 +96,7 @@ if __name__ == "__main__":
         id=1,
         client_name="Hospital_A",
         status=Status.Active,
-        model_type=ModelType.ResNet50,
+        model_type=ModelType.EfficientNetB0,
         model_path="/path/to/model.pt",
         created_at=datetime.now().isoformat()
     )

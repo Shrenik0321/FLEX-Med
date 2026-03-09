@@ -1,4 +1,3 @@
-import math
 import torch
 import numpy as np
 import os
@@ -22,10 +21,9 @@ from flex_med.utils.config import (
     BASE_PATH, CLIENT_INFO_FILE_PATH, DATASET_FILE_PATH,
     PUBLIC_ANCHOR_DATASET_PATH, PUBLIC_TEST_DATASET_PATH, LOCAL_TRAIN_DATASET_PATH,
     MODEL_CHECKPOINT_FILE_PATH, GRAPHS_OUTPUT_DIR, NUM_CLASSES, IMG_SIZE,
-    TRAIN_LOSS_WEIGHT, DISTILL_LOSS_WEIGHT, CONSENSUS_MOMENTUM,
     DIRICHLET_ALPHA, DIRICHLET_SEED, DIRICHLET_MIN_PARTITION_SIZE,
-    FOCAL_ALPHA_DEFAULT, FOCAL_GAMMA, MINORITY_BOOST,
-    DISTILL_WEIGHT_BASE, DISTILL_DECAY_RATE, WEIGHT_DECAY
+    DISTILL_WEIGHT_BASE, DISTILL_DECAY_RATE, WEIGHT_DECAY,
+    FOCAL_GAMMA, MINORITY_BOOST
 )
 from flex_med.utils.helpers import (
     sanitize_client_paths,
@@ -37,6 +35,16 @@ from flex_med.utils.helpers import (
     load_client_config, get_client_by_partition_id,
     get_model_by_type, load_model_weights
 )
+
+# <----------------------------- HELPERS ----------------------------->
+def set_bn_eval(m):
+    """Freeze running statistics and parameters for ALL types of BatchNorm layers."""
+    if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
+        m.eval()
+        if m.weight is not None:
+            m.weight.requires_grad = False
+        if m.bias is not None:
+            m.bias.requires_grad = False
 
 # <----------------------------- CONSTANTS & GLOBAL VARIABLES ----------------------------->
 PARTITIONER_CACHE = {}
@@ -88,21 +96,6 @@ class TransformOverrideSubset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.subset)
 
-# <----------------------------- LOSS FUNCTIONS ----------------------------->
-class FocalLoss(nn.Module):
-    def __init__(self, alpha: float = 0.35, gamma: float = 2.0, label_smoothing: float = 0.05):
-        super().__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-        self.label_smoothing = label_smoothing
-
-    def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        ce_loss = F.cross_entropy(inputs, targets, reduction='none', label_smoothing=self.label_smoothing)
-        pt = torch.exp(-ce_loss)
-        focal_term = (1 - pt) ** self.gamma
-        alpha_t = torch.where(targets == 0, self.alpha, 1 - self.alpha)
-        return (alpha_t * focal_term * ce_loss).mean()
-
 # <----------------------------- LOAD DATA ----------------------------->
 # Create a Dirichlet partitioner for heterogeneous data distribution.
 def create_dirichlet_partitioner(
@@ -132,7 +125,7 @@ def load_public_dataset(batch_size=32, round_num=1, total_rounds=10):
     subset = torch.utils.data.Subset(full_dataset, indices)
     return DataLoader(subset, batch_size=batch_size, shuffle=False, num_workers=2)
 
-# Load and assign the data distribution to client models using Dirichlet partioning.
+# Load and assign the data distribution to client models using Dirichlet partitioning.
 def load_private_dataset(partition_id: int, num_partitions: int, batch_size=32,
                          config_path: str = CLIENT_INFO_FILE_PATH):
     if not os.path.exists(LOCAL_TRAIN_DATASET_PATH):
@@ -181,34 +174,23 @@ def load_private_dataset(partition_id: int, num_partitions: int, batch_size=32,
         torch.utils.data.Subset(client_dataset, val_indices), COMMON_TRANSFORM
     )
 
-    train_targets = [full_dataset.targets[client_indices[i]] for i in train_indices]
-    
-    # Calculate weights for WeightedRandomSampler
-    class_sample_counts = torch.bincount(torch.tensor(train_targets), minlength=2).float()
-    
-    # Identify minority class and apply boost
-    minority_class = torch.argmin(class_sample_counts).item()
-    class_weights = 1.0 / class_sample_counts.clamp(min=1)
-    
-    if MINORITY_BOOST != 1.0:
-        class_weights[minority_class] *= MINORITY_BOOST
-        
-    sample_weights = class_weights[torch.tensor(train_targets)]
-    
+    train_labels = [full_dataset.targets[client_indices[i]] for i in train_indices]
+    class_counts = np.bincount(train_labels, minlength=NUM_CLASSES)
+
+    # Power-based rebalancing: MINORITY_BOOST controls how much to rebalance
+    # 0.0 = natural distribution, 0.5 = square-root, 1.0 = full inverse-frequency (50/50)
+    class_weights = 1.0 / np.maximum(class_counts, 1) ** MINORITY_BOOST
+    sample_weights = [class_weights[label] for label in train_labels]
+
     sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
+
     trainloader = DataLoader(train_ds, batch_size=batch_size, sampler=sampler, num_workers=2)
     testloader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=2)
-    
-    # Calculate class counts for dynamic focal alpha
-    class_counts = {
-        0: train_targets.count(0),
-        1: train_targets.count(1)
-    }
-    
+
     return trainloader, testloader, class_counts
 
 # Load public test dataset for post_fl evaluation.
-def load_public_test_dataset(batch_size=64):
+def load_public_test_dataset(batch_size=32):
     if not os.path.exists(PUBLIC_TEST_DATASET_PATH):
         raise FileNotFoundError(f"Public test data not found at {PUBLIC_TEST_DATASET_PATH}")
     dataset = datasets.ImageFolder(root=PUBLIC_TEST_DATASET_PATH, transform=COMMON_TRANSFORM)
@@ -244,30 +226,36 @@ def validate_training(model, valloader, criterion, device):
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
-    model.train()
     
     avg_loss = val_loss / val_batches if val_batches > 0 else 0.0
     accuracy = correct / total if total > 0 else 0.0
     return avg_loss, accuracy
 
-def train(model, trainloader, epochs, lr, device,
-          valloader=None, server_round: int = 1, total_rounds: int = 10,
-          focal_alpha=None):
+def train(model, trainloader, epochs, base_lr, phase_multiplier, device,
+          valloader=None, server_round: int = 1, total_rounds: int = 10):
 
     if trainloader is None:
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0
 
     model.to(device)
 
-    if focal_alpha is None:
-        focal_alpha = FOCAL_ALPHA_DEFAULT
-    criterion = FocalLoss(alpha=focal_alpha, gamma=FOCAL_GAMMA)
+    # Standard CrossEntropyLoss with label smoothing (WRS handles class balance)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
-    # Only optimize parameters that require gradients (respects freeze strategy applied in client_app.py)
-    optimizer = torch.optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()),
-        lr=lr, betas=(0.9, 0.999), weight_decay=WEIGHT_DECAY
-    )
+    # Separate classifier and backbone parameters for Discriminative LRs
+    classifier_params = []
+    backbone_params = []
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            if "classifier" in name or "fc" in name:
+                classifier_params.append(param)
+            else:
+                backbone_params.append(param)
+    
+    optimizer = torch.optim.AdamW([
+        {"params": classifier_params, "lr": base_lr},
+        {"params": backbone_params, "lr": base_lr * phase_multiplier}
+    ], betas=(0.9, 0.999), weight_decay=WEIGHT_DECAY)
     
     # With local-epochs=1, CosineAnnealingLR serves no purpose (steps after all batches).
     # Cross-round LR decay in client_app.py handles round-to-round reduction.
@@ -280,8 +268,10 @@ def train(model, trainloader, epochs, lr, device,
     total_train_correct, total_train_samples = 0, 0
     total_val_accuracy = 0.0
 
-    model.train()
     for epoch in range(epochs):
+        model.train()
+        model.apply(set_bn_eval)
+        
         epoch_train_loss, epoch_train_batches = 0.0, 0
         epoch_correct, epoch_samples = 0, 0
 
@@ -291,7 +281,10 @@ def train(model, trainloader, epochs, lr, device,
             outputs = model(images)
             loss = criterion(outputs, labels)
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            
+            # STABILITY FIX: Tighten gradient clipping to prevent fine-tuning explosions
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
+            
             optimizer.step()
 
             epoch_train_loss += loss.item()
@@ -391,7 +384,7 @@ def test(model, testloader, device, return_detailed=False):
 
 # <----------------------------- KNOWLEDGE DISTILLATION : Distill consensus knowledge into local model using KL divergence with adaptive weighting. ----------------------------->
 def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr, temperature,
-                      current_round=1, total_rounds=10, adaptive=True):
+                      phase_multiplier=1.0, current_round=1, total_rounds=10, adaptive=True):
     base_weight = DISTILL_WEIGHT_BASE
     decay_rate = DISTILL_DECAY_RATE
     weight_decay = WEIGHT_DECAY
@@ -400,16 +393,29 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
     if adaptive and total_rounds > 1:
         progress = (current_round - 1) / (total_rounds - 1)
         adaptive_factor = np.exp(-decay_rate * progress)
-        DISTILL_WEIGHT = max(0.20, min(0.65, base_weight * adaptive_factor))
+        DISTILL_WEIGHT = max(0.20, min(1.0, base_weight * adaptive_factor))
     else:
         DISTILL_WEIGHT = base_weight
 
     model.to(device)
     model.train()
-    optimizer = torch.optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()),
-        lr=lr, betas=(0.9, 0.999), weight_decay=weight_decay
-    )
+    model.apply(set_bn_eval)
+    
+    # Separate classifier and backbone parameters for Discriminative LRs
+    classifier_params = []
+    backbone_params = []
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            if "classifier" in name or "fc" in name:
+                classifier_params.append(param)
+            else:
+                backbone_params.append(param)
+                
+    optimizer = torch.optim.AdamW([
+        {"params": classifier_params, "lr": lr},
+        {"params": backbone_params, "lr": lr * phase_multiplier}
+    ], betas=(0.9, 0.999), weight_decay=weight_decay)
+    
     consensus_tensor = torch.from_numpy(consensus_logits).float()
 
     total_loss, idx = 0.0, 0
@@ -426,9 +432,11 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
             student_logits = model(images)
 
             # Kullback Leibler Divergence
+            # consensus is already a soft probability from temperature-scaled softmax in compute_consensus,
+            # so we use it directly as the target distribution (no additional softmax needed)
             kl_loss = F.kl_div(
                 F.log_softmax(student_logits / temperature, dim=1),
-                F.softmax(batch_consensus / temperature, dim=1),
+                batch_consensus,                                    # already a probability
                 reduction='batchmean'
             ) * (temperature ** 2)
             loss = DISTILL_WEIGHT * kl_loss
@@ -436,6 +444,10 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
             # Backpropagate and update
             optimizer.zero_grad()
             loss.backward()
+            
+            # STABILITY FIX: Clip gradients to mirror private training loop, preventing massive KL spikes
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
+            
             optimizer.step()
             total_loss += loss.item()
             idx += batch_size
@@ -446,98 +458,52 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
 # <----------------------------- CONSENSUS COMPUTATION ----------------------------->
 def compute_consensus(
     logits_list: List[np.ndarray], client_metrics: List[Dict], client_configs: List[Dict],
-    server_round: int, last_consensus: Optional[np.ndarray] = None,
-    momentum: float = CONSENSUS_MOMENTUM,
+    server_round: int,
+    temperature: float = 4.0,
 ) -> Tuple[Optional[np.ndarray], Dict]:
     if not logits_list:
         return None, {"error": "No client logits provided"}
-    if len(logits_list) != len(client_metrics) or len(logits_list) != len(client_configs):
-        return None, {"error": "Mismatched input lengths"}
 
-    # <----------------------------- WEIGHT CALCULATION ----------------------------->
     num_clients = len(logits_list)
-    weights = []
-    weight_breakdown = []
 
+    # Extract sample counts for each client (default to 1.0 if missing to prevent 0 division)
+    raw_weights = []
     for i in range(num_clients):
-        metrics, config = client_metrics[i], client_configs[i]
-        num_samples = metrics.get("num-examples", 1)
-        train_loss = metrics.get("train_loss", 0.0)
-        distill_loss = metrics.get("distill_loss", 0.0)
-        model_type = config.get("model_type", "unknown").lower()
-        client_name = config.get("client_name", f"client_{i}")
-
-        base_weight = max(num_samples, 2)
-
-        # accuracy factor calculation - use balanced accuracy if available (privacy-preserving)
-        baseline_accuracy_factor = 0.5 # so that every client has a chance even if it performs badly it will have a baseline of 0.5 accuracy since this is binary classification
-
-        # Prefer balanced_accuracy (mean of per-class accuracies) to prevent bias from imbalanced clients
-        balanced_acc = metrics.get("balanced_accuracy", 0.5)
-        if balanced_acc is None:
-            balanced_acc = 0.5
-        accuracy_factor = baseline_accuracy_factor + balanced_acc
-
-        # final weight calculation combining the base weight and accuracy factor
-        final_weight = base_weight * accuracy_factor
-
-        weights.append(final_weight)
-        weight_breakdown.append({
-            "client_name": client_name,
-            "model_type": model_type,
-            "num_samples": num_samples,
-            "train_loss": train_loss,
-            "distill_loss": distill_loss,
-            "base_weight": base_weight, 
-            "accuracy_factor": accuracy_factor,
-            "final_weight": final_weight,
-        })
-
-    # calculates the total weight of all the client weights combined
-    total_weight = sum(weights)
-    if total_weight == 0:
-        return None, {"error": "All clients have zero weight", "weight_breakdown": weight_breakdown}
-
-    # normalizes the weights so that they sum to 1
-    normalized_weights = [w / total_weight for w in weights]
-    for i, breakdown in enumerate(weight_breakdown):
-        breakdown["normalized_weight"] = normalized_weights[i]
-
-    # calculates the new consensus by taking the weighted average of the client logits
-    new_consensus = np.average(logits_list, axis=0, weights=normalized_weights)
-
-    # <----------------------------- CONSENSUS MOMENTUM SMOOTHING ----------------------------->
-    smoothing_applied = False
-    if last_consensus is not None and server_round > 1:
-        if last_consensus.shape != new_consensus.shape:
-            if new_consensus.shape[0] > last_consensus.shape[0]:
-                if new_consensus.shape[1] != last_consensus.shape[1]:
-                    return None, {"error": "Class count mismatch in consensus resizing"}
-                old_len = last_consensus.shape[0]
-                balanced_part = momentum * last_consensus + (1 - momentum) * new_consensus[:old_len]
-                consensus_logits = np.concatenate([balanced_part, new_consensus[old_len:]], axis=0)
-            else:
-                consensus_logits = new_consensus
+        # Safely extract num_examples if it exists in the nested dict structure from client_app.py
+        if i < len(client_metrics) and "num-examples" in client_metrics[i]:
+            raw_weights.append(float(client_metrics[i]["num-examples"]))
         else:
-            consensus_logits = momentum * last_consensus + (1 - momentum) * new_consensus
-        smoothing_applied = True
-    else:
-        consensus_logits = new_consensus
+            raw_weights.append(1.0) # Fallback
+
+    total_samples = sum(raw_weights)
+    normalized_weights = [w / total_samples for w in raw_weights]
+
+    # <--- TEMPERATURE-SCALED CONSENSUS --->
+    # Soften sharplogits with temperature T before averaging.
+    # Prevents overconfident clients (e.g. DenseNet on imbalanced data) from dominating
+    # and keeps the distillation signal rich and learnable through late rounds.
+    def softmax_with_temp(logits: np.ndarray, T: float) -> np.ndarray:
+        shifted = logits - logits.max(axis=-1, keepdims=True)   # numerical stability
+        e = np.exp(shifted / T)
+        return e / e.sum(axis=-1, keepdims=True)
+
+    soft_probs = [softmax_with_temp(l, temperature) for l in logits_list]
+
+    # Weighted average over soft probabilities, not raw logits
+    consensus_logits = np.average(soft_probs, axis=0, weights=normalized_weights)
+
+    weight_breakdown = []
+    for i in range(num_clients):
+        config = client_configs[i] if i < len(client_configs) else {}
+        weight_breakdown.append({
+            "client_name": config.get("client_name", f"client_{i}"),
+            "model_type": config.get("model_type", "unknown"),
+            "normalized_weight": normalized_weights[i],
+        })
 
     aggregation_metadata = {
         "server_round": server_round, "num_clients": num_clients,
-        "num_contributing_clients": sum(1 for w in weights if w > 0),
-        "total_raw_weight": total_weight,
-        "momentum": momentum if smoothing_applied else None,
-        "smoothing_applied": smoothing_applied,
         "weight_breakdown": weight_breakdown, "normalized_weights": normalized_weights,
-        "weight_statistics": {
-            "min": min(normalized_weights) if normalized_weights else 0,
-            "max": max(normalized_weights) if normalized_weights else 0,
-            "mean": float(np.mean(normalized_weights)) if normalized_weights else 0,
-            "std": float(np.std(normalized_weights)) if normalized_weights else 0,
-        },
-        "parameters": {"train_loss_weight": TRAIN_LOSS_WEIGHT, "distill_loss_weight": DISTILL_LOSS_WEIGHT}
     }
 
     return consensus_logits, aggregation_metadata
@@ -550,7 +516,6 @@ class FLEXMedStrategy(Strategy):
         self.batch_size = batch_size
         self.client_configs = load_client_config(config_path)
         self.num_clients = len(self.client_configs)
-        self.last_consensus_logits = None
         self.client_history = {}
 
 # <----------------------------- HELPER METHODS ----------------------------->
@@ -719,13 +684,11 @@ class FLEXMedStrategy(Strategy):
 
         consensus_logits, aggregation_metadata = compute_consensus(
             logits_list, client_metrics_list, self.client_configs[:len(logits_list)],
-            server_round, self.last_consensus_logits, CONSENSUS_MOMENTUM
+            server_round
         )
 
         if consensus_logits is None:
             return None, {}, {}
-
-        self.last_consensus_logits = consensus_logits
 
         metrics_aggregated = {
             "consensus_round": server_round, "num_clients": len(logits_list),

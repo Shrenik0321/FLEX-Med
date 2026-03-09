@@ -25,7 +25,7 @@ BEGIN
     -- Model types (CNN architectures)
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'model_type') THEN
         CREATE TYPE model_type AS ENUM (
-            'resnet50',
+            'efficientnet_b0',
             'densenet121',
             'mobilenet_v2'
         );
@@ -184,7 +184,7 @@ CREATE TABLE system_config (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Insert default configuration (singleton row)
+
 -- Includes heterogeneity presets, active config, and training strategy params (v4.0)
 -- Tuning params are top-level (constant across presets); presets only set dirichlet_alpha.
 INSERT INTO system_config (config) VALUES ('{
@@ -194,20 +194,21 @@ INSERT INTO system_config (config) VALUES ('{
         "moderate": { "dirichlet_alpha": 1.0 },
         "high":     { "dirichlet_alpha": 0.5 }
     },
-    "minority_boost": 0.80,
+    "minority_boost": 0.75,
     "focal_alpha": 0.50,
     "focal_gamma": 2.0,
-    "consensus_momentum": 0.40,
-    "distill_weight_base": 0.45,
-    "distill_decay_rate": 0.18,
-    "train_loss_weight": 0.72,
-    "distill_loss_weight": 0.28,
-    "lr_decay": 0.90,
+    "consensus_momentum": 0.35,
+    "distill_weight_base": 0.75,
+    "distill_decay_rate": 0.10,
+    "weight_decay": 0.02,
+    "train_loss_weight": 0.70,
+    "distill_loss_weight": 0.30,
+    "lr_decay": 0.95,
     "learning_rate": 0.001,
     "num_rounds": 10,
     "local_epochs": 1,
     "batch_size": 32,
-    "distill_lr": 0.001,
+    "distill_lr": 0.0005,
     "distill_epochs": 1,
     "temperature": 4.0,
     "dirichlet_seed": 42,

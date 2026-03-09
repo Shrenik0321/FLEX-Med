@@ -22,7 +22,7 @@ MODEL_CACHE: Dict[str, "ModelBundle"] = {}
 
 # Model type to canonical name mapping
 MODEL_TYPE_NAMES = {
-    "resnet50": "ResNet50",
+    "efficientnet_b0": "EfficientNetB0",
     "mobilenet_v2": "MobileNetV2",
     "densenet121": "DenseNet121",
 }
@@ -56,9 +56,9 @@ def select_model(model_path: Path) -> Tuple[torch.nn.Module, str]:
     if "mobilenet" in name:
         model = get_model_by_type('mobilenet_v2')
         model_name = "MobileNetV2"
-    elif "resnet" in name:
-        model = get_model_by_type('resnet50')
-        model_name = "ResNet50"
+    elif "efficientnet" in name:
+        model = get_model_by_type('efficientnet_b0')
+        model_name = "EfficientNetB0"
     elif "densenet" in name:
         model = get_model_by_type('densenet121')
         model_name = "DenseNet121"
@@ -76,19 +76,8 @@ def adapt_state_dict(model: torch.nn.Module, state_dict: Dict[str, torch.Tensor]
     """
     new_state_dict = state_dict.copy()
     
-    # Check for dropout layer mismatch in ResNet (fc.weight -> fc.1.weight)
-    if "ResNet" in model_name:
-        if "fc.weight" in state_dict and "fc.1.weight" not in state_dict:
-            # Check if model expects fc.1
-            if hasattr(model, "fc") and isinstance(model.fc, torch.nn.Sequential):
-                print(f"[Model Service] Adapting legacy ResNet checkpoint: fc -> fc.1")
-                new_state_dict["fc.1.weight"] = state_dict["fc.weight"]
-                new_state_dict["fc.1.bias"] = state_dict["fc.bias"]
-                del new_state_dict["fc.weight"]
-                del new_state_dict["fc.bias"]
-
-    # Check for MobileNet(classifier.1.weight -> classifier.1.1.weight)
-    elif "MobileNet" in model_name in model_name:
+    # Check for MobileNet/EfficientNet (classifier.1.weight -> classifier.1.1.weight)
+    if any(x in model_name for x in ["MobileNet", "EfficientNet"]):
         if "classifier.1.weight" in state_dict and "classifier.1.1.weight" not in state_dict:
              # Check if model has Sequential classifier[1]
              if hasattr(model, "classifier") and isinstance(model.classifier[1], torch.nn.Sequential):

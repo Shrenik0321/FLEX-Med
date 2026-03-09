@@ -198,7 +198,7 @@ class Settings(BaseSettings):
     minority_boost: float = float(os.getenv("FLEX_MED_MINORITY_BOOST", "0.80"))
 
     # Knowledge distillation configuration
-    distill_weight_base: float = float(os.getenv("FLEX_MED_DISTILL_WEIGHT", "0.42"))
+    distill_weight_base: float = float(os.getenv("FLEX_MED_DISTILL_WEIGHT", "0.80"))
     distill_decay_rate: float = float(os.getenv("FLEX_MED_DISTILL_DECAY", "0.18"))
     weight_decay: float = float(os.getenv("FLEX_MED_WEIGHT_DECAY", "0.02"))
 

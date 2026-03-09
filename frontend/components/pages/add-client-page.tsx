@@ -100,8 +100,8 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
                   className="w-full px-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
                 >
                   <option value="">Select a PyTorch CNN model...</option>
-                  <option value="resnet50">
-                    ResNet-50 (Industry Standard)
+                  <option value="efficientnet_b0">
+                    EfficientNet-B0 (Lightweight EfficientNet)
                   </option>
                   <option value="mobilenet_v2">
                     MobileNet-V2 (Mobile Optimized)
@@ -118,12 +118,12 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
                   <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">
                     Architectural Insight
                   </h4>
-                  {modelType === "resnet50" && (
+                  {modelType === "efficientnet_b0" && (
                     <p className="text-sm text-foreground">
-                      <strong>The Industry Standard:</strong> Uses residual
-                      skip-connections to solve the vanishing gradient problem.
-                      Best for establishing a high-accuracy baseline for medical
-                      pathology.
+                      <strong>Lightweight EfficientNet:</strong> Uses compound
+                      scaling to balance depth, width, and resolution. Provides
+                      high accuracy with very few parameters, excellent for
+                      preventing overfitting on small medical datasets.
                     </p>
                   )}
                   {modelType === "mobilenet_v2" && (

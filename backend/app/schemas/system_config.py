@@ -30,12 +30,12 @@ class SystemConfigData(BaseModel):
     focal_alpha: float = Field(default=0.50, ge=0.0, le=1.0, description="Focal loss alpha (fallback; dynamic alpha used at runtime)")
     focal_gamma: float = Field(default=2.0, ge=0.0, le=5.0, description="Focal loss gamma")
     consensus_momentum: float = Field(default=0.35, ge=0.0, le=1.0, description="Consensus momentum smoothing")
-    distill_weight_base: float = Field(default=0.42, ge=0.0, le=1.0, description="Knowledge distillation weight base")
+    distill_weight_base: float = Field(default=0.80, ge=0.0, le=1.0, description="Knowledge distillation weight base")
     distill_decay_rate: float = Field(default=0.18, ge=0.0, le=1.0, description="Distillation weight decay rate")
     train_loss_weight: float = Field(default=0.72, ge=0.0, le=1.0, description="Training loss weight in combined loss")
     distill_loss_weight: float = Field(default=0.28, ge=0.0, le=1.0, description="Distillation loss weight in combined loss")
     lr_decay: float = Field(default=0.90, ge=0.5, le=1.0, description="Learning rate decay per round")
-    learning_rate: float = Field(default=0.001, ge=0.00001, le=1.0, description="Initial learning rate")
+    learning_rate: float = Field(default=0.0005, ge=0.00001, le=1.0, description="Initial learning rate")
 
     # FL Training Configuration (global)
     num_rounds: int = Field(default=10, ge=1, le=100, description="Number of federated learning rounds")
@@ -43,7 +43,7 @@ class SystemConfigData(BaseModel):
     batch_size: int = Field(default=32, ge=1, le=256, description="Training batch size")
 
     # Knowledge Distillation Configuration (global)
-    distill_lr: float = Field(default=0.001, ge=0.00001, le=1.0, description="Distillation learning rate")
+    distill_lr: float = Field(default=0.0005, ge=0.00001, le=1.0, description="Distillation learning rate")
     distill_epochs: int = Field(default=1, ge=1, le=20, description="Distillation epochs")
     temperature: float = Field(default=4.0, ge=1.0, le=10.0, description="Softmax temperature for distillation")
 

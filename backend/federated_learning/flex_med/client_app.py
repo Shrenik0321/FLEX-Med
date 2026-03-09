@@ -19,7 +19,7 @@ from flex_med.utils.helpers import (
     apply_freeze_strategy,
     get_model_by_type, get_client_by_partition_id, load_model_weights,
     get_display_id, save_model, load_model_for_client,
-    compute_dynamic_focal_alpha, compute_per_class_accuracy
+    compute_per_class_accuracy
 )
 
 app = ClientApp()
@@ -65,10 +65,37 @@ def train(msg: Message, context: Context):
 
     # <-------------------------------------- APPLY FREEZE STRATEGY -------------------------------------->
     if model_type:
-        model, _ = apply_freeze_strategy(model, model_type, server_round, total_rounds)
-        freeze_backbone = (server_round <= total_rounds // 2)
+        model = apply_freeze_strategy(model, model_type, server_round, total_rounds)
+        freeze_backbone = (server_round <= 3)
         phase = "Phase 1 - Backbone FROZEN" if freeze_backbone else "Phase 2 - Fine-tuning"
         print(f"[{display_id}] [Freeze] Round {server_round}/{total_rounds}: {phase}")
+
+    # <-------------------------------------- PRIVATE TRAINING PREP -------------------------------------->
+    base_lr = msg.content["config"]["lr"]
+    lr_decay_factor = context.run_config.get("lr-decay", 0.97)
+
+    # Stage-aware LR multiplier for Discriminative Learning Rates
+    decayed_lr = base_lr * (lr_decay_factor ** (server_round - 1))
+    progress = server_round / total_rounds
+
+    if progress <= 0.2:
+        phase_multiplier = 1.0      # Stage 1: Classifier only (Backbone frozen)
+        phase_name = "S1"
+    elif progress <= 0.4:
+        phase_multiplier = 0.30     # Stage 2: 25% of final block (3e-4 / 1e-3)
+        phase_name = "S2"
+    elif progress <= 0.6:
+        phase_multiplier = 0.30     # Stage 3: 50% of final block (3e-4 / 1e-3)
+        phase_name = "S3"
+    elif progress <= 0.8:
+        phase_multiplier = 0.10     # Stage 4: 75% of final block (1e-4 / 1e-3)
+        phase_name = "S4"
+    else:
+        phase_multiplier = 0.05     # Stage 5: 100% of final block (5e-5 / 1e-3)
+        phase_name = "S5"
+
+    print(f"[{display_id}] Round {server_round}/{total_rounds} ({progress:.0%})")
+    print(f"[{display_id}] Base LR: {decayed_lr:.6f} | Backbone Multiplier: {phase_multiplier} ({phase_name})")
 
     # <-------------------------------------- KNOWLEDGE DISTILLATION -------------------------------------->
     distill_loss = 0.0
@@ -82,6 +109,7 @@ def train(msg: Message, context: Context):
                     model=model, public_loader=public_loader, consensus_logits=consensus_logits,
                     device=device, epochs=context.run_config["distill-epochs"], 
                     lr=context.run_config["distill-lr"], temperature=context.run_config["temperature"],
+                    phase_multiplier=phase_multiplier,
                     current_round=server_round, total_rounds=total_rounds, adaptive=True
                 )
                 print(f"[{display_id}] Distillation Loss: {distill_loss:.4f}")
@@ -89,32 +117,19 @@ def train(msg: Message, context: Context):
             print(f"[Client {partition_id}] Distillation failed: {e}")
 
     # <-------------------------------------- PRIVATE TRAINING -------------------------------------->
-    print(f"[{display_id}] Phase 2: Private Training")
+    print(f"[{display_id}] Private Training")
 
-    lr_decay_factor = context.run_config.get("lr-decay", 0.90)
-    base_lr = msg.content["config"]["lr"]
-    decayed_lr = base_lr * (lr_decay_factor ** (server_round - 1))
-
-    trainloader, valloader, class_counts = load_private_dataset(partition_id, num_partitions, batch_size=context.run_config["batch-size"])
+    trainloader, valloader, _ = load_private_dataset(partition_id, num_partitions, batch_size=context.run_config["batch-size"])
     if trainloader is None:
         raise ValueError(f"[{display_id}] No training data available")
-
-    client_name = client_config.get('client_name', f"Client_{partition_id}")
-
-    n_leukemia = class_counts.get(0, 0)
-    n_healthy = class_counts.get(1, 0)
-    focal_alpha = compute_dynamic_focal_alpha(class_counts)
-    print(f"[{display_id} | {client_name}] Focal Alpha: {focal_alpha:.4f} (L:{n_leukemia}, H:{n_healthy})")
 
     dataset_len = len(trainloader.dataset)
 
     start_time = time.time()
-    # Local training strategy
     train_loss, val_loss, train_accuracy, val_accuracy = train_fn(
         model=model, trainloader=trainloader, epochs=context.run_config["local-epochs"],
-        lr=decayed_lr, device=device,
-        valloader=valloader, server_round=server_round, total_rounds=total_rounds,
-        focal_alpha=focal_alpha
+        base_lr=decayed_lr, phase_multiplier=phase_multiplier, device=device,
+        valloader=valloader, server_round=server_round, total_rounds=total_rounds
     )
     training_time = time.time() - start_time
 
