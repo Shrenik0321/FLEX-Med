@@ -226,9 +226,6 @@ export default function FLHistoryPage({
                   const metrics = parseMetrics(simulation.aggregate_metrics);
                   const avgAccuracy = metrics?.aggregate?.post_fl?.avg_accuracy;
                   const numClients = metrics?.total_clients || 0;
-                  const preset =
-                    simulation.heterogeneity_preset ??
-                    simulation.configs?.heterogeneity_preset;
                   const alpha = simulation.configs?.dirichlet_alpha;
 
                   return (
@@ -257,27 +254,10 @@ export default function FLHistoryPage({
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm">
-                        {preset ? (
-                          <div className="flex flex-col">
-                            <span
-                              className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium border w-fit ${
-                                preset === "high"
-                                  ? "border-red-300 text-red-700 bg-red-50"
-                                  : preset === "moderate"
-                                    ? "border-amber-300 text-amber-700 bg-amber-50"
-                                    : preset === "low"
-                                      ? "border-emerald-300 text-emerald-700 bg-emerald-50"
-                                      : "border-purple-300 text-purple-700 bg-purple-50"
-                              }`}
-                            >
-                              {preset.charAt(0).toUpperCase() + preset.slice(1)}
-                            </span>
-                            {alpha != null && (
-                              <span className="text-[10px] text-muted-foreground mt-0.5">
-                                &alpha;={alpha}
-                              </span>
-                            )}
-                          </div>
+                        {alpha != null ? (
+                          <span className="font-medium text-foreground">
+                            &alpha; = {alpha}
+                          </span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}

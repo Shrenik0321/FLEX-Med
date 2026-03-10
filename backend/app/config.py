@@ -205,7 +205,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------------
     # Dirichlet Partitioning Configuration (Runtime Data Heterogeneity)
     # ------------------------------------------------------------------------
-    dirichlet_alpha: float = float(os.getenv("FLEX_MED_DIRICHLET_ALPHA", "0.5"))
+    dirichlet_alpha: float = float(os.getenv("FLEX_MED_DIRICHLET_ALPHA", "1.5"))
     dirichlet_seed: int = int(os.getenv("FLEX_MED_DIRICHLET_SEED", "42"))
     dirichlet_min_partition_size: int = int(os.getenv("FLEX_MED_DIRICHLET_MIN_PARTITION_SIZE", "400"))  # Minimum samples per client partition
 

@@ -2,13 +2,6 @@
 
 import { useState, useEffect } from "react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Card,
   CardContent,
   CardHeader,
@@ -21,16 +14,11 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Loading } from "@/components/ui/loading";
 
-interface PresetConfig {
-  dirichlet_alpha: number;
-}
-
 interface SystemConfig {
-  // Active Heterogeneity Preset
-  heterogeneity_preset: string;
-  presets: Record<string, PresetConfig>;
+  // Dirichlet Alpha (data heterogeneity control)
+  dirichlet_alpha: number;
 
-  // Training Strategy Parameters (global — constant across presets)
+  // Training Strategy Parameters (global)
   minority_boost: number;
   focal_alpha: number;
   focal_gamma: number;
@@ -65,56 +53,11 @@ interface SystemConfig {
   ngrok_url: string;
 }
 
-const PRESET_DESCRIPTIONS: Record<
-  string,
-  { label: string; description: string; alpha: string }
-> = {
-  low: {
-    label: "Low Heterogeneity",
-    description:
-      "Nearly uniform data distribution across clients. Suitable for baseline experiments.",
-    alpha: "alpha ~ 1.5",
-  },
-  moderate: {
-    label: "Moderate Heterogeneity",
-    description:
-      "Balanced non-IID distribution. Recommended default for most experiments.",
-    alpha: "alpha ~ 1.0",
-  },
-  high: {
-    label: "High Heterogeneity",
-    description:
-      "Highly skewed data distribution. Tests robustness under extreme non-IID conditions.",
-    alpha: "alpha ~ 0.5",
-  },
-};
-
 export default function SettingsPage() {
   const [config, setConfig] = useState<SystemConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  // Helper to update a field in a specific preset
-  const handlePresetFieldChange = (
-    presetKey: string,
-    field: keyof PresetConfig,
-    value: number,
-  ) => {
-    setConfig((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        presets: {
-          ...prev.presets,
-          [presetKey]: {
-            ...(prev.presets[presetKey] || { dirichlet_alpha: 1.0 }),
-            [field]: value,
-          },
-        },
-      };
-    });
-  };
 
   // Fetch configuration from backend on mount
   useEffect(() => {
@@ -256,11 +199,30 @@ export default function SettingsPage() {
               Heterogeneity Configuration
             </CardTitle>
             <CardDescription>
-              Configure data heterogeneity presets and Dirichlet parameters.
+              Configure Dirichlet partitioning parameters for data heterogeneity.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6 border-b border-border">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <Label className="mb-2 block">Dirichlet Alpha</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  value={config.dirichlet_alpha}
+                  onChange={(e) =>
+                    handleInputChange(
+                      "dirichlet_alpha",
+                      parseFloat(e.target.value) || 0,
+                    )
+                  }
+                  min="0.01"
+                  max="100"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Controls data heterogeneity. Lower = more skewed (e.g. 0.1 extreme, 1.5 mild).
+                </p>
+              </div>
               <div>
                 <Label className="mb-2 block">Min Partition Size</Label>
                 <Input
@@ -294,44 +256,6 @@ export default function SettingsPage() {
                 <p className="text-xs text-muted-foreground mt-1">
                   Seed for deterministic partitioning
                 </p>
-              </div>
-            </div>
-
-            <div className="pt-2">
-              <Label className="text-base font-medium mb-4 block">
-                Dirichlet Alpha Presets
-              </Label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {Object.entries(PRESET_DESCRIPTIONS).map(
-                  ([key, { label, description }]) => (
-                    <div
-                      key={key}
-                      className="p-4 rounded-lg border border-border bg-card"
-                    >
-                      <Label className="mb-3 block font-semibold">
-                        {label}
-                      </Label>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        value={config.presets[key]?.dirichlet_alpha || 0}
-                        onChange={(e) =>
-                          handlePresetFieldChange(
-                            key,
-                            "dirichlet_alpha",
-                            parseFloat(e.target.value) || 0,
-                          )
-                        }
-                        min="0.1"
-                        max="10"
-                        className="mb-2"
-                      />
-                      <p className="text-xs text-muted-foreground h-8 line-clamp-2">
-                        {description}
-                      </p>
-                    </div>
-                  ),
-                )}
               </div>
             </div>
           </CardContent>

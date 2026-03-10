@@ -24,7 +24,6 @@ class StartFLRequest(BaseModel):
     client_ids: Optional[List[int]] = None  # If None, all clients are used
     dataset: Optional[str] = None
     config: Optional[Dict[str, Any]] = None
-    heterogeneity_preset: Optional[str] = None  # low, moderate, high, custom
 
 
 @router.post("/start_fl")
@@ -56,7 +55,6 @@ async def start_fl(
     selected_client_ids = request.client_ids if request else None
     dataset = request.dataset if request else None
     user_config = request.config if request else None
-    heterogeneity_preset = request.heterogeneity_preset if request else None
 
     # Fetch all clients from database
     response = supabase.from_("clients").select("*").execute()
@@ -102,23 +100,6 @@ async def start_fl(
         logger.warning(f"Failed to load system_config from database: {e}, using defaults")
         system_config = {}
 
-    # Resolve heterogeneity preset: request overrides system_config default
-    if not heterogeneity_preset:
-        heterogeneity_preset = system_config.get("heterogeneity_preset", "moderate")
-
-    # Resolve preset config values — presets now only contain dirichlet_alpha
-    presets = system_config.get("presets", {})
-    preset_config = presets.get(heterogeneity_preset, {})
-
-    if not preset_config:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Preset '{heterogeneity_preset}' not found in system_config. Available: {list(presets.keys())}"
-        )
-
-    logger.info(f"Using heterogeneity preset: {heterogeneity_preset}")
-    logger.info(f"Preset config: dirichlet_alpha={preset_config.get('dirichlet_alpha')}")
-
     # Build FL configs — global params from top-level system_config
     configs = {
         "num_server_rounds": system_config.get("num_rounds", 10),
@@ -133,9 +114,9 @@ async def start_fl(
         "batch_size": system_config.get("batch_size", 32),
     }
 
-    # Build training strategy config — dirichlet_alpha from preset, rest from top-level
+    # Build training strategy config
     training_config = {
-        "dirichlet_alpha": preset_config.get("dirichlet_alpha", 1.5),
+        "dirichlet_alpha": system_config.get("dirichlet_alpha", 1.5),
         "dirichlet_seed": system_config.get("dirichlet_seed", 42),
         "dirichlet_min_partition_size": system_config.get("dirichlet_min_partition_size", 400),
         "minority_boost": system_config.get("minority_boost", 0.78),
@@ -169,7 +150,6 @@ async def start_fl(
             "dirichlet_alpha": training_config["dirichlet_alpha"],
             "training_config": training_config,
         },
-        "heterogeneity_preset": heterogeneity_preset,
         "status": SimulationStatus.PENDING.value,
     }
 

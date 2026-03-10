@@ -22,8 +22,7 @@ from flex_med.utils.config import (
     PUBLIC_ANCHOR_DATASET_PATH, PUBLIC_TEST_DATASET_PATH, LOCAL_TRAIN_DATASET_PATH,
     MODEL_CHECKPOINT_FILE_PATH, GRAPHS_OUTPUT_DIR, NUM_CLASSES, IMG_SIZE,
     DIRICHLET_ALPHA, DIRICHLET_SEED, DIRICHLET_MIN_PARTITION_SIZE,
-    DISTILL_WEIGHT_BASE, DISTILL_DECAY_RATE, WEIGHT_DECAY,
-    FOCAL_GAMMA, MINORITY_BOOST
+    FOCAL_GAMMA, MINORITY_BOOST, WEIGHT_DECAY, DISTILL_WEIGHT_BASE, DISTILL_DECAY_RATE
 )
 from flex_med.utils.helpers import (
     sanitize_client_paths,
@@ -257,10 +256,6 @@ def train(model, trainloader, epochs, base_lr, phase_multiplier, device,
         {"params": backbone_params, "lr": base_lr * phase_multiplier}
     ], betas=(0.9, 0.999), weight_decay=WEIGHT_DECAY)
     
-    # With local-epochs=1, CosineAnnealingLR serves no purpose (steps after all batches).
-    # Cross-round LR decay in client_app.py handles round-to-round reduction.
-    scheduler = None
-    
     has_validation = valloader is not None
 
     total_train_loss, total_val_loss = 0.0, 0.0
@@ -303,10 +298,6 @@ def train(model, trainloader, epochs, base_lr, phase_multiplier, device,
             total_val_loss += epoch_val_loss
             total_val_accuracy += epoch_val_acc
             total_val_epochs += 1
-            
-        # Cosine Annealing per epoch
-        if scheduler:
-            scheduler.step()
 
     avg_train_loss = total_train_loss / total_train_batches if total_train_batches > 0 else 0.0
     avg_val_loss = total_val_loss / total_val_epochs if total_val_epochs > 0 else 0.0
@@ -432,11 +423,11 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
             student_logits = model(images)
 
             # Kullback Leibler Divergence
-            # consensus is already a soft probability from temperature-scaled softmax in compute_consensus,
-            # so we use it directly as the target distribution (no additional softmax needed)
+            # Since we bypassed temperature smoothing in compute_consensus, batch_consensus are now raw logits.
+            # We apply the temperature-scaled softmax here to form the target probability distribution.
             kl_loss = F.kl_div(
                 F.log_softmax(student_logits / temperature, dim=1),
-                batch_consensus,                                    # already a probability
+                F.softmax(batch_consensus / temperature, dim=1),
                 reduction='batchmean'
             ) * (temperature ** 2)
             loss = DISTILL_WEIGHT * kl_loss
@@ -477,20 +468,7 @@ def compute_consensus(
 
     total_samples = sum(raw_weights)
     normalized_weights = [w / total_samples for w in raw_weights]
-
-    # <--- TEMPERATURE-SCALED CONSENSUS --->
-    # Soften sharplogits with temperature T before averaging.
-    # Prevents overconfident clients (e.g. DenseNet on imbalanced data) from dominating
-    # and keeps the distillation signal rich and learnable through late rounds.
-    def softmax_with_temp(logits: np.ndarray, T: float) -> np.ndarray:
-        shifted = logits - logits.max(axis=-1, keepdims=True)   # numerical stability
-        e = np.exp(shifted / T)
-        return e / e.sum(axis=-1, keepdims=True)
-
-    soft_probs = [softmax_with_temp(l, temperature) for l in logits_list]
-
-    # Weighted average over soft probabilities, not raw logits
-    consensus_logits = np.average(soft_probs, axis=0, weights=normalized_weights)
+    consensus_logits = np.average(logits_list, axis=0, weights=normalized_weights)
 
     weight_breakdown = []
     for i in range(num_clients):

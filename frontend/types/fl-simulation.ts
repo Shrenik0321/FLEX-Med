@@ -27,8 +27,6 @@ export interface FLConfig {
   distill_epochs: number;
   temperature: number;
   batch_size: number;
-  // Heterogeneity preset used for this run
-  heterogeneity_preset?: string;
   // Dirichlet Partitioning Configuration
   dirichlet_alpha?: number;
   dirichlet_seed?: number;
@@ -88,7 +86,6 @@ export interface FLSimulation {
   id: number;
   configs: FLConfig;
   aggregate_metrics: FLSimulationMetrics; // JSONB stored as object (not string)
-  heterogeneity_preset?: string | null; // Top-level column: low, moderate, high, custom
   status: SimulationStatus;
   error_message?: string | null;
   created_at: string;

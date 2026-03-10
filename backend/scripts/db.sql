@@ -88,7 +88,6 @@ CREATE TABLE fl_simulations (
     id SERIAL PRIMARY KEY,
     configs JSONB NOT NULL DEFAULT '{}'::jsonb,
     aggregate_metrics JSONB NOT NULL DEFAULT '{}'::jsonb,
-    heterogeneity_preset TEXT,
     status simulation_status NOT NULL DEFAULT 'pending',
     error_message TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -185,16 +184,10 @@ CREATE TABLE system_config (
 );
 
 
--- Includes heterogeneity presets, active config, and training strategy params (v4.0)
--- Tuning params are top-level (constant across presets); presets only set dirichlet_alpha.
+-- Single configuration — no presets. dirichlet_alpha is a direct top-level field.
 INSERT INTO system_config (config) VALUES ('{
-    "heterogeneity_preset": "moderate",
-    "presets": {
-        "low":      { "dirichlet_alpha": 1.5 },
-        "moderate": { "dirichlet_alpha": 1.0 },
-        "high":     { "dirichlet_alpha": 0.5 }
-    },
-    "minority_boost": 0.75,
+    "dirichlet_alpha": 1.5,
+    "minority_boost": 0.85,
     "focal_alpha": 0.50,
     "focal_gamma": 2.0,
     "consensus_momentum": 0.35,
