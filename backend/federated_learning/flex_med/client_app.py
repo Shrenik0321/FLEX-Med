@@ -78,31 +78,21 @@ def train(msg: Message, context: Context):
     decayed_lr = base_lr * (lr_decay_factor ** (server_round - 1))
     progress = server_round / total_rounds
 
-    if progress <= 0.3:
-        phase_multiplier = 1.0      # Phase 1: Classifier only (Backbone frozen)
-        phase_name = "P1"
-    elif progress <= 0.7:
-        phase_multiplier = 0.30     # Phase 2: 25% of final block
-        phase_name = "P2"
+    if progress <= 0.2:
+        phase_multiplier = 1.0      # Stage 1: Classifier only (Backbone frozen)
+        phase_name = "S1"
+    elif progress <= 0.4:
+        phase_multiplier = 0.30     # Stage 2: 25% of final block (3e-4 / 1e-3)
+        phase_name = "S2"
+    elif progress <= 0.6:
+        phase_multiplier = 0.30     # Stage 3: 50% of final block (3e-4 / 1e-3)
+        phase_name = "S3"
+    elif progress <= 0.8:
+        phase_multiplier = 0.05     # Stage 4: 75% of final block (1e-4 / 1e-3)
+        phase_name = "S4"
     else:
-        phase_multiplier = 0.10     # Phase 3: 50% of final block (Capped)
-        phase_name = "P3"
-
-    # if progress <= 0.2:
-    #     phase_multiplier = 1.0      # Stage 1: Classifier only (Backbone frozen)
-    #     phase_name = "S1"
-    # elif progress <= 0.4:
-    #     phase_multiplier = 0.30     # Stage 2: 25% of final block (3e-4 / 1e-3)
-    #     phase_name = "S2"
-    # elif progress <= 0.6:
-    #     phase_multiplier = 0.30     # Stage 3: 50% of final block (3e-4 / 1e-3)
-    #     phase_name = "S3"
-    # elif progress <= 0.8:
-    #     phase_multiplier = 0.05     # Stage 4: 75% of final block (1e-4 / 1e-3)
-    #     phase_name = "S4"
-    # else:
-    #     phase_multiplier = 0.01     # Stage 5: 100% of final block (5e-5 / 1e-3)
-    #     phase_name = "S5"
+        phase_multiplier = 0.01     # Stage 5: 100% of final block (5e-5 / 1e-3)
+        phase_name = "S5"
 
     print(f"[{display_id}] Round {server_round}/{total_rounds} ({progress:.0%})")
     print(f"[{display_id}] Base LR: {decayed_lr:.6f} | Backbone Multiplier: {phase_multiplier} ({phase_name})")

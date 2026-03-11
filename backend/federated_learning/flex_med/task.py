@@ -646,6 +646,9 @@ class FLEXMedStrategy(Strategy):
         if not results_list:
             return None, {}, {}
 
+        # FIX: Sort the results by client_id to prevent metrics from swapping between clients
+        results_list.sort(key=lambda msg: msg.content.get("metrics", {}).get("client_id", 999) if msg.has_content() else 999)
+
         logits_list, client_metrics_list, client_names = [], [], []
 
         for i, msg in enumerate(results_list):

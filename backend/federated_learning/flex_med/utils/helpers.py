@@ -452,49 +452,34 @@ def apply_freeze_strategy(model, model_type: str, server_round: int, total_round
 
     progress = server_round / total_rounds
 
-    if progress <= 0.3:
-        # Phase 1: Classifier only (rounds 1-3)
+    if progress <= 0.2:
+        # Stage 1: Classifier only (0-20% of rounds)
         trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Phase 1 - Classifier only ({trainable:,} params)")
-    elif progress <= 0.7:
-        # Phase 2: Classifier + 25% of final block (rounds 4-7)
+        log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Stage 1 - Classifier only ({trainable:,} params)")
+
+    elif progress <= 0.4:
+        # Stage 2: Classifier + 25% of final backbone block (20-40% of rounds)
         model = unfreeze_fraction_of_last_block(model, model_type, fraction=0.25)
         trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Phase 2 - 25% final block ({trainable:,} params)")
+        log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Stage 2 - 25% final block ({trainable:,} params)")
+
+    elif progress <= 0.6:
+        # Stage 3: Classifier + 50% of final backbone block (40-60% of rounds)
+        model = unfreeze_fraction_of_last_block(model, model_type, fraction=0.50)
+        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Stage 3 - 50% final block ({trainable:,} params)")
+
+    elif progress <= 0.8:
+        # Stage 4: Classifier + 75% of final backbone block (60-80% of rounds)
+        model = unfreeze_fraction_of_last_block(model, model_type, fraction=0.75)
+        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Stage 4 - 75% final block ({trainable:,} params)")
+
     else:
-         # Phase 3: Classifier + 50% of final block (rounds 8-10)
-         model = unfreeze_fraction_of_last_block(model, model_type, fraction=0.50)
-         trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-         log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Phase 3 - 50% final block ({trainable:,} params)")
-
-    # if progress <= 0.2:
-    #     # Stage 1: Classifier only (0-20% of rounds)
-    #     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    #     log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Stage 1 - Classifier only ({trainable:,} params)")
-
-    # elif progress <= 0.4:
-    #     # Stage 2: Classifier + 25% of final backbone block (20-40% of rounds)
-    #     model = unfreeze_fraction_of_last_block(model, model_type, fraction=0.25)
-    #     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    #     log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Stage 2 - 25% final block ({trainable:,} params)")
-
-    # elif progress <= 0.6:
-    #     # Stage 3: Classifier + 50% of final backbone block (40-60% of rounds)
-    #     model = unfreeze_fraction_of_last_block(model, model_type, fraction=0.50)
-    #     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    #     log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Stage 3 - 50% final block ({trainable:,} params)")
-
-    # elif progress <= 0.8:
-    #     # Stage 4: Classifier + 75% of final backbone block (60-80% of rounds)
-    #     model = unfreeze_fraction_of_last_block(model, model_type, fraction=0.75)
-    #     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    #     log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Stage 4 - 75% final block ({trainable:,} params)")
-
-    # else:
-    #     # Stage 5: Classifier + 100% of final backbone block (80-100% of rounds)
-    #     model = unfreeze_fraction_of_last_block(model, model_type, fraction=1.0)
-    #     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    #     log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Stage 5 - Full final block ({trainable:,} params)")
+        # Stage 5: Classifier + 100% of final backbone block (80-100% of rounds)
+        model = unfreeze_fraction_of_last_block(model, model_type, fraction=1.0)
+        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Stage 5 - Full final block ({trainable:,} params)")
 
     return model
 
