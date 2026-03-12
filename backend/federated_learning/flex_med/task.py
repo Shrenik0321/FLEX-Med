@@ -4,6 +4,7 @@ import os
 import json
 import time
 import uuid
+import shutil
 import torch.nn as nn
 import torch.nn.functional as F
 from PIL import Image
@@ -32,18 +33,8 @@ from flex_med.utils.helpers import (
     check_for_degradation_warnings, SUPABASE_CLIENT, SIMULATION_ID,
     save_all_clients_data_heterogeneity,
     load_client_config, get_client_by_partition_id,
-    get_model_by_type, load_model_weights
+    get_model_by_type, load_model_weights, set_bn_eval
 )
-
-# <----------------------------- HELPERS ----------------------------->
-def set_bn_eval(m):
-    """Freeze running statistics and parameters for ALL types of BatchNorm layers."""
-    if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
-        m.eval()
-        if m.weight is not None:
-            m.weight.requires_grad = False
-        if m.bias is not None:
-            m.bias.requires_grad = False
 
 # <----------------------------- CONSTANTS & GLOBAL VARIABLES ----------------------------->
 PARTITIONER_CACHE = {}
@@ -423,8 +414,6 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
             student_logits = model(images)
 
             # Kullback Leibler Divergence
-            # Since we bypassed temperature smoothing in compute_consensus, batch_consensus are now raw logits.
-            # We apply the temperature-scaled softmax here to form the target probability distribution.
             kl_loss = F.kl_div(
                 F.log_softmax(student_logits / temperature, dim=1),
                 F.softmax(batch_consensus / temperature, dim=1),
@@ -436,7 +425,6 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
             optimizer.zero_grad()
             loss.backward()
             
-            # STABILITY FIX: Clip gradients to mirror private training loop, preventing massive KL spikes
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
             
             optimizer.step()
@@ -457,7 +445,7 @@ def compute_consensus(
 
     num_clients = len(logits_list)
 
-    # Extract sample counts for each client (default to 1.0 if missing to prevent 0 division)
+    # Weighted aggregation
     raw_weights = []
     for i in range(num_clients):
         # Safely extract num_examples if it exists in the nested dict structure from client_app.py
@@ -579,7 +567,11 @@ class FLEXMedStrategy(Strategy):
         t_start = time.time()
         self.round_metrics_history = {}
 
-        # <----------------------------- Simulating and recording the data distributions across clients ----------------------------->
+        # Best model tracking
+        self.best_avg_accuracy = -1.0
+        self.best_round = 0
+
+        # <----------------------------- DATA DISTRIBUTION ASSIGNMENT TO EACH CLIENT ----------------------------->
         try:
             log(INFO, "[FL] Pre-initializing Dirichlet partitioner...")
             cache_key = (LOCAL_TRAIN_DATASET_PATH, self.num_clients, DIRICHLET_ALPHA, DIRICHLET_SEED)
@@ -590,13 +582,13 @@ class FLEXMedStrategy(Strategy):
                 PARTITIONER_CACHE[cache_key] = (partitioner, full_dataset)
                 log(INFO, f"[FL] Partitioner initialized: {self.num_clients} partitions, alpha={DIRICHLET_ALPHA}")
             
-            # Save data heterogeneity for all clients at FL start
-            save_all_clients_data_heterogeneity(self.client_configs, PARTITIONER_CACHE)
+            save_all_clients_data_heterogeneity(self.client_configs, PARTITIONER_CACHE) # Save data heterogeneity for all clients at FL start
         except Exception as e:
             log(WARNING, f"[FL] Failed to pre-initialize partitioner: {e}")
 
         print_client_data_distribution_summary(self.client_configs, PARTITIONER_CACHE)
 
+        # <----------------------------- TRAINING STARTS BASED ON THE NUMBER OF ROUNDS ----------------------------->
         for current_round in range(1, num_rounds + 1):
             log(INFO, f"\n{'='*70}\n[ROUND {current_round}/{num_rounds}]\n{'='*70}")
 
@@ -611,7 +603,10 @@ class FLEXMedStrategy(Strategy):
             if agg_metrics:
                 result.train_metrics_clientapp[current_round] = agg_metrics
             if training_metrics:
-                save_round_training_metrics(current_round, training_metrics, self.client_configs, PARTITIONER_CACHE)
+                try:
+                    save_round_training_metrics(current_round, training_metrics, self.client_configs, PARTITIONER_CACHE)
+                except Exception as e:
+                    log(WARNING, f"[ROUND {current_round}] Failed to save training metrics: {e}")
 
             try:
                 # <----------------------------- Evaluate model on validation set ----------------------------->
@@ -625,15 +620,52 @@ class FLEXMedStrategy(Strategy):
                     self.client_history[client_id].append({'round': current_round, 'metrics': metrics})
 
                 check_for_degradation_warnings(round_val_metrics, current_round, self.client_history)
+
+                # <----------------------------- Best model checkpoint tracking ----------------------------->
+                valid_accs = [m.get('accuracy') for m in round_val_metrics.values()
+                              if m.get('accuracy') is not None]
+                if valid_accs:
+                    avg_acc = sum(valid_accs) / len(valid_accs)
+                    if avg_acc > self.best_avg_accuracy:
+                        self.best_avg_accuracy = avg_acc
+                        self.best_round = current_round
+                        log(INFO, f"[BEST] New best avg accuracy {avg_acc:.2%} at round {current_round}")
+                        # NOTE: Best model checkpoint saving commented out for now
+                        # for client_cfg in self.client_configs:
+                        #     src = client_cfg.get('model_path', '')
+                        #     if src and os.path.exists(src):
+                        #         base, ext = os.path.splitext(src)
+                        #         dst = f"{base}_best{ext}"
+                        #         shutil.copy2(src, dst)
+                    else:
+                        log(INFO, f"[BEST] Round {current_round} avg accuracy {avg_acc:.2%} "
+                                  f"(best: {self.best_avg_accuracy:.2%} at round {self.best_round})")
+
             except Exception as e:
                 log(WARNING, f"[ROUND {current_round}] Validation evaluation failed: {e}")
+
+        # NOTE: Best model restore commented out — post-FL eval uses final round models
+        # <----------------------------- Restore best model checkpoints before final evaluation ----------------------------->
+        # if self.best_round > 0 and self.best_round < num_rounds:
+        #     log(INFO, f"[BEST] Restoring best models from round {self.best_round} "
+        #               f"(avg accuracy: {self.best_avg_accuracy:.2%})")
+        #     for client_cfg in self.client_configs:
+        #         src = client_cfg.get('model_path', '')
+        #         if src:
+        #             base, ext = os.path.splitext(src)
+        #             best_path = f"{base}_best{ext}"
+        #             if os.path.exists(best_path):
+        #                 shutil.copy2(best_path, src)
+        #                 log(INFO, f"[BEST] Restored {os.path.basename(src)} from round {self.best_round}")
+        # else:
+        #     log(INFO, f"[BEST] Final round {num_rounds} was the best — no restore needed")
 
         log(INFO, f"\n{'='*70}\n[GLOBAL] Final Federated Model Evaluation\n{'='*70}")
 
         try:
             # <----------------------------- Evaluate model on public test set (unseen data) ----------------------------->
             global_post_fl_metrics = self.evaluate_all_clients_on_public_test(device)
-            save_global_post_fl_metrics(global_post_fl_metrics, self.client_configs)
+            save_global_post_fl_metrics(global_post_fl_metrics, self.client_configs, self.best_round)
         except Exception as e:
             log(WARNING, f"[GLOBAL] Post-FL Evaluation failed: {e}")
 

@@ -32,7 +32,7 @@ def main(grid: Grid, context: Context) -> None:
     public_loader = load_public_dataset(batch_size=batch_size, round_num=server_round, total_rounds=num_rounds)
     num_samples = len(public_loader.dataset)
 
-    initial_consensus = np.zeros((num_samples, NUM_CLASSES), dtype=np.float32)
+    initial_consensus = np.zeros((num_samples, NUM_CLASSES), dtype=np.float32) # creates an array of arrays [[0,0] * num_samples]
 
     # <-------------------------------------- LOAD FL STRATEGY -------------------------------------->
     strategy = FLEXMedStrategy(

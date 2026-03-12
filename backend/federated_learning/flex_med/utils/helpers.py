@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 import torch
 import torch.nn as nn
 from torchvision import models
-from torchvision.models import EfficientNet_B0_Weights, MobileNet_V2_Weights, DenseNet121_Weights
+from torchvision.models import EfficientNet_B0_Weights, MobileNet_V2_Weights, DenseNet121_Weights, ResNet18_Weights
 from pathlib import Path
 from flex_med.utils.config import (
     LOCAL_TRAIN_DATASET_PATH, DIRICHLET_ALPHA, DIRICHLET_SEED, CLIENT_INFO_FILE_PATH, NUM_CLASSES)
@@ -70,6 +70,7 @@ def sanitize_client_paths(clients: List[Dict]) -> List[Dict]:
 def load_client_config(config_path: str = CLIENT_INFO_FILE_PATH) -> List[Dict]:
     if SUPABASE_CLIENT is not None and SIMULATION_ID is not None:
         try:
+            # Loads the clients only relevant to this FL simulation
             response = SUPABASE_CLIENT.from_('client_simulation_metrics') \
                 .select('client_id, clients(*)') \
                 .eq('simulation_id', SIMULATION_ID) \
@@ -113,20 +114,7 @@ def get_display_id(partition_id: int, client_config: Dict) -> str:
     """Get display ID for logging."""
     return client_config.get('client_name') or f"Client {client_config.get('id', partition_id + 1)}"
 
-def save_model(model: torch.nn.Module, model_path: str, model_type: str):
-    """Save model weights with minimal metadata."""
-    torch.save({
-        'model_type': model_type,
-        'num_classes': NUM_CLASSES,
-        'state_dict': model.state_dict(),
-    }, model_path)
-
-def load_model_for_client(partition_id: int, config_path: str = CLIENT_INFO_FILE_PATH):
-    """Load client config and create model architecture."""
-    client_config = get_client_by_partition_id(partition_id, config_path)
-    model = get_model_by_type(client_config['model_type'])
-    return model, client_config['model_path'], client_config
-
+# <----------------------------- DATA HETEROGENEITY UTILITIES ----------------------------->
 def get_partition_stats(partition_id: int, num_partitions: int, partitioner_cache: dict) -> Dict:
     """Get data heterogeneity statistics for a client's partition."""
     from flwr.common import log
@@ -285,7 +273,97 @@ def print_client_data_distribution_summary(client_configs: List[Dict], partition
     else:
         log(INFO, "Partitioner not initialized yet")
 
-# <----------------------------- MODEL EVALUATION UTILITIES ----------------------------->
+# <----------------------------- MODEL UTILITIES ----------------------------->
+def get_model_by_type(model_type: str, use_pretrained: bool = True, dropout_rate: float = None):
+    """Create a model instance by type with dropout-enhanced classifier."""
+    model_type = model_type.lower()
+    if dropout_rate is None:
+        dropout_rate = get_initial_dropout_rate(model_type)
+
+    model_map = {
+        'efficientnet_b0': (models.efficientnet_b0, EfficientNet_B0_Weights.DEFAULT),
+        'mobilenet_v2': (models.mobilenet_v2, MobileNet_V2_Weights.DEFAULT),
+        'densenet121': (models.densenet121, DenseNet121_Weights.DEFAULT),
+        'resnet18': (models.resnet18, ResNet18_Weights.DEFAULT),
+    }
+
+    if model_type not in model_map:
+        raise ValueError(f"Unsupported model type: {model_type}. Supported: {list(model_map.keys())}")
+
+    model_fn, default_weights = model_map[model_type]
+    weights = default_weights if use_pretrained else None
+
+    model = model_fn(weights=weights)
+    return add_dropout_to_classifier(model, model_type, dropout_rate)
+
+def get_initial_dropout_rate(model_type: str) -> float:
+    """Get default dropout rate for model architecture."""
+    rates = {'efficientnet_b0': 0.35, 'mobilenet_v2': 0.45, 'densenet121': 0.35, 'resnet18': 0.40}
+    return rates.get(model_type.lower(), 0.3)
+
+def add_dropout_to_classifier(model, model_type: str, dropout_rate: float = 0.3):
+    """Add/update dropout layer before the final classifier head (idempotent)."""
+    model_type = model_type.lower()
+
+    match model_type:
+        case 'efficientnet_b0':
+            if isinstance(model.classifier[1], nn.Sequential) and isinstance(model.classifier[1][0], nn.Dropout):
+                model.classifier[1][0].p = dropout_rate
+            else:
+                in_features = model.classifier[1].in_features
+                model.classifier[1] = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
+
+        case 'mobilenet_v2':
+            if isinstance(model.classifier[1], nn.Sequential) and isinstance(model.classifier[1][0], nn.Dropout):
+                model.classifier[1][0].p = dropout_rate
+            else:
+                in_features = model.classifier[1].in_features
+                model.classifier[1] = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
+
+        case 'densenet121':
+            if isinstance(model.classifier, nn.Sequential) and isinstance(model.classifier[0], nn.Dropout):
+                model.classifier[0].p = dropout_rate
+            else:
+                in_features = model.classifier.in_features
+                model.classifier = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
+
+        case 'resnet18':
+            # ResNet uses model.fc instead of model.classifier
+            if isinstance(model.fc, nn.Sequential) and isinstance(model.fc[0], nn.Dropout):
+                model.fc[0].p = dropout_rate
+            else:
+                in_features = model.fc.in_features
+                model.fc = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
+
+    return model
+
+def load_model_weights(model, model_path, device):
+    """Load model weights from file (handles legacy and new formats)."""
+    try:
+        checkpoint = torch.load(model_path, map_location=device, weights_only=True)
+    except Exception:
+        checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+    if isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
+        model.load_state_dict(checkpoint['state_dict'])
+    else:
+        model.load_state_dict(checkpoint)
+    return model
+
+def save_model(model: torch.nn.Module, model_path: str, model_type: str):
+    """Save model weights with minimal metadata."""
+    torch.save({
+        'model_type': model_type,
+        'num_classes': NUM_CLASSES,
+        'state_dict': model.state_dict(),
+    }, model_path)
+
+def load_model_for_client(partition_id: int, config_path: str = CLIENT_INFO_FILE_PATH):
+    """Load client config and create model architecture."""
+    client_config = get_client_by_partition_id(partition_id, config_path)
+    model = get_model_by_type(client_config['model_type'])
+    return model, client_config['model_path'], client_config
+
+# <----------------------------- MODEL EVALUATION & TRAINING UTILITIES ----------------------------->
 def compute_per_class_accuracy(model, valloader, device):
     """
     Compute per-class accuracies for balanced accuracy metric.
@@ -322,76 +400,8 @@ def compute_per_class_accuracy(model, valloader, device):
 
     return balanced_accuracy
 
-# <----------------------------- MODEL UTILITIES - Freeze/Unfreeze for Gradual Training ----------------------------->
-def get_model_by_type(model_type: str, use_pretrained: bool = True, dropout_rate: float = None):
-    """Create a model instance by type with dropout-enhanced classifier."""
-    model_type = model_type.lower()
-    if dropout_rate is None:
-        dropout_rate = get_initial_dropout_rate(model_type)
-
-    model_map = {
-        'efficientnet_b0': (models.efficientnet_b0, EfficientNet_B0_Weights.DEFAULT),
-        'mobilenet_v2': (models.mobilenet_v2, MobileNet_V2_Weights.DEFAULT),
-        'densenet121': (models.densenet121, DenseNet121_Weights.DEFAULT),
-    }
-
-    if model_type not in model_map:
-        raise ValueError(f"Unsupported model type: {model_type}. Supported: {list(model_map.keys())}")
-
-    model_fn, default_weights = model_map[model_type]
-    weights = default_weights if use_pretrained else None
-
-    model = model_fn(weights=weights)
-    return add_dropout_to_classifier(model, model_type, dropout_rate)
-
-def get_initial_dropout_rate(model_type: str) -> float:
-    """Get default dropout rate for model architecture."""
-    rates = {'efficientnet_b0': 0.35, 'mobilenet_v2': 0.45, 'densenet121': 0.35}   
-    return rates.get(model_type.lower(), 0.3)
-
-def add_dropout_to_classifier(model, model_type: str, dropout_rate: float = 0.3):
-    """Add/update dropout layer before the final classifier head (idempotent)."""
-    model_type = model_type.lower()
-
-    match model_type:
-        case 'efficientnet_b0':
-            if isinstance(model.classifier[1], nn.Sequential) and isinstance(model.classifier[1][0], nn.Dropout):
-                model.classifier[1][0].p = dropout_rate
-            else:
-                in_features = model.classifier[1].in_features
-                model.classifier[1] = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
-
-        case 'mobilenet_v2':
-            if isinstance(model.classifier[1], nn.Sequential) and isinstance(model.classifier[1][0], nn.Dropout):
-                model.classifier[1][0].p = dropout_rate
-            else:
-                in_features = model.classifier[1].in_features
-                model.classifier[1] = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
-
-        case 'densenet121':
-            if isinstance(model.classifier, nn.Sequential) and isinstance(model.classifier[0], nn.Dropout):
-                model.classifier[0].p = dropout_rate
-            else:
-                in_features = model.classifier.in_features
-                model.classifier = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
-
-    return model
-
-def load_model_weights(model, model_path, device):
-    """Load model weights from file (handles legacy and new formats)."""
-    try:
-        checkpoint = torch.load(model_path, map_location=device, weights_only=True)
-    except Exception:
-        checkpoint = torch.load(model_path, map_location=device, weights_only=False)
-    if isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
-        model.load_state_dict(checkpoint['state_dict'])
-    else:
-        model.load_state_dict(checkpoint)
-    return model
-
-# <----------------------------- MODEL FREEZE/UNFREEZE FOR GRADUAL TRAINING ----------------------------->
 # Freeze all backbone layers, keeping only the classifier trainable.
-# Use in early FL rounds (1-2) to prevent biased gradients from corrupting
+# Use in early FL rounds to prevent biased gradients from corrupting pretrained features.
 def freeze_backbone(model, model_type: str):
     model_type = model_type.lower()
 
@@ -403,8 +413,20 @@ def freeze_backbone(model, model_type: str):
     if model_type in ('efficientnet_b0', 'mobilenet_v2', 'densenet121'):
         for param in model.classifier.parameters():
             param.requires_grad = True
+    elif model_type == 'resnet18':
+        for param in model.fc.parameters():
+            param.requires_grad = True
 
     return model
+
+def set_bn_eval(m):
+    """Freeze running statistics and parameters for ALL types of BatchNorm layers."""
+    if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
+        m.eval()
+        if m.weight is not None:
+            m.weight.requires_grad = False
+        if m.bias is not None:
+            m.bias.requires_grad = False
 
 # Progressive unfreezing: unfreeze fractions of the final backbone block (25% -> 50% -> 100%).
 def unfreeze_fraction_of_last_block(model, model_type: str, fraction: float):
@@ -421,6 +443,8 @@ def unfreeze_fraction_of_last_block(model, model_type: str, fraction: float):
             last_block = model.features.denseblock4       # Last dense block
         else:
             return model
+    elif model_type == 'resnet18':
+        last_block = model.layer4                         # Final residual block (~2 BasicBlocks, ~3.7M params)
 
     if last_block is not None:
         last_block_layers = list(last_block.modules())
@@ -483,7 +507,7 @@ def apply_freeze_strategy(model, model_type: str, server_round: int, total_round
 
     return model
 
-# <----------------------------- DATABASE PERSISTENCE UTILITIES ----------------------------->
+# <----------------------------- DATABASE PERSISTENCE & MONITORING UTILITIES ----------------------------->
 def extract_training_metrics_for_persistence(client_metrics_list: List[Dict], aggregation_metadata: Dict, client_configs: List[Dict]) -> Dict:
     """Extract training metrics for persistence."""
     training_metrics = {}
@@ -498,7 +522,7 @@ def extract_training_metrics_for_persistence(client_metrics_list: List[Dict], ag
         }
     return training_metrics
 
-def save_global_post_fl_metrics(metrics: Dict, client_configs: List[Dict]):
+def save_global_post_fl_metrics(metrics: Dict, client_configs: List[Dict], best_round: int = 0):
     """Save Post-FL metrics to database and compute aggregates."""
     if SUPABASE_CLIENT is None or SIMULATION_ID is None:
         return
@@ -532,6 +556,11 @@ def save_global_post_fl_metrics(metrics: Dict, client_configs: List[Dict]):
         response = SUPABASE_CLIENT.from_('client_simulation_metrics').select('metrics').eq('simulation_id', SIMULATION_ID).execute()
         if response.data:
             aggregate_metrics = compute_aggregate_metrics_local([row['metrics'] for row in response.data])
+
+            # Persist the best model round into aggregate metrics
+            if best_round > 0:
+                aggregate_metrics['best_model_round'] = best_round
+
             sim_response = SUPABASE_CLIENT.from_('fl_simulations').select('started_at').eq('id', SIMULATION_ID).execute()
             duration = None
             if sim_response.data and sim_response.data[0].get('started_at'):
@@ -726,37 +755,27 @@ def check_for_degradation_warnings(current_metrics: Dict, round_num: int, client
     for client_id, history in client_history.items():
         if len(history) >= 3:
             last_3 = history[-3:]
-            # Handle possible None values if validation failed
+
             accs = []
             for r in last_3:
                 val = r['metrics'].get('accuracy')
-                # Ensure we convert None to float, and handle any other edge cases
-                if val is None or not isinstance(val, (int, float)):
-                    accs.append(0.0)
-                else:
-                    accs.append(float(val))
+                accs.append(float(val) if val is not None and isinstance(val, (int, float)) else 0.0)
 
-            # Only compare if all values are valid (not None)
             if all(a is not None for a in accs):
                 try:
                     if accs[-1] < accs[-2] < accs[-3]:
                         log(WARNING, f"Client {client_id}: Accuracy declining for 2 consecutive rounds")
                 except TypeError:
-                    pass  # Skip comparison if there are still type issues
+                    pass
 
             losses = []
             for r in last_3:
                 val = r['metrics'].get('loss')
-                # Ensure we convert None to float, and handle any other edge cases
-                if val is None or not isinstance(val, (int, float)):
-                    losses.append(999.0)
-                else:
-                    losses.append(float(val))
+                losses.append(float(val) if val is not None and isinstance(val, (int, float)) else 999.0)
 
-            # Only compare if all values are valid (not None)
             if all(l is not None for l in losses):
                 try:
                     if losses[-1] > losses[-2] > losses[-3]:
                         log(WARNING, f"Client {client_id}: Loss increasing for 2 consecutive rounds (overfitting)")
                 except TypeError:
-                    pass  # Skip comparison if there are still type issues
+                    pass

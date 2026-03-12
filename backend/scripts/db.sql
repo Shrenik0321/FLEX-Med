@@ -187,13 +187,10 @@ CREATE TABLE system_config (
 -- Single configuration — no presets. dirichlet_alpha is a direct top-level field.
 INSERT INTO system_config (config) VALUES ('{
     "dirichlet_alpha": 1.5,
-    "minority_boost": 0.85,
-    "focal_alpha": 0.50,
-    "focal_gamma": 2.0,
-    "consensus_momentum": 0.35,
-    "distill_weight_base": 0.75,
+    "minority_boost": 0.90,
+    "distill_weight_base": 0.80,
     "distill_decay_rate": 0.10,
-    "weight_decay": 0.02,
+    "weight_decay": 0.03,
     "train_loss_weight": 0.70,
     "distill_loss_weight": 0.30,
     "lr_decay": 0.95,

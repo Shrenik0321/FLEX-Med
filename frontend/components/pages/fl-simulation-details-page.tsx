@@ -1,6 +1,6 @@
 "use client";
 
-import { Users, Loader2, Clock, XCircle, AlertCircle } from "lucide-react";
+import { Users, Loader2, XCircle } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { API_BASE_PATH } from "@/utils";
@@ -8,7 +8,7 @@ import {
   FLSimulation,
   formatDuration,
   parseMetrics,
-} from "@/types/fl-simulation";
+} from "../../types/fl-simulation";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -20,6 +20,7 @@ import {
   Tooltip as ChartTooltip,
   Legend as ChartLegend,
 } from "chart.js";
+import annotationPlugin from "chartjs-plugin-annotation";
 import { Line, Bar } from "react-chartjs-2";
 import {
   Select,
@@ -39,6 +40,7 @@ ChartJS.register(
   Title,
   ChartTooltip,
   ChartLegend,
+  annotationPlugin,
 );
 
 // ---------------------------------------------------------------------------
@@ -156,7 +158,7 @@ const CLIENT_COLORS = [
 
 function smartYLimit(
   values: number[],
-  padding: number = 0.15,
+  padding: number = 0.05,
   allowNegative: boolean = false,
 ): { min: number; max: number } {
   const valid = (values ?? []).filter((v) => v != null && !isNaN(v));
@@ -315,7 +317,29 @@ function MetricCard({
 function makeLineOptions(
   limits: { min: number; max: number; stepSize?: number },
   isPercentage: boolean = false,
+  bestRoundAnnotation?: { round: number },
 ) {
+  const annotations: Record<string, any> = {};
+  if (bestRoundAnnotation && bestRoundAnnotation.round > 0) {
+    annotations.bestRoundLine = {
+      type: "line" as const,
+      xMin: String(bestRoundAnnotation.round),
+      xMax: String(bestRoundAnnotation.round),
+      borderColor: "#10b981",
+      borderWidth: 2,
+      borderDash: [6, 4],
+      label: {
+        display: true,
+        content: `Best (R${bestRoundAnnotation.round})`,
+        position: "start" as const,
+        backgroundColor: "rgba(16, 185, 129, 0.85)",
+        color: "#fff",
+        font: { size: 10, weight: "bold" as const },
+        padding: { x: 6, y: 3 },
+        borderRadius: 4,
+      },
+    };
+  }
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -342,6 +366,9 @@ function makeLineOptions(
               : `${ctx.dataset.label}: ${v.toFixed(4)}`;
           },
         },
+      },
+      annotation: {
+        annotations,
       },
     },
     scales: {
@@ -565,6 +592,12 @@ export default function FLSimulationDetailsPage({
     [lossValues],
   );
 
+  // Best model round from aggregate metrics
+  const bestModelRound = useMemo(() => {
+    const bmr = simulation?.aggregate_metrics?.best_model_round;
+    return bmr && typeof bmr === "number" && bmr > 0 ? bmr : null;
+  }, [simulation]);
+
   // Accuracy chart — average only in overview, anchored at (0, 0%)
   const accChartData = useMemo(() => {
     if (selectedClient === "all") {
@@ -662,10 +695,25 @@ export default function FLSimulationDetailsPage({
     }
   }, [clients, clientMetricsMap, roundLabels, accRoundLabels, selectedClient]);
 
-  // Accuracy y-axis: start from 60% and go by 5%
+  const accValues = useMemo(() => {
+    const vals: number[] = [];
+    accChartData.datasets.forEach((ds) =>
+      ds.data.forEach((v) => {
+        if (v != null) vals.push(v as number);
+      }),
+    );
+    return vals;
+  }, [accChartData]);
+
+  // Accuracy y-axis: dynamic based on values, with best-round annotation
   const accOptions = useMemo(
-    () => makeLineOptions({ min: 0.5, max: 1, stepSize: 0.05 }, true),
-    [],
+    () =>
+      makeLineOptions(
+        smartYLimit(accValues),
+        true,
+        bestModelRound ? { round: bestModelRound } : undefined,
+      ),
+    [accValues, bestModelRound],
   );
 
   // Accuracy difference (round-to-round delta) chart
@@ -885,6 +933,17 @@ export default function FLSimulationDetailsPage({
     };
   }, [clients, clientMetricsMap]);
 
+  // ---- Total data points across all clients ----
+  const totalDataPoints = useMemo(() => {
+    let total = 0;
+    clients.forEach((c) => {
+      const cm = clientMetricsMap.get(c.id);
+      const dh = cm?.data_heterogeneity;
+      if (dh) total += dh.total_samples;
+    });
+    return total;
+  }, [clients, clientMetricsMap]);
+
   const dataHetOptions = useMemo(
     () => ({
       indexAxis: "y" as const,
@@ -904,6 +963,21 @@ export default function FLSimulationDetailsPage({
           borderWidth: 1,
           padding: 10,
           callbacks: {
+            title: (items: any[]) => {
+              if (!items.length) return "";
+              const di = items[0].dataIndex;
+              const leuk = dataHetChart?.datasets[0]?.data[di] ?? 0;
+              const heal = dataHetChart?.datasets[1]?.data[di] ?? 0;
+              const t = leuk + heal;
+              const ratio =
+                Math.min(leuk, heal) > 0
+                  ? (Math.max(leuk, heal) / Math.min(leuk, heal)).toFixed(1)
+                  : "N/A";
+              return [
+                `${items[0].label}`,
+                `Total: ${t.toLocaleString()}  ·  Ratio: ${ratio}:1`,
+              ];
+            },
             label: (ctx: any) => {
               const v = ctx.raw;
               const di = ctx.dataIndex;
@@ -998,7 +1072,7 @@ export default function FLSimulationDetailsPage({
           const improvement = metrics?.aggregate?.improvement;
 
           return (
-            <div className="space-y-10">
+            <div className="space-y-8">
               {/* ── Header ── */}
               <div className="flex items-center justify-between">
                 <div className="text-sm text-slate-500">
@@ -1061,268 +1135,188 @@ export default function FLSimulationDetailsPage({
 
               {/* ── Simulation Config Summary ── */}
               {simulation.configs && (
-                <section className="bg-white rounded-2xl border border-slate-200 p-5">
-                  <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
-                    {simulation.heterogeneity_preset && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">
-                          Preset
-                        </span>
-                        <span
-                          className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium border ${
-                            simulation.heterogeneity_preset === "high"
-                              ? "border-red-300 text-red-700 bg-red-50"
-                              : simulation.heterogeneity_preset === "moderate"
-                                ? "border-amber-300 text-amber-700 bg-amber-50"
-                                : simulation.heterogeneity_preset === "low"
-                                  ? "border-emerald-300 text-emerald-700 bg-emerald-50"
-                                  : "border-purple-300 text-purple-700 bg-purple-50"
-                          }`}
-                        >
-                          {simulation.heterogeneity_preset
-                            .charAt(0)
-                            .toUpperCase() +
-                            simulation.heterogeneity_preset.slice(1)}
-                        </span>
-                      </div>
-                    )}
-                    <div className="h-4 w-px bg-slate-200" />
-                    <div>
-                      <span className="text-slate-400 text-xs">Rounds</span>{" "}
-                      <span className="font-semibold text-slate-700">
-                        {simulation.configs.num_server_rounds}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-xs">Epochs</span>{" "}
-                      <span className="font-semibold text-slate-700">
-                        {simulation.configs.local_epochs}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-xs">LR</span>{" "}
-                      <span className="font-semibold text-slate-700">
-                        {simulation.configs.lr}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-xs">LR Decay</span>{" "}
-                      <span className="font-semibold text-slate-700">
-                        {simulation.configs.lr_decay}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-xs">Batch</span>{" "}
-                      <span className="font-semibold text-slate-700">
-                        {simulation.configs.batch_size}
-                      </span>
-                    </div>
-                    {simulation.configs.dirichlet_alpha != null && (
-                      <div>
-                        <span className="text-slate-400 text-xs">
-                          Dirichlet &alpha;
-                        </span>{" "}
-                        <span className="font-semibold text-slate-700">
-                          {simulation.configs.dirichlet_alpha}
-                        </span>
-                      </div>
-                    )}
-                    {simulation.configs.temperature != null && (
-                      <div>
-                        <span className="text-slate-400 text-xs">Temp</span>{" "}
-                        <span className="font-semibold text-slate-700">
-                          {simulation.configs.temperature}
-                        </span>
-                      </div>
-                    )}
-                    {simulation.duration != null && (
-                      <>
-                        <div className="h-4 w-px bg-slate-200" />
-                        <div>
-                          <span className="text-slate-400 text-xs">
-                            Duration
-                          </span>{" "}
+                <section className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+                    {/* FL Core */}
+                    <div className="p-5">
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <div className="w-1 h-1 rounded-full bg-blue-500" />
+                        FL Core
+                      </h4>
+                      <div className="space-y-2.5">
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500 text-xs">
+                            Rounds / Epochs
+                          </span>
                           <span className="font-semibold text-slate-700">
-                            {formatDuration(simulation.duration)}
+                            {simulation.configs.num_rounds ??
+                              simulation.configs.num_server_rounds}{" "}
+                            / {simulation.configs.local_epochs}
                           </span>
                         </div>
-                      </>
-                    )}
-                  </div>
-                </section>
-              )}
-
-              {/* ── Section: Data Heterogeneity (all clients view) ── */}
-              {selectedClient === "all" && dataHetChart && (
-                <section>
-                  <div className="flex items-center justify-between mb-5">
-                    <h2 className="text-xl font-bold text-slate-900">
-                      Data Heterogeneity
-                    </h2>
-                    <span className="text-xs font-medium bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-200">
-                      Dirichlet &alpha; ={" "}
-                      {simulation?.heterogeneity_preset === "moderate"
-                        ? "1.0"
-                        : simulation?.heterogeneity_preset === "high"
-                          ? "0.5"
-                          : "2.0"}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Bar chart */}
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200">
-                      <h3 className="text-sm font-semibold text-slate-700 mb-3">
-                        Class Distribution per Client
-                      </h3>
-                      <div className="h-72">
-                        <Bar data={dataHetChart} options={dataHetOptions} />
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500 text-xs">
+                            Base LR / Decay
+                          </span>
+                          <span className="font-semibold text-slate-700">
+                            {(
+                              simulation.configs.learning_rate ??
+                              simulation.configs.lr ??
+                              0
+                            ).toFixed(4)}{" "}
+                            / {simulation.configs.lr_decay}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500 text-xs">
+                            Batch Size
+                          </span>
+                          <span className="font-semibold text-slate-700 whitespace-nowrap">
+                            {simulation.configs.batch_size}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Table */}
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200">
-                      <h3 className="text-sm font-semibold text-slate-700 mb-3">
-                        Client Breakdown
-                      </h3>
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-200 text-left">
-                            <th className="py-2.5 font-semibold text-slate-600">
-                              Client
-                            </th>
-                            <th className="py-2.5 font-semibold text-slate-600 text-right">
-                              Samples
-                            </th>
-                            <th className="py-2.5 font-semibold text-slate-600 text-right">
-                              Ratio
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {clients.map((c, idx) => {
-                            const cm = clientMetricsMap.get(c.id);
-                            const dh = cm?.data_heterogeneity;
-                            return (
-                              <tr
-                                key={c.id}
-                                className="border-b border-slate-100 hover:bg-slate-50"
-                              >
-                                <td className="py-2.5 font-medium text-slate-900 flex items-center gap-2">
-                                  <div
-                                    className="w-2 h-2 rounded-full"
-                                    style={{
-                                      backgroundColor:
-                                        CLIENT_COLORS[
-                                          idx % CLIENT_COLORS.length
-                                        ],
-                                    }}
-                                  />
-                                  {c.client_name}
-                                </td>
-                                <td className="py-2.5 text-right text-slate-700">
-                                  {dh?.total_samples?.toLocaleString() ?? "—"}
-                                </td>
-                                <td className="py-2.5 text-right">
-                                  {dh ? (
-                                    <span
-                                      className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-                                        dh.imbalance_ratio <= 1.5
-                                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                          : dh.imbalance_ratio <= 5
-                                            ? "bg-amber-50 text-amber-700 border-amber-200"
-                                            : "bg-red-50 text-red-700 border-red-200"
-                                      }`}
-                                    >
-                                      {dh.imbalance_ratio.toFixed(1)}:1
-                                    </span>
-                                  ) : (
-                                    "—"
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                    {/* Strategy & Loss */}
+                    <div className="p-5">
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <div className="w-1 h-1 rounded-full bg-rose-500" />
+                        Strategy & Loss
+                      </h4>
+                      <div className="space-y-2.5">
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500 text-xs">
+                            Minority Boost
+                          </span>
+                          <span className="font-semibold text-slate-700">
+                            {simulation.configs.minority_boost ??
+                              simulation.configs.training_config
+                                ?.minority_boost ??
+                              "—"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500 text-xs">
+                            Consensus Momentum
+                          </span>
+                          <span className="font-semibold text-slate-700">
+                            {simulation.configs.consensus_momentum ??
+                              simulation.configs.training_config
+                                ?.consensus_momentum ??
+                              "—"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500 text-xs">
+                            Focal Loss (&alpha;/&gamma;)
+                          </span>
+                          <span className="font-semibold text-slate-700 whitespace-nowrap">
+                            {simulation.configs.focal_alpha ??
+                              simulation.configs.training_config?.focal_alpha ??
+                              "—"}{" "}
+                            /
+                            {simulation.configs.focal_gamma ??
+                              simulation.configs.training_config?.focal_gamma ??
+                              "—"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Distillation */}
+                    <div className="p-5">
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <div className="w-1 h-1 rounded-full bg-amber-500" />
+                        Distillation
+                      </h4>
+                      <div className="space-y-2.5">
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500 text-xs">
+                            Weight (Base/Decay)
+                          </span>
+                          <span className="font-semibold text-slate-700">
+                            {simulation.configs.distill_weight_base ??
+                              simulation.configs.training_config
+                                ?.distill_weight_base ??
+                              "—"}{" "}
+                            /
+                            {simulation.configs.distill_decay_rate ??
+                              simulation.configs.training_config
+                                ?.distill_decay_rate ??
+                              "—"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500 text-xs">
+                            Loss (Train/Distill)
+                          </span>
+                          <span className="font-semibold text-slate-700">
+                            {simulation.configs.train_loss_weight ??
+                              simulation.configs.training_config
+                                ?.train_loss_weight ??
+                              "—"}{" "}
+                            /
+                            {simulation.configs.distill_loss_weight ??
+                              simulation.configs.training_config
+                                ?.distill_loss_weight ??
+                              "—"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500 text-xs">
+                            Temp / Epochs
+                          </span>
+                          <span className="font-semibold text-slate-700">
+                            {simulation.configs.temperature} /{" "}
+                            {simulation.configs.distill_epochs}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Data Partitioning */}
+                    <div className="p-5">
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <div className="w-1 h-1 rounded-full bg-emerald-500" />
+                        Data Partitioning
+                      </h4>
+                      <div className="space-y-2.5">
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500 text-xs">
+                            Dirichlet &alpha;
+                          </span>
+                          <span className="font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                            {simulation.configs.dirichlet_alpha}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500 text-xs">
+                            Random Seed
+                          </span>
+                          <span className="font-semibold text-slate-700">
+                            {simulation.configs.dirichlet_seed ?? "—"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-slate-500 text-xs">
+                            Min Sample Size
+                          </span>
+                          <span className="font-semibold text-slate-700 whitespace-nowrap">
+                            {simulation.configs.dirichlet_min_partition_size ??
+                              "—"}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </section>
               )}
-
-              {/* ── Section: Training Convergence ── */}
-              <section>
-                <h2 className="text-xl font-bold text-slate-900 mb-5">
-                  Training Convergence
-                </h2>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-1">
-                      {selectedClient === "all" ? "Avg Loss" : "Loss History"}
-                    </h3>
-                    <p className="text-xs text-slate-400 mb-3">
-                      {selectedClient === "all"
-                        ? "Average validation and training loss across all clients"
-                        : "Validation and training loss each round"}
-                    </p>
-                    <div className="h-72">
-                      <Line data={lossChartData} options={lossOptions} />
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-1">
-                      {selectedClient === "all" ? "Avg F1 Score" : "F1 Score"}
-                    </h3>
-                    <p className="text-xs text-slate-400 mb-3">
-                      {selectedClient === "all"
-                        ? "Average F1 score progression across all clients"
-                        : "F1 score progression each round"}
-                    </p>
-                    <div className="h-72">
-                      <Line data={f1ChartData} options={f1Options} />
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-1">
-                      {selectedClient === "all"
-                        ? "Avg Accuracy"
-                        : "Validation Accuracy"}
-                    </h3>
-                    <p className="text-xs text-slate-400 mb-3">
-                      {selectedClient === "all"
-                        ? "Average validation accuracy across all clients"
-                        : "Validation accuracy each round"}
-                    </p>
-                    <div className="h-72">
-                      <Line data={accChartData} options={accOptions} />
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-6 rounded-2xl border border-slate-200">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-1">
-                      {selectedClient === "all"
-                        ? "Avg Accuracy Delta"
-                        : "Accuracy Delta"}
-                    </h3>
-                    <p className="text-xs text-slate-400 mb-3">
-                      Round-to-round accuracy change (positive = improving)
-                    </p>
-                    <div className="h-72">
-                      <Line
-                        data={accDeltaChartData}
-                        options={accDeltaOptions}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </section>
 
               {/* ── Section: Post-FL Results — Overall (all clients view) ── */}
               {selectedClient === "all" && (
                 <section>
-                  <h2 className="text-xl font-bold text-slate-900 mb-5">
+                  <h2 className="text-lg font-bold text-slate-900 mb-4">
                     Post-FL Evaluation
                     <span className="text-xs font-normal text-slate-400 ml-2">
                       on balanced test set (50/50)
@@ -1330,7 +1324,7 @@ export default function FLSimulationDetailsPage({
                   </h2>
 
                   {/* Summary cards */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
                     <MetricCard
                       label="Avg Accuracy"
                       value={pct(postFlStats.avgAcc)}
@@ -1364,28 +1358,28 @@ export default function FLSimulationDetailsPage({
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-slate-50 border-b border-slate-200">
-                          <th className="py-3 px-4 text-left font-semibold text-slate-600">
+                          <th className="py-2.5 px-4 text-left font-semibold text-slate-600">
                             Client
                           </th>
-                          <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                          <th className="py-2.5 px-4 text-right font-semibold text-slate-600">
                             Accuracy
                           </th>
-                          <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                          <th className="py-2.5 px-4 text-right font-semibold text-slate-600">
                             Class Gap
                           </th>
-                          <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                          <th className="py-2.5 px-4 text-right font-semibold text-slate-600">
                             Leukemia Acc
                           </th>
-                          <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                          <th className="py-2.5 px-4 text-right font-semibold text-slate-600">
                             Healthy Acc
                           </th>
-                          <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                          <th className="py-2.5 px-4 text-right font-semibold text-slate-600">
                             F1
                           </th>
-                          <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                          <th className="py-2.5 px-4 text-right font-semibold text-slate-600">
                             Precision
                           </th>
-                          <th className="py-3 px-4 text-right font-semibold text-slate-600">
+                          <th className="py-2.5 px-4 text-right font-semibold text-slate-600">
                             Recall
                           </th>
                         </tr>
@@ -1401,7 +1395,7 @@ export default function FLSimulationDetailsPage({
                               key={c.id}
                               className="border-b border-slate-100 hover:bg-slate-50"
                             >
-                              <td className="py-3 px-4 font-medium text-slate-900 flex items-center gap-2">
+                              <td className="py-2.5 px-4 font-medium text-slate-900 flex items-center gap-2">
                                 <div
                                   className="w-2 h-2 rounded-full flex-shrink-0"
                                   style={{
@@ -1414,29 +1408,29 @@ export default function FLSimulationDetailsPage({
                                   {c.model_type}
                                 </span>
                               </td>
-                              <td className="py-3 px-4 text-right font-semibold text-slate-900">
+                              <td className="py-2.5 px-4 text-right font-semibold text-slate-900">
                                 {pct(pf.accuracy)}
                               </td>
-                              <td className="py-3 px-4 text-right">
+                              <td className="py-2.5 px-4 text-right">
                                 <span
                                   className={`text-xs font-medium px-2 py-0.5 rounded-full border ${gapBadge(gap)}`}
                                 >
                                   {pct(gap)}
                                 </span>
                               </td>
-                              <td className="py-3 px-4 text-right text-slate-700">
+                              <td className="py-2.5 px-4 text-right text-slate-700">
                                 {pct(pf.leukemia_accuracy)}
                               </td>
-                              <td className="py-3 px-4 text-right text-slate-700">
+                              <td className="py-2.5 px-4 text-right text-slate-700">
                                 {pct(pf.healthy_accuracy)}
                               </td>
-                              <td className="py-3 px-4 text-right text-slate-700">
+                              <td className="py-2.5 px-4 text-right text-slate-700">
                                 {pf.f1_score.toFixed(3)}
                               </td>
-                              <td className="py-3 px-4 text-right text-slate-700">
+                              <td className="py-2.5 px-4 text-right text-slate-700">
                                 {pct(pf.precision)}
                               </td>
-                              <td className="py-3 px-4 text-right text-slate-700">
+                              <td className="py-2.5 px-4 text-right text-slate-700">
                                 {pct(pf.recall)}
                               </td>
                             </tr>
@@ -1451,8 +1445,8 @@ export default function FLSimulationDetailsPage({
               {/* ── Section: Individual Client Detail ── */}
               {selectedClient !== "all" && selectedCM && (
                 <section>
-                  <div className="flex items-center justify-between mb-5">
-                    <h2 className="text-xl font-bold text-slate-900">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-bold text-slate-900">
                       Post-FL Evaluation
                       <span className="text-xs font-normal text-slate-400 ml-2">
                         on balanced test set (50/50)
@@ -1466,7 +1460,7 @@ export default function FLSimulationDetailsPage({
                   </div>
 
                   {/* Metric cards — row 1 */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                     <MetricCard
                       label="Accuracy"
                       value={pct(selectedCM.global.post_fl.accuracy)}
@@ -1497,7 +1491,7 @@ export default function FLSimulationDetailsPage({
                   </div>
 
                   {/* Metric cards — row 2 */}
-                  <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="grid grid-cols-3 gap-3 mb-5">
                     <MetricCard
                       label="Precision"
                       value={pct(selectedCM.global.post_fl.precision)}
@@ -1512,9 +1506,9 @@ export default function FLSimulationDetailsPage({
                     />
                   </div>
 
-                  {/* Confusion matrix + data heterogeneity */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200">
+                  {/* Confusion matrix + data partition */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200">
                       <h3 className="text-sm font-semibold text-slate-700 mb-4">
                         Confusion Matrix
                       </h3>
@@ -1527,11 +1521,11 @@ export default function FLSimulationDetailsPage({
                     </div>
 
                     {selectedCM.data_heterogeneity && (
-                      <div className="bg-white p-6 rounded-2xl border border-slate-200">
+                      <div className="bg-white p-5 rounded-2xl border border-slate-200">
                         <h3 className="text-sm font-semibold text-slate-700 mb-4">
                           Data Partition
                         </h3>
-                        <div className="space-y-4">
+                        <div className="space-y-3">
                           <div className="flex justify-between text-sm">
                             <span className="text-slate-500">
                               Total Samples
@@ -1550,7 +1544,7 @@ export default function FLSimulationDetailsPage({
                           </div>
 
                           {/* Class bars */}
-                          <div className="pt-2 space-y-3">
+                          <div className="pt-2 space-y-2.5">
                             <div>
                               <div className="flex justify-between text-xs mb-1">
                                 <span className="text-red-600 font-medium">
@@ -1626,6 +1620,102 @@ export default function FLSimulationDetailsPage({
                   </div>
                 </section>
               )}
+
+              {/* ── Section: Data Heterogeneity (all clients view) ── */}
+              {selectedClient === "all" && dataHetChart && (
+                <section>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-bold text-slate-900">
+                      Data Heterogeneity
+                    </h2>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-medium bg-slate-50 text-slate-600 px-2.5 py-1 rounded-full border border-slate-200">
+                        {totalDataPoints.toLocaleString()} total samples
+                      </span>
+                      <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full border border-blue-200">
+                        &alpha; = {simulation?.configs?.dirichlet_alpha ?? "—"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200">
+                    <div className="h-56">
+                      <Bar data={dataHetChart} options={dataHetOptions} />
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* ── Section: Training Convergence ── */}
+              <section>
+                <h2 className="text-lg font-bold text-slate-900 mb-4">
+                  Training Convergence
+                </h2>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-1">
+                      {selectedClient === "all" ? "Avg Loss" : "Loss History"}
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mb-2">
+                      {selectedClient === "all"
+                        ? "Val & train loss across clients"
+                        : "Val & train loss each round"}
+                    </p>
+                    <div className="h-52">
+                      <Line data={lossChartData} options={lossOptions} />
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-1">
+                      {selectedClient === "all"
+                        ? "Avg Accuracy"
+                        : "Validation Accuracy"}
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mb-2">
+                      {selectedClient === "all"
+                        ? "Val accuracy across clients"
+                        : "Val accuracy each round"}
+                    </p>
+                    <div className="h-52">
+                      <Line data={accChartData} options={accOptions} />
+                    </div>
+                  </div>
+
+                  {/* <div className="bg-white p-5 rounded-2xl border border-slate-200">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-1">
+                      {selectedClient === "all" ? "Avg F1 Score" : "F1 Score"}
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mb-2">
+                      {selectedClient === "all"
+                        ? "F1 score across clients"
+                        : "F1 score each round"}
+                    </p>
+                    <div className="h-52">
+                      <Line data={f1ChartData} options={f1Options} />
+                    </div>
+                  </div> */}
+
+                  {/* Accuracy Delta — commented out for now */}
+
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-1">
+                      {selectedClient === "all"
+                        ? "Avg Accuracy Delta"
+                        : "Accuracy Delta"}
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mb-2">
+                      Round-to-round accuracy change
+                    </p>
+                    <div className="h-52">
+                      <Line
+                        data={accDeltaChartData}
+                        options={accDeltaOptions}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </section>
             </div>
           );
         })()

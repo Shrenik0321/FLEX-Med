@@ -5,10 +5,10 @@ import numpy as np
 from flwr.app import ArrayRecord, Context, Message, MetricRecord, RecordDict
 from flwr.clientapp import ClientApp
 import warnings
-# Suppress the specific Pillow deprecation warning heavily spamming the logs
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="torchvision.transforms._functional_pil")
 warnings.filterwarnings("ignore", message=".*'mode' parameter is deprecated.*")
 import random
+import math
 from flex_med.utils.config import CLIENT_INFO_FILE_PATH, DIRICHLET_SEED
 from flex_med.task import (
     load_private_dataset,
@@ -16,8 +16,7 @@ from flex_med.task import (
     train as train_fn, NUM_CLASSES
 )
 from flex_med.utils.helpers import (
-    apply_freeze_strategy,
-    get_model_by_type, get_client_by_partition_id, load_model_weights,
+    apply_freeze_strategy,load_model_weights,
     get_display_id, save_model, load_model_for_client,
     compute_per_class_accuracy
 )
@@ -47,8 +46,7 @@ def train(msg: Message, context: Context):
 
     print(f"\n{'='*60}")
     
-    # Load model and config early for logging
-    model, model_path, client_config = load_model_for_client(partition_id)
+    model, model_path, client_config = load_model_for_client(partition_id) # load model with the partition assigned to it
     display_id = get_display_id(partition_id, client_config)
 
     print(f"[{display_id} (Partition {partition_id})] ROUND {server_round} - Training Phase")
@@ -70,12 +68,16 @@ def train(msg: Message, context: Context):
         phase = "Phase 1 - Backbone FROZEN" if freeze_backbone else "Phase 2 - Fine-tuning"
         print(f"[{display_id}] [Freeze] Round {server_round}/{total_rounds}: {phase}")
 
-    # <-------------------------------------- PRIVATE TRAINING PREP -------------------------------------->
+    # <-------------------------------------- PRIVATE TRAINING -------------------------------------->
     base_lr = msg.content["config"]["lr"]
-    lr_decay_factor = context.run_config.get("lr-decay", 0.97)
 
-    # Stage-aware LR multiplier for Discriminative Learning Rates
-    decayed_lr = base_lr * (lr_decay_factor ** (server_round - 1))
+    # --- Cosine Annealing Schedule ---
+    # Gradually lowers LR from base_lr -> lr_min following a half-cosine curve.
+    # Slow drop in early (frozen) rounds, fast drop in late (unfrozen) rounds.
+    lr_min = base_lr * 0.05  # Floor: 5% of max (e.g. 0.001 -> 0.00005)
+    t = server_round - 1     # 0-indexed round
+    decayed_lr = lr_min + 0.5 * (base_lr - lr_min) * (1.0 + math.cos(math.pi * t / total_rounds))
+
     progress = server_round / total_rounds
 
     if progress <= 0.2:
@@ -85,7 +87,7 @@ def train(msg: Message, context: Context):
         phase_multiplier = 0.30     # Stage 2: 25% of final block (3e-4 / 1e-3)
         phase_name = "S2"
     elif progress <= 0.6:
-        phase_multiplier = 0.30     # Stage 3: 50% of final block (3e-4 / 1e-3)
+        phase_multiplier = 0.10     # Stage 3: 50% of final block (3e-4 / 1e-3)
         phase_name = "S3"
     elif progress <= 0.8:
         phase_multiplier = 0.05     # Stage 4: 75% of final block (1e-4 / 1e-3)
@@ -104,7 +106,11 @@ def train(msg: Message, context: Context):
             consensus_logits = msg.content["arrays"]["0"].numpy()
             if consensus_logits.shape[0] > 0:
                 print(f"[{display_id}] Phase 1: Knowledge Distillation")
+
+                #  Load public dataset for logit generation
                 public_loader = load_public_dataset(batch_size=context.run_config["batch-size"], round_num=server_round, total_rounds=total_rounds)
+
+                #  Perform knowledge distillation
                 distill_loss = distill_knowledge(
                     model=model, public_loader=public_loader, consensus_logits=consensus_logits,
                     device=device, epochs=context.run_config["distill-epochs"], 

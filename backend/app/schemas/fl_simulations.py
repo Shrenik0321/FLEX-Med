@@ -12,6 +12,7 @@ class SimulationStatus(str, Enum):
 
 class FLSimulationBase(BaseModel):
     """Base schema for FL Simulation"""
+    run_name: Optional[str] = None
     configs: dict  # JSONB - FL hyperparameters
     aggregate_metrics: dict = {}  # JSONB - Aggregated metrics from all clients
     heterogeneity_preset: Optional[str] = None  # Heterogeneity preset used for this run (from DB)
@@ -51,6 +52,7 @@ class FLSimulationBase(BaseModel):
 
 class FLSimulationCreate(BaseModel):
     """Schema for creating new simulation"""
+    run_name: Optional[str] = None
     configs: dict
 
     # Note: client_ids can be computed from client_simulation_metrics table
@@ -58,6 +60,7 @@ class FLSimulationCreate(BaseModel):
 
 class FLSimulationUpdate(BaseModel):
     """Schema for updating simulation"""
+    run_name: Optional[str] = None
     status: Optional[SimulationStatus] = None
     aggregate_metrics: Optional[dict] = None
     heterogeneity_preset: Optional[str] = None
@@ -264,14 +267,14 @@ if __name__ == "__main__":
     print("-" * 70)
 
     sim_create = FLSimulationCreate(
-        client_ids=[1, 2, 3],
+        run_name="example_run",
         configs={
             "num_server_rounds": 10,
             "lr": 0.0001,
             "batch_size": 32
         }
     )
-    print(f"Client IDs: {sim_create.client_ids}")
+    print(f"Run Name: {sim_create.run_name}")
     print(f"Configs: {sim_create.configs}")
 
     # Example 2: Complete simulation object
@@ -280,9 +283,9 @@ if __name__ == "__main__":
 
     sim = FLSimulation(
         id=1,
-        client_ids=[1, 2],
         configs={"num_server_rounds": 5, "lr": 0.0001},
-        metrics='{"aggregate": {"post_fl": {"avg_accuracy": 0.85}}}',
+        run_name="old_simulation",
+        aggregate_metrics='{"aggregate": {"post_fl": {"avg_accuracy": 0.85}}}',
         status=SimulationStatus.COMPLETED,
         created_at=datetime.now().isoformat(),
         started_at=datetime.now().isoformat(),
@@ -296,4 +299,4 @@ if __name__ == "__main__":
     # Example 3: Show metrics
     print("\nExample 3: Metrics")
     print("-" * 70)
-    print(f"Metrics: {sim.metrics}")
+    print(f"Metrics: {sim.aggregate_metrics}")

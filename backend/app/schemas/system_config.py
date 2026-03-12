@@ -14,9 +14,6 @@ class SystemConfigData(BaseModel):
 
     # Training Strategy Parameters (global)
     minority_boost: float = Field(default=0.78, ge=0.0, le=2.0, description="Minority class boost for WeightedRandomSampler")
-    focal_alpha: float = Field(default=0.50, ge=0.0, le=1.0, description="Focal loss alpha (fallback; dynamic alpha used at runtime)")
-    focal_gamma: float = Field(default=2.0, ge=0.0, le=5.0, description="Focal loss gamma")
-    consensus_momentum: float = Field(default=0.35, ge=0.0, le=1.0, description="Consensus momentum smoothing")
     distill_weight_base: float = Field(default=0.80, ge=0.0, le=1.0, description="Knowledge distillation weight base")
     distill_decay_rate: float = Field(default=0.18, ge=0.0, le=1.0, description="Distillation weight decay rate")
     train_loss_weight: float = Field(default=0.72, ge=0.0, le=1.0, description="Training loss weight in combined loss")
