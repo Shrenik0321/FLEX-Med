@@ -65,26 +65,25 @@ def train(msg: Message, context: Context):
     base_lr = msg.content["config"]["lr"]
     progress = server_round / total_rounds
 
-    # Applying the 4-stage unfreeze strategy
+    # Applying the 2-stage unfreeze strategy
     model = apply_freeze_strategy(model, model_type, server_round, total_rounds)
 
-    # Discriminative learning where each part of the network has a different learning rate
+    # Discriminative learning rates — Phase 2 start matches apply_freeze_strategy threshold
+    from flex_med.utils.helpers import PHASE2_START_ROUND
+
     phase = "INITIALIZING"
-    if server_round <= 6:
-        # Stage 1: Extended Head Only Warm-up (R1-R6)
+    if server_round < PHASE2_START_ROUND:
+        # Phase 1: Head Only Warm-up
         classifier_lr = base_lr
         backbone_lr = 0.0
         phase = "PHASE 1 - Head Only Warm-up"
     else:
-        # Stage 2: 25% Backbone with Soft Refinement (R7-R10)
-        # We drop backbone LR to 0.03x to prevent peaking too early (Round 8 in log9)
-        classifier_lr = base_lr * 0.6  # Fixed throughout R7-10
-        backbone_lr = base_lr * 0.03   # Fixed throughout R7-10
+        # Phase 2: 25% Backbone with Soft Refinement
+        classifier_lr = base_lr * 0.6
+        backbone_lr = base_lr * 0.03
         phase = "PHASE 2 - 25% Backbone (Soft Refinement)"
 
     print(f"[{display_id}] [Strategy] Round {server_round}/{total_rounds}: {phase}")
-    # print(f"[{display_id}] [Freeze] Round {server_round}/{total_rounds}: {phase}") # Removed old freeze log
-
     print(f"[{display_id}] Round {server_round}/{total_rounds} ({progress:.0%})")
     print(f"[{display_id}] Classifier LR: {classifier_lr:.6f} | Backbone LR: {backbone_lr:.6f} (dynamic)")
 

@@ -432,10 +432,12 @@ def unfreeze_fraction_of_last_block(model, model_type: str, fraction: float):
 
     return model
 
+PHASE2_START_ROUND = 6  # All architectures: Phase 1 rounds 1-5, Phase 2 rounds 6-10
+
 def apply_freeze_strategy(model, model_type: str, server_round: int, total_rounds: int = 10):
     """2-stage progressive unfreezing strategy.
-    Rounds 1-6: Head only (Stabilization)
-    Rounds 7-10: 25% last backbone block (Soft Refinement)
+    Phase 1 (R1-5): Classifier head only — backbone frozen.
+    Phase 2 (R6-10): 25% of final backbone block unfrozen.
     """
     from flwr.common import log
     from logging import INFO
@@ -443,12 +445,12 @@ def apply_freeze_strategy(model, model_type: str, server_round: int, total_round
     # Always start by freezing everything and unfreezing the classifier head
     model = freeze_backbone(model, model_type)
 
-    if server_round <= 6:
-        # Rounds 1-6: Head Only Warm-up (Stabilization)
+    if server_round < PHASE2_START_ROUND:
+        # Phase 1: Head Only Warm-up
         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         log(INFO, f"[Freeze] Round {server_round}/{total_rounds}: Stage 1 - Classifier only ({trainable_params:,} params)")
     else:
-        # Rounds 7-10: Gradual 25% Backbone Refinement
+        # Phase 2: 25% Backbone Refinement
         model = unfreeze_fraction_of_last_block(model, model_type, fraction=0.25)
         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         log(INFO, f"[Freeze] Round {server_round}/{total_rounds}: Stage 2 - 25% backbone block ({trainable_params:,} params)")

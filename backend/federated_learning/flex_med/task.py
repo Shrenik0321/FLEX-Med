@@ -471,8 +471,6 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, cl
 def compute_consensus(
     logits_list: List[np.ndarray], client_metrics: List[Dict], client_configs: List[Dict],
     server_round: int,
-    temperature: float = 4.0,
-    previous_consensus: Optional[np.ndarray] = None,
 ) -> Tuple[Optional[np.ndarray], Dict]:
     if not logits_list:
         return None, {"error": "No client logits provided"}
@@ -484,7 +482,7 @@ def compute_consensus(
     for i in range(num_clients):
         # Safely extract num_examples if it exists in the nested dict structure from client_app.py
         if i < len(client_metrics) and "num-examples" in client_metrics[i]:
-            raw_weights.append(float(client_metrics[i]["num-examples"]))
+            raw_weights.append(float(client_metrics[i]["num-examples"]) ** 0.5)
         else:
             raw_weights.append(1.0) # Fallback
 
@@ -521,7 +519,6 @@ class FLEXMedStrategy(Strategy):
         self.client_configs = load_client_config(config_path)
         self.num_clients = len(self.client_configs)
         self.client_history = {}
-        self.previous_consensus_logits = None
         self.total_rounds = 0
 
 # <----------------------------- HELPER METHODS ----------------------------->
@@ -662,14 +659,17 @@ class FLEXMedStrategy(Strategy):
                 check_for_degradation_warnings(round_val_metrics, current_round, self.client_history)
 
                 # <----------------------------- Best model checkpoint tracking ----------------------------->
-                valid_accs = [m.get('accuracy') for m in round_val_metrics.values()
-                              if m.get('accuracy') is not None]
+                valid_accs = [
+                    (m.get('leukemia_accuracy', 0) + m.get('healthy_accuracy', 0)) / 2
+                    for m in round_val_metrics.values()
+                    if m.get('leukemia_accuracy') is not None and m.get('healthy_accuracy') is not None
+                ]
                 if valid_accs:
                     avg_acc = sum(valid_accs) / len(valid_accs)
                     if avg_acc > self.best_avg_accuracy:
                         self.best_avg_accuracy = avg_acc
                         self.best_round = current_round
-                        log(INFO, f"[BEST] New best avg accuracy {avg_acc:.2%} at round {current_round}")
+                        log(INFO, f"[BEST] New best avg balanced accuracy {avg_acc:.2%} at round {current_round}")
                         for client_cfg in self.client_configs:
                             src = client_cfg.get('model_path', '')
                             if src and os.path.exists(src):
@@ -677,7 +677,7 @@ class FLEXMedStrategy(Strategy):
                                 dst = f"{base}_best{ext}"
                                 shutil.copy2(src, dst)
                     else:
-                        log(INFO, f"[BEST] Round {current_round} avg accuracy {avg_acc:.2%} "
+                        log(INFO, f"[BEST] Round {current_round} avg balanced accuracy {avg_acc:.2%} "
                                   f"(best: {self.best_avg_accuracy:.2%} at round {self.best_round})")
 
             except Exception as e:
@@ -736,12 +736,7 @@ class FLEXMedStrategy(Strategy):
         consensus_logits, aggregation_metadata = compute_consensus(
             logits_list, client_metrics_list, self.client_configs[:len(logits_list)],
             server_round, 
-            previous_consensus=self.previous_consensus_logits,
         )
-
-        # Update state for next round
-        if consensus_logits is not None:
-            self.previous_consensus_logits = consensus_logits
 
         if consensus_logits is None:
             return None, {}, {}

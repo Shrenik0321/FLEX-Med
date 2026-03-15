@@ -855,70 +855,8 @@ export default function FLSimulationDetailsPage({
     return smartYLimit(vals, 0.2, false, 0.05);
   }, [accChartData]);
 
-  // ---- F1 chart ----
-  const f1ChartData = useMemo(() => {
-    if (selectedClient === "all") {
-      const avgF1 = roundLabels.map((_, ri) => {
-        const vals: number[] = [];
-        clients.forEach((c) => {
-          const v = clientMetricsMap.get(c.id)?.rounds?.[ri]?.validation
-            ?.f1_score;
-          if (v != null) vals.push(v);
-        });
-        return vals.length
-          ? vals.reduce((a, b) => a + b, 0) / vals.length
-          : null;
-      });
-      return {
-        labels: roundLabels,
-        datasets: [
-          {
-            label: "F1 score",
-            data: avgF1,
-            borderColor: VAL_COLOR,
-            backgroundColor: "rgba(29,78,216,0.05)",
-            tension: 0.35,
-            pointRadius: 3,
-            borderWidth: 2,
-            fill: true,
-            spanGaps: true,
-          },
-        ],
-      };
-    }
-    const cm = clientMetricsMap.get(parseInt(selectedClient));
-    const rounds = cm?.rounds ?? [];
-    const info = clients.find((c) => c.id === parseInt(selectedClient));
-    return {
-      labels: rounds.map((r) => `${r.round}`),
-      datasets: [
-        {
-          label: `${info?.client_name ?? "Client"} · F1`,
-          data: rounds.map((r) => r.validation?.f1_score ?? null),
-          borderColor: VAL_COLOR,
-          backgroundColor: "rgba(29,78,216,0.05)",
-          tension: 0.35,
-          pointRadius: 3,
-          borderWidth: 2,
-          fill: true,
-          spanGaps: true,
-        },
-      ],
-    };
-  }, [clients, clientMetricsMap, roundLabels, selectedClient]);
-
-  const f1Limits = useMemo(() => {
-    const vals: number[] = [];
-    f1ChartData.datasets.forEach((ds) =>
-      ds.data.forEach((v) => {
-        if (v != null) vals.push(v as number);
-      }),
-    );
-    return smartYLimit(vals, 0.15);
-  }, [f1ChartData]);
-
   // ---- Delta chart ----
-  const accDeltaChartData = useMemo(() => {
+  /* const accDeltaChartData = useMemo(() => {
     if (selectedClient === "all") {
       const avgAccs = roundLabels.map((_, ri) => {
         const vals: number[] = [];
@@ -988,7 +926,7 @@ export default function FLSimulationDetailsPage({
       }),
     );
     return smartYLimit(vals, 0.35, true, 0.05);
-  }, [accDeltaChartData]);
+  }, [accDeltaChartData]); */
 
   // ---- Data het chart ----
   const dataHetChart = useMemo(() => {
@@ -1097,7 +1035,6 @@ export default function FLSimulationDetailsPage({
   const postFlStats = useMemo(() => {
     const accs: number[] = [],
       gaps: number[] = [],
-      f1s: number[] = [],
       balAccs: number[] = [];
     let worst = { name: "", acc: 1 };
     clients.forEach((c) => {
@@ -1105,7 +1042,6 @@ export default function FLSimulationDetailsPage({
       if (!pf) return;
       accs.push(pf.accuracy);
       gaps.push(pf.class_gap ?? 0);
-      f1s.push(pf.f1_score);
       // balanced accuracy = avg of per-class accuracies
       const leuk = pf.leukemia_accuracy ?? 0;
       const heal = pf.healthy_accuracy ?? 0;
@@ -1120,7 +1056,6 @@ export default function FLSimulationDetailsPage({
     return {
       avgAcc: avg(accs),
       avgGap: avg(gaps),
-      avgF1: avg(f1s),
       avgBalAcc: avg(balAccs),
       worst,
     };
@@ -1419,7 +1354,6 @@ export default function FLSimulationDetailsPage({
                       : "red"
                 }
               />
-              <KpiCard label="Avg F1" value={postFlStats.avgF1.toFixed(3)} />
               <KpiCard
                 label="Weakest"
                 value={pct(postFlStats.worst.acc)}
@@ -1439,7 +1373,6 @@ export default function FLSimulationDetailsPage({
                       "Class gap",
                       "Leukemia acc",
                       "Healthy acc",
-                      "F1",
                       "Precision",
                       "Recall",
                     ].map((h) => (
@@ -1501,9 +1434,6 @@ export default function FLSimulationDetailsPage({
                         </td>
                         <td className="py-3.5 px-4 text-right tabular-nums text-gray-700">
                           {pct(pf.healthy_accuracy)}
-                        </td>
-                        <td className="py-3.5 px-4 text-right tabular-nums text-gray-700">
-                          {pf.f1_score.toFixed(3)}
                         </td>
                         <td className="py-3.5 px-4 text-right tabular-nums text-gray-700">
                           {pct(pf.precision)}
@@ -1586,10 +1516,6 @@ export default function FLSimulationDetailsPage({
               <KpiCard
                 label="Recall"
                 value={pct(selectedCM.global.post_fl.recall)}
-              />
-              <KpiCard
-                label="F1 score"
-                value={selectedCM.global.post_fl.f1_score.toFixed(3)}
               />
             </div>
 
@@ -1723,15 +1649,12 @@ export default function FLSimulationDetailsPage({
                 options={lineOptions(accLimits, true, bestModelRound)}
               />
             </ChartCard>
-            <ChartCard title="F1 score" sub="Per-round validation F1">
-              <Line data={f1ChartData} options={lineOptions(f1Limits)} />
-            </ChartCard>
-            <ChartCard title="Accuracy delta" sub="Round-to-round change">
+            {/* <ChartCard title="Accuracy delta" sub="Round-to-round change">
               <Line
                 data={accDeltaChartData}
                 options={lineOptions(deltaLimits, true)}
               />
-            </ChartCard>
+            </ChartCard> */}
           </div>
         </section>
       </div>

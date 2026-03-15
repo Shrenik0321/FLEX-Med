@@ -8,14 +8,9 @@ import { Loading } from "@/components/ui/loading";
 interface SystemConfig {
   dirichlet_alpha: number;
   minority_boost: number;
-  focal_alpha: number;
-  focal_gamma: number;
-  consensus_momentum: number;
   distill_weight_base: number;
   distill_decay_rate: number;
-  train_loss_weight: number;
-  distill_loss_weight: number;
-  lr_decay: number;
+  weight_decay: number;
   learning_rate: number;
   num_rounds: number;
   local_epochs: number;
@@ -260,17 +255,6 @@ export default function SettingsPage() {
               className={inputCls}
             />
           </Field>
-          <Field label="LR Decay">
-            <input
-              type="number"
-              step="0.01"
-              min="0.8"
-              max="1"
-              value={config.lr_decay}
-              onChange={(e) => set("lr_decay", parseFloat(e.target.value) || 0)}
-              className={inputCls}
-            />
-          </Field>
           <Field label="NGROK URL">
             <input
               type="text"
@@ -287,7 +271,7 @@ export default function SettingsPage() {
       <div className="rounded-xl border border-gray-100 bg-white p-5">
         <SectionHeader
           title="Advanced Training Configuration"
-          description="Loss weights, focal loss parameters, and consensus distillation settings."
+          description="Class imbalance handling and consensus distillation settings."
         />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
           <Field label="Minority Boost">
@@ -298,39 +282,6 @@ export default function SettingsPage() {
               max="2"
               value={config.minority_boost}
               onChange={(e) => set("minority_boost", parseFloat(e.target.value) || 0)}
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Focal Alpha">
-            <input
-              type="number"
-              step="0.05"
-              min="0"
-              max="1"
-              value={config.focal_alpha}
-              onChange={(e) => set("focal_alpha", parseFloat(e.target.value) || 0)}
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Focal Gamma">
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              max="5"
-              value={config.focal_gamma}
-              onChange={(e) => set("focal_gamma", parseFloat(e.target.value) || 0)}
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Consensus Momentum">
-            <input
-              type="number"
-              step="0.05"
-              min="0"
-              max="1"
-              value={config.consensus_momentum}
-              onChange={(e) => set("consensus_momentum", parseFloat(e.target.value) || 0)}
               className={inputCls}
             />
           </Field>
@@ -356,25 +307,14 @@ export default function SettingsPage() {
               className={inputCls}
             />
           </Field>
-          <Field label="Train Loss Weight">
+          <Field label="Weight Decay">
             <input
               type="number"
-              step="0.05"
+              step="0.005"
               min="0"
               max="1"
-              value={config.train_loss_weight}
-              onChange={(e) => set("train_loss_weight", parseFloat(e.target.value) || 0)}
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Distill Loss Weight">
-            <input
-              type="number"
-              step="0.05"
-              min="0"
-              max="1"
-              value={config.distill_loss_weight}
-              onChange={(e) => set("distill_loss_weight", parseFloat(e.target.value) || 0)}
+              value={config.weight_decay}
+              onChange={(e) => set("weight_decay", parseFloat(e.target.value) || 0)}
               className={inputCls}
             />
           </Field>

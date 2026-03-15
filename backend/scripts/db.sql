@@ -63,6 +63,16 @@ CREATE TABLE clients (
 CREATE INDEX idx_clients_status ON clients(status);
 CREATE INDEX idx_clients_model_type ON clients(model_type);
 
+-- Client inserts ordered by partition assignment (insertion order = partition_id):
+--   partition 0 (2532 samples, 3.9:1 ratio) → B1 (needs most capacity for hardest imbalance)
+--   partition 1 (3954 samples, 2.7:1 ratio) → B2 (most data supports largest model)
+--   partition 2 (2288 samples, 3.1:1 ratio) → B0 (smallest model on smallest dataset)
+-- NOTE: fl_simulation.py fetches clients with no ORDER BY — relies on insertion order (id ASC).
+INSERT INTO clients (client_name, model_type, model_path, status) VALUES
+    ('Delmon', 'efficientnet_b1', '/content/drive/MyDrive/College/FLEX-Med/backend/federated_learning/models/Delmon-b1.pt', 'Active'),
+    ('Lanka',  'efficientnet_b2', '/content/drive/MyDrive/College/FLEX-Med/backend/federated_learning/models/Lanka-b2.pt',  'Active'),
+    ('Asiri',  'efficientnet_b0', '/content/drive/MyDrive/College/FLEX-Med/backend/federated_learning/models/Asiri-b0.pt',  'Active');
+
 -- ------------------------------------------
 -- fl_simulations TABLE
 -- ------------------------------------------
@@ -195,20 +205,16 @@ CREATE TABLE system_config (
 -- Single configuration — no presets. dirichlet_alpha is a direct top-level field.
 INSERT INTO system_config (config) VALUES ('{
     "dirichlet_alpha": 1.5,
-    "consensus_momentum": 0.35,
-    "minority_boost": 0.90,
+    "minority_boost": 0.85,
     "distill_weight_base": 0.80,
     "distill_decay_rate": 0.10,
-    "weight_decay": 0.03,
-    "train_loss_weight": 0.70,
-    "distill_loss_weight": 0.30,
-    "lr_decay": 0.95,
-    "learning_rate": 0.001,
+    "weight_decay": 0.02,
+    "learning_rate": 0.0005,
     "num_rounds": 10,
-    "local_epochs": 1,
+    "local_epochs": 2,
     "batch_size": 32,
     "distill_lr": 0.0005,
-    "distill_epochs": 1,
+    "distill_epochs": 2,
     "temperature": 3.0,
     "dirichlet_seed": 42,
     "dirichlet_min_partition_size": 400,
