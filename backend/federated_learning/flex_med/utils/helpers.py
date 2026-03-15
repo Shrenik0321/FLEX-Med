@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 import torch
 import torch.nn as nn
 from torchvision import models
-from torchvision.models import EfficientNet_B0_Weights, MobileNet_V2_Weights, DenseNet121_Weights, ResNet18_Weights
+from torchvision.models import EfficientNet_B0_Weights, EfficientNet_B1_Weights, EfficientNet_B2_Weights
 from pathlib import Path
 from flex_med.utils.config import (
     LOCAL_TRAIN_DATASET_PATH, DIRICHLET_ALPHA, DIRICHLET_SEED, CLIENT_INFO_FILE_PATH, NUM_CLASSES)
@@ -282,9 +282,8 @@ def get_model_by_type(model_type: str, use_pretrained: bool = True, dropout_rate
 
     model_map = {
         'efficientnet_b0': (models.efficientnet_b0, EfficientNet_B0_Weights.DEFAULT),
-        'mobilenet_v2': (models.mobilenet_v2, MobileNet_V2_Weights.DEFAULT),
-        'densenet121': (models.densenet121, DenseNet121_Weights.DEFAULT),
-        'resnet18': (models.resnet18, ResNet18_Weights.DEFAULT),
+        'efficientnet_b1': (models.efficientnet_b1, EfficientNet_B1_Weights.DEFAULT),
+        'efficientnet_b2': (models.efficientnet_b2, EfficientNet_B2_Weights.DEFAULT),
     }
 
     if model_type not in model_map:
@@ -298,7 +297,7 @@ def get_model_by_type(model_type: str, use_pretrained: bool = True, dropout_rate
 
 def get_initial_dropout_rate(model_type: str) -> float:
     """Get default dropout rate for model architecture."""
-    rates = {'efficientnet_b0': 0.35, 'mobilenet_v2': 0.45, 'densenet121': 0.35, 'resnet18': 0.40}
+    rates = {'efficientnet_b0': 0.40, 'efficientnet_b1': 0.40, 'efficientnet_b2': 0.35}
     return rates.get(model_type.lower(), 0.3)
 
 def add_dropout_to_classifier(model, model_type: str, dropout_rate: float = 0.3):
@@ -306,34 +305,12 @@ def add_dropout_to_classifier(model, model_type: str, dropout_rate: float = 0.3)
     model_type = model_type.lower()
 
     match model_type:
-        case 'efficientnet_b0':
+        case 'efficientnet_b0' | 'efficientnet_b1' | 'efficientnet_b2':
             if isinstance(model.classifier[1], nn.Sequential) and isinstance(model.classifier[1][0], nn.Dropout):
                 model.classifier[1][0].p = dropout_rate
             else:
                 in_features = model.classifier[1].in_features
                 model.classifier[1] = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
-
-        case 'mobilenet_v2':
-            if isinstance(model.classifier[1], nn.Sequential) and isinstance(model.classifier[1][0], nn.Dropout):
-                model.classifier[1][0].p = dropout_rate
-            else:
-                in_features = model.classifier[1].in_features
-                model.classifier[1] = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
-
-        case 'densenet121':
-            if isinstance(model.classifier, nn.Sequential) and isinstance(model.classifier[0], nn.Dropout):
-                model.classifier[0].p = dropout_rate
-            else:
-                in_features = model.classifier.in_features
-                model.classifier = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
-
-        case 'resnet18':
-            # ResNet uses model.fc instead of model.classifier
-            if isinstance(model.fc, nn.Sequential) and isinstance(model.fc[0], nn.Dropout):
-                model.fc[0].p = dropout_rate
-            else:
-                in_features = model.fc.in_features
-                model.fc = nn.Sequential(nn.Dropout(p=dropout_rate), nn.Linear(in_features, NUM_CLASSES))
 
     return model
 
@@ -410,11 +387,8 @@ def freeze_backbone(model, model_type: str):
         param.requires_grad = False
 
     # Then unfreeze only the classifier head
-    if model_type in ('efficientnet_b0', 'mobilenet_v2', 'densenet121'):
+    if model_type.startswith('efficientnet'):
         for param in model.classifier.parameters():
-            param.requires_grad = True
-    elif model_type == 'resnet18':
-        for param in model.fc.parameters():
             param.requires_grad = True
 
     return model
@@ -434,76 +408,50 @@ def unfreeze_fraction_of_last_block(model, model_type: str, fraction: float):
     model_type = model_type.lower()
     last_block = None
 
-    if model_type == 'efficientnet_b0':
-        last_block = list(model.features.children())[-1]  # features[8] (~280k params)
-    elif model_type == 'mobilenet_v2':
-        last_block = list(model.features.children())[-1]  # features[18] (~320k params)
-    elif model_type == 'densenet121':
-        if hasattr(model.features, 'denseblock4'):
-            last_block = model.features.denseblock4       # Last dense block
-        else:
-            return model
-    elif model_type == 'resnet18':
-        last_block = model.layer4                         # Final residual block (~2 BasicBlocks, ~3.7M params)
+    if model_type.startswith('efficientnet'):
+        # Unfreeze the final 1x1 conv + BN layer (Bridge to classifier)
+        # This layer is critical for adapting ImageNet features to medical images.
+        for param in model.features[-1].parameters():
+            param.requires_grad = True
+        last_block = model.features[-2]  # Stage 7 (last MBConv stage)
 
     if last_block is not None:
-        last_block_layers = list(last_block.modules())
-        num_layers = len(last_block_layers)
-        
-        # Calculate how many layers at the end of the block to unfreeze
-        num_unfreeze = int(num_layers * fraction)
-        
-        # Ensure we always unfreeze at least something if fraction > 0
+        children = list(last_block.children())
+        num_children = len(children)
+
+        num_unfreeze = int(num_children * fraction)
         if fraction > 0.0 and num_unfreeze == 0:
             num_unfreeze = 1
-            
-        unfreeze_start_idx = num_layers - num_unfreeze
-        
-        for i, layer in enumerate(last_block_layers):
+
+        unfreeze_start_idx = num_children - num_unfreeze
+
+        for i, child in enumerate(children):
             if i >= unfreeze_start_idx:
-                for param in layer.parameters(recurse=False):
+                for param in child.parameters(recurse=True):  # recurse=True (default): all params in block
                     param.requires_grad = True
 
     return model
 
 def apply_freeze_strategy(model, model_type: str, server_round: int, total_rounds: int = 10):
-    """5-stage granular unfreezing strategy (Refined)."""
+    """2-stage progressive unfreezing strategy.
+    Rounds 1-6: Head only (Stabilization)
+    Rounds 7-10: 25% last backbone block (Soft Refinement)
+    """
     from flwr.common import log
     from logging import INFO
 
     # Always start by freezing everything and unfreezing the classifier head
     model = freeze_backbone(model, model_type)
 
-    progress = server_round / total_rounds
-
-    if progress <= 0.2:
-        # Stage 1: Classifier only (0-20% of rounds)
-        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Stage 1 - Classifier only ({trainable:,} params)")
-
-    elif progress <= 0.4:
-        # Stage 2: Classifier + 25% of final backbone block (20-40% of rounds)
-        model = unfreeze_fraction_of_last_block(model, model_type, fraction=0.25)
-        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Stage 2 - 25% final block ({trainable:,} params)")
-
-    elif progress <= 0.6:
-        # Stage 3: Classifier + 50% of final backbone block (40-60% of rounds)
-        model = unfreeze_fraction_of_last_block(model, model_type, fraction=0.50)
-        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Stage 3 - 50% final block ({trainable:,} params)")
-
-    elif progress <= 0.8:
-        # Stage 4: Classifier + 75% of final backbone block (60-80% of rounds)
-        model = unfreeze_fraction_of_last_block(model, model_type, fraction=0.75)
-        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Stage 4 - 75% final block ({trainable:,} params)")
-
+    if server_round <= 6:
+        # Rounds 1-6: Head Only Warm-up (Stabilization)
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        log(INFO, f"[Freeze] Round {server_round}/{total_rounds}: Stage 1 - Classifier only ({trainable_params:,} params)")
     else:
-        # Stage 5: Classifier + 100% of final backbone block (80-100% of rounds)
-        model = unfreeze_fraction_of_last_block(model, model_type, fraction=1.0)
-        trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        log(INFO, f"[Freeze] Round {server_round}/{total_rounds} ({progress:.0%}): Stage 5 - Full final block ({trainable:,} params)")
+        # Rounds 7-10: Gradual 25% Backbone Refinement
+        model = unfreeze_fraction_of_last_block(model, model_type, fraction=0.25)
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        log(INFO, f"[Freeze] Round {server_round}/{total_rounds}: Stage 2 - 25% backbone block ({trainable_params:,} params)")
 
     return model
 

@@ -9,8 +9,8 @@ class Status(str, Enum):
 
 class ModelType(str, Enum):
     EfficientNetB0 = "efficientnet_b0"
-    MobileNetV2 = "mobilenet_v2"
-    DenseNet121 = "densenet121"
+    EfficientNetB1 = "efficientnet_b1"
+    EfficientNetB2 = "efficientnet_b2"
 
 class ClientBase(BaseModel):
     """Base schema for client (static configuration only)"""
@@ -54,7 +54,7 @@ if __name__ == "__main__":
 
     client_create = ClientCreate(
         client_name="Hospital_A",
-        model_type=ModelType.EfficientNetB0,
+        model_type=ModelType.ResNet18,
         status=Status.Active,
         model_path="/path/to/model.pt"
     )
@@ -70,7 +70,7 @@ if __name__ == "__main__":
         id=1,
         client_name="Hospital_A",
         status=Status.Active,
-        model_type=ModelType.EfficientNetB0,
+        model_type=ModelType.ResNet18,
         model_path="/path/to/model.pt",
         created_at=datetime.now().isoformat()
     )

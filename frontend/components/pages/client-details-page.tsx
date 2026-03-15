@@ -1,10 +1,9 @@
 import { EmptyState } from "@/components/ui/empty-state";
 
 import { useState } from "react";
-import { Upload, Loader2, Microscope, Activity, FileText } from "lucide-react";
+import { Upload, Loader2, Activity, FileText } from "lucide-react";
 import { API_BASE_PATH } from "@/utils";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 
 interface Client {
   id: number;
@@ -32,12 +31,8 @@ export default function ClientDetailsPage({ client }: ClientDetailsPageProps) {
       setInferenceResult(null);
       setGradcamImage(null);
       setLimeImage(null);
-
-      // Create preview
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
+      reader.onloadend = () => setImagePreview(reader.result as string);
       reader.readAsDataURL(file);
     }
   };
@@ -47,36 +42,25 @@ export default function ClientDetailsPage({ client }: ClientDetailsPageProps) {
       toast.error("Please select an image first");
       return;
     }
-
     try {
       setIsRunningInference(true);
-
       const formData = new FormData();
       formData.append("file", selectedImage);
       formData.append("client_id", client.id.toString());
 
       const response = await fetch(`${API_BASE_PATH}/inference`, {
         method: "POST",
-        headers: {
-          "ngrok-skip-browser-warning": "true",
-        },
+        headers: { "ngrok-skip-browser-warning": "true" },
         body: formData,
       });
 
-      if (!response.ok) {
-        throw new Error("Inference failed");
-      }
+      if (!response.ok) throw new Error("Inference failed");
 
       const result = await response.json();
 
-      // Extract Grad-CAM image
       if (result?.xai?.gradcam?.image_base64) {
-        setGradcamImage(
-          `data:image/png;base64,${result.xai.gradcam.image_base64}`,
-        );
+        setGradcamImage(`data:image/png;base64,${result.xai.gradcam.image_base64}`);
       }
-
-      // Extract LIME image
       if (result?.xai?.lime?.image_base64) {
         setLimeImage(`data:image/png;base64,${result.xai.lime.image_base64}`);
       }
@@ -92,48 +76,47 @@ export default function ClientDetailsPage({ client }: ClientDetailsPageProps) {
   };
 
   return (
-    <div className="p-8 w-full mx-auto space-y-8">
-      {/* Client Overview Card */}
-      <div className="bg-card rounded-2xl shadow-sm border border-border p-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <h1 className="text-3xl font-bold text-foreground tracking-tight">
+    <div className="px-6 py-8 space-y-6">
+      {/* Client header */}
+      <div className="rounded-xl border border-gray-100 bg-white p-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-base font-semibold text-gray-900 tracking-tight">
               {client.client_name}
-            </h1>
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1.5 px-2 py-0.5 bg-muted rounded-md border border-border font-medium text-foreground capitalize">
-                <Microscope className="h-3.5 w-3.5" />
+            </p>
+            <div className="flex items-center gap-3 mt-1.5">
+              <span className="text-xs font-semibold uppercase tracking-widest text-gray-500">
                 {client.model_type}
               </span>
-              <span>•</span>
-              <span className="flex items-center gap-1.5">
-                <Activity className="h-3.5 w-3.5" />
-                Status:{" "}
-                <span className="text-foreground font-medium">
-                  {client.status}
-                </span>
+              <span className="text-gray-300 select-none">·</span>
+              <span
+                className={`text-xs font-semibold uppercase tracking-widest ${
+                  client.status === "Active"
+                    ? "text-green-600"
+                    : client.status === "Inactive"
+                      ? "text-red-600"
+                      : "text-gray-500"
+                }`}
+              >
+                {client.status}
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <p className="text-xs text-muted-foreground font-mono">
-              ID: {client.id}
-            </p>
-          </div>
+          <span className="text-xs text-gray-400 tabular-nums font-mono">
+            ID #{client.id}
+          </span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 text-foreground">
-        {/* Left Column: Analysis Controls */}
-        <div className="lg:col-span-1 space-y-6">
-          <div className="bg-card rounded-2xl shadow-sm border border-border p-6 overflow-hidden">
-            <h2 className="text-lg font-bold mb-6 flex items-center gap-2">
-              <Upload className="h-5 w-5 text-primary" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Left: Upload */}
+        <div className="lg:col-span-1">
+          <div className="rounded-xl border border-gray-100 bg-white p-5">
+            <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-4">
               Upload Image
-            </h2>
-
-            <div className="space-y-6">
-              <div className="relative group">
+            </p>
+            <div className="space-y-4">
+              <div className="relative">
                 <input
                   type="file"
                   id="image-upload"
@@ -141,61 +124,56 @@ export default function ClientDetailsPage({ client }: ClientDetailsPageProps) {
                   onChange={handleImageSelect}
                   className="hidden"
                 />
-                <Button
-                  asChild
-                  variant="outline"
-                  className="w-full h-32 border-dashed border-2 hover:border-primary/50 hover:bg-primary/5 cursor-pointer flex flex-col gap-2 transition-all bg-transparent"
+                <label
+                  htmlFor="image-upload"
+                  className="w-full h-28 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-gray-400 hover:bg-gray-50/60 transition-colors"
                 >
-                  <label htmlFor="image-upload">
-                    <Upload className="h-8 w-8 text-muted-foreground group-hover:text-primary transition-colors" />
-                    <span className="text-sm font-medium">
-                      {selectedImage ? "Change Image" : "Click to upload"}
-                    </span>
-                  </label>
-                </Button>
+                  <Upload className="h-6 w-6 text-gray-500" />
+                  <span className="text-sm text-gray-600 font-medium">
+                    {selectedImage ? "Change Image" : "Click to upload"}
+                  </span>
+                </label>
               </div>
 
               {selectedImage && (
-                <div className="p-3 bg-muted/50 rounded-lg border border-border flex items-center justify-between overflow-hidden">
-                  <div className="flex items-center gap-2 overflow-hidden mx-auto">
-                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <span className="text-xs font-medium truncate">
-                      {selectedImage.name}
-                    </span>
-                  </div>
+                <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-gray-500" />
+                  <span className="text-sm text-gray-600 truncate">
+                    {selectedImage.name}
+                  </span>
                 </div>
               )}
 
               {imagePreview && (
-                <div className="rounded-xl overflow-hidden border border-border bg-slate-100/50 p-2">
+                <div className="rounded-lg overflow-hidden border border-gray-100 bg-gray-50">
                   <img
                     src={imagePreview}
                     alt="Preview"
-                    className="w-full h-auto rounded-lg object-contain shadow-sm max-h-48 mx-auto"
+                    className="w-full h-auto object-contain max-h-44"
                   />
                 </div>
               )}
 
-              <Button
+              <button
                 onClick={handleRunInference}
                 disabled={!selectedImage || isRunningInference}
-                className="w-full h-11 text-base shadow-sm"
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#b80028] text-white text-sm font-medium hover:bg-[#9b0022] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 {isRunningInference ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Analyzing...
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Analyzing…
                   </>
                 ) : (
                   "Run Diagnosis"
                 )}
-              </Button>
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Results & XAI */}
-        <div className="lg:col-span-2 space-y-6">
+        {/* Right: Results */}
+        <div className="lg:col-span-2 space-y-4">
           {!inferenceResult ? (
             <EmptyState
               title="No diagnosis run yet"
@@ -204,114 +182,97 @@ export default function ClientDetailsPage({ client }: ClientDetailsPageProps) {
               className="h-full min-h-[400px]"
             />
           ) : (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              {/* Primary Results Row */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-card rounded-2xl shadow-sm border border-border p-6 overflow-hidden relative">
-                  <div className="absolute -right-4 -top-4 w-24 h-24 bg-primary/5 rounded-full blur-2xl"></div>
-                  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-4">
-                    Diagnosis Outcome
-                  </h3>
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-4xl font-bold tracking-tight text-foreground">
-                        {inferenceResult.prediction}
-                      </p>
-                    </div>
-                    <div className="pt-2 border-t border-border/50">
-                      <p className="text-xs text-muted-foreground mb-1">
-                        Confidence Score
-                      </p>
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-1000 ${
-                              inferenceResult.confidence > 0.8
-                                ? "bg-green-500"
-                                : "bg-primary"
-                            }`}
-                            style={{
-                              width: `${inferenceResult.confidence * 100}%`,
-                            }}
-                          ></div>
-                        </div>
-                        <span className="text-xl font-bold">
-                          {(inferenceResult.confidence * 100).toFixed(1)}%
-                        </span>
+            <div className="space-y-4">
+              {/* Prediction result */}
+              <div className="rounded-xl border border-gray-100 bg-white p-5">
+                <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-4">
+                  Diagnosis Outcome
+                </p>
+                <div className="space-y-4">
+                  <p className="text-2xl font-semibold text-gray-900 tracking-tight">
+                    {inferenceResult.prediction}
+                  </p>
+                  <div className="pt-3 border-t border-gray-50">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-2">
+                      Confidence
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${
+                            inferenceResult.confidence > 0.8
+                              ? "bg-emerald-500"
+                              : "bg-amber-500"
+                          }`}
+                          style={{
+                            width: `${inferenceResult.confidence * 100}%`,
+                          }}
+                        />
                       </div>
+                      <span className="text-sm font-semibold text-gray-900 tabular-nums">
+                        {(inferenceResult.confidence * 100).toFixed(1)}%
+                      </span>
                     </div>
                   </div>
                 </div>
-
-                {inferenceResult.llm_explanation && (
-                  <div className="bg-card rounded-2xl shadow-sm border border-border p-6 flex flex-col">
-                    <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-4">
-                      Clinical Insight
-                    </h3>
-                    <div className="prose prose-sm dark:prose-invert max-w-none flex-1">
-                      <p className="text-sm leading-relaxed text-foreground/80 italic">
-                        "{inferenceResult.llm_explanation}"
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
+
+              {inferenceResult.llm_explanation && (
+                <div className="rounded-xl border border-gray-100 bg-white p-5">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-3">
+                    Clinical Insight
+                  </p>
+                  <p className="text-sm text-gray-600 leading-relaxed italic">
+                    "{inferenceResult.llm_explanation}"
+                  </p>
+                </div>
+              )}
 
               {/* XAI Visualizations */}
               {(gradcamImage || limeImage) && (
-                <div className="bg-card rounded-2xl shadow-sm border border-border p-6">
-                  <div className="flex items-center justify-between mb-8">
-                    <h3 className="text-lg font-bold flex items-center gap-2">
-                      <Activity className="h-5 w-5 text-primary" />
+                <div className="rounded-xl border border-gray-100 bg-white p-5">
+                  <div className="flex items-center justify-between mb-5">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-gray-500">
                       Explainability Modules
-                    </h3>
-                    <span className="text-[10px] px-2 py-0.5 bg-primary/10 text-primary font-bold rounded uppercase tracking-tighter">
+                    </p>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border text-gray-600 bg-gray-50 border-gray-200">
                       Model Reasoning
                     </span>
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     {gradcamImage && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold">
-                            Grad-CAM Heatmap
-                          </span>
-                          <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
-                        </div>
-                        <div className="rounded-xl overflow-hidden border border-border shadow-sm group cursor-zoom-in">
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-gray-700">
+                          Grad-CAM Heatmap
+                        </p>
+                        <div className="rounded-lg overflow-hidden border border-gray-100">
                           <img
                             src={gradcamImage}
                             alt="Grad-CAM"
-                            className="w-full h-auto transition-transform group-hover:scale-105 duration-500"
+                            className="w-full h-auto"
                           />
                         </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          Visualizes areas within the image that had the
-                          strongest gradient influence on the model's final
-                          prediction.
+                        <p className="text-xs text-gray-500 leading-relaxed">
+                          Visualizes regions with strongest gradient influence on
+                          the model's prediction.
                         </p>
                       </div>
                     )}
-
                     {limeImage && (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold">
-                            LIME Local Features
-                          </span>
-                          <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-                        </div>
-                        <div className="rounded-xl overflow-hidden border border-border shadow-sm group cursor-zoom-in">
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-gray-700">
+                          LIME Local Features
+                        </p>
+                        <div className="rounded-lg overflow-hidden border border-gray-100">
                           <img
                             src={limeImage}
                             alt="LIME"
-                            className="w-full h-auto transition-transform group-hover:scale-105 duration-500"
+                            className="w-full h-auto"
                           />
                         </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          Highlights specific superpixels/features contributing
-                          to the local classification via perturbation analysis.
+                        <p className="text-xs text-gray-500 leading-relaxed">
+                          Highlights superpixels contributing to the local
+                          classification via perturbation analysis.
                         </p>
                       </div>
                     )}

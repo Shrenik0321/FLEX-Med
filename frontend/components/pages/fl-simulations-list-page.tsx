@@ -1,10 +1,9 @@
 "use client";
 
-import { Search, MoreVertical, Eye, Trash2 } from "lucide-react";
+import { MoreVertical, Eye, Trash2 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { API_BASE_PATH } from "@/utils";
-import { Button } from "@/components/ui/button";
 import {
   FLSimulation,
   parseMetrics,
@@ -19,7 +18,6 @@ interface FLHistoryPageProps {
   onSelectSimulation: (simulation: FLSimulation) => void;
 }
 
-// Action Dropdown Component
 interface ActionDropdownProps {
   simulation: FLSimulation;
   onView: (simulation: FLSimulation) => void;
@@ -39,42 +37,34 @@ function ActionDropdown({ simulation, onView, onDelete }: ActionDropdownProps) {
         setIsOpen(false);
       }
     }
-
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    if (isOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <Button
-        variant="ghost"
-        size="icon"
+      <button
         onClick={(e) => {
           e.stopPropagation();
           setIsOpen(!isOpen);
         }}
-        className="h-8 w-8 hover:bg-muted"
+        className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
         title="Actions"
       >
-        <MoreVertical className="h-4 w-4 text-muted-foreground" />
-      </Button>
+        <MoreVertical className="h-3.5 w-3.5 text-gray-400" />
+      </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-48 bg-card rounded-lg shadow-lg border border-border py-1 z-50">
+        <div className="absolute right-0 mt-1 w-40 bg-white rounded-lg border border-gray-100 shadow-lg py-1 z-50">
           <button
             onClick={(e) => {
               e.stopPropagation();
               onView(simulation);
               setIsOpen(false);
             }}
-            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
+            className="w-full px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
           >
-            <Eye size={16} className="text-blue-600" />
+            <Eye size={13} className="text-blue-500" />
             View Details
           </button>
           <button
@@ -83,9 +73,9 @@ function ActionDropdown({ simulation, onView, onDelete }: ActionDropdownProps) {
               onDelete(simulation);
               setIsOpen(false);
             }}
-            className="w-full px-4 py-2 text-left text-sm text-primary hover:bg-red-50 flex items-center gap-2 transition-colors"
+            className="w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
           >
-            <Trash2 size={16} />
+            <Trash2 size={13} />
             Delete
           </button>
         </div>
@@ -94,25 +84,36 @@ function ActionDropdown({ simulation, onView, onDelete }: ActionDropdownProps) {
   );
 }
 
+function StatusTag({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    completed: "text-emerald-700 bg-emerald-50 border-emerald-200",
+    running: "text-blue-700 bg-blue-50 border-blue-200",
+    pending: "text-amber-700 bg-amber-50 border-amber-200",
+    failed: "text-red-700 bg-red-50 border-red-200",
+  };
+  const cls = map[status] ?? "text-gray-500 bg-gray-50 border-gray-200";
+  return (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border ${cls}`}
+    >
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  );
+}
+
 export default function FLHistoryPage({
   onStartClick,
   onSelectSimulation,
 }: FLHistoryPageProps) {
   const [simulations, setSimulations] = useState<FLSimulation[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // Fetch simulations from API
   useEffect(() => {
     const fetchSimulations = async () => {
       try {
         setLoading(true);
         const response = await fetch(`${API_BASE_PATH}/fl_simulations`);
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch simulations");
-        }
-
+        if (!response.ok) throw new Error("Failed to fetch simulations");
         const data: FLSimulation[] = await response.json();
         setSimulations(data);
       } catch (error) {
@@ -122,109 +123,61 @@ export default function FLHistoryPage({
         setLoading(false);
       }
     };
-
     fetchSimulations();
   }, []);
 
   const handleView = (simulation: FLSimulation) => {
-    toast.info(`Viewing simulation: ID ${simulation.id}`);
     onSelectSimulation(simulation);
   };
 
   const handleDelete = async (simulation: FLSimulation) => {
-    // TODO: Implement delete API endpoint
-    toast.success(`Deleted simulation: ID ${simulation.id}`);
-    // Refresh simulations after delete
+    toast.success(`Deleted simulation #${simulation.id}`);
     setSimulations((prev) => prev.filter((s) => s.id !== simulation.id));
   };
 
-  const filteredSimulations = simulations.filter((sim) => {
-    if (!searchTerm.trim()) return true;
-    const term = searchTerm.toLowerCase();
-    return (
-      sim.id.toString().includes(term) ||
-      sim.status.toLowerCase().includes(term)
-    );
-  });
-
   return (
-    <div className="p-8">
-      {/* Search */}
-      <div className="mb-6 max-w-md">
-        <div className="relative">
-          <Search
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground"
-            size={18}
-          />
-          <input
-            type="text"
-            placeholder="Search simulations..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#B80028] focus:border-transparent"
-          />
-        </div>
-      </div>
-
-      {/* Simulations Table or Loading */}
+    <div className="px-6 py-8">
       {loading ? (
-        <Loading
-          className="min-h-[400px]"
-          text="Synchronizing client database..."
-        />
+        <Loading className="min-h-[400px]" text="Loading simulations…" />
       ) : (
-        <div className="bg-card rounded-lg shadow-sm border border-border">
-          {filteredSimulations.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-300 overflow-hidden">
+          {simulations.length === 0 ? (
             <EmptyState
               title="No simulations found"
-              description={
-                searchTerm
-                  ? "No simulations match your search criteria."
-                  : "Get started by running your first federated learning simulation."
-              }
-              action={
-                !searchTerm
-                  ? { label: "Start Simulation", onClick: onStartClick }
-                  : undefined
-              }
+              description="Get started by running your first federated learning simulation."
+              action={{ label: "Start Simulation", onClick: onStartClick }}
             />
           ) : (
-            <table className="w-full">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border">
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                    Simulation ID
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                    Heterogeneity
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                    Rounds
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                    Clients
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                    Avg Accuracy
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                    Duration
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                    Started At
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-foreground uppercase tracking-wider">
-                    Action
-                  </th>
+                <tr className="border-b border-gray-300">
+                  {[
+                    "ID",
+                    "Status",
+                    "α",
+                    "Rounds",
+                    "Clients",
+                    "Avg Accuracy",
+                    "Duration",
+                    "Started",
+                    "",
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className={`py-3 px-4 font-semibold uppercase tracking-wider text-xs text-gray-400 ${
+                        h === "ID" || h === "Status" ? "text-left" : h === "" ? "text-right" : "text-right"
+                      }`}
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {filteredSimulations.map((simulation) => {
+                {simulations.map((simulation) => {
                   const metrics = parseMetrics(simulation.aggregate_metrics);
-                  const avgAccuracy = metrics?.aggregate?.post_fl?.avg_accuracy;
+                  const avgAccuracy =
+                    metrics?.aggregate?.post_fl?.avg_accuracy;
                   const numClients = metrics?.total_clients || 0;
                   const alpha = simulation.configs?.dirichlet_alpha;
 
@@ -232,60 +185,45 @@ export default function FLHistoryPage({
                     <tr
                       key={simulation.id}
                       onClick={() => onSelectSimulation(simulation)}
-                      className="cursor-pointer border-b border-border hover:bg-[rgba(184,0,40,0.03)] transition-colors"
+                      className="cursor-pointer border-b border-gray-200 last:border-0 hover:bg-gray-50/60 transition-colors"
                     >
-                      <td className="px-6 py-4 text-sm font-medium text-foreground">
-                        Simulation #{simulation.id}
+                      <td className="py-3.5 px-4 font-semibold text-gray-900 tabular-nums">
+                        #{simulation.id}
                       </td>
-                      <td className="px-6 py-4 text-sm">
-                        <span
-                          className={`inline-block px-3 py-1 rounded-full text-xs font-medium border ${
-                            simulation.status === "completed"
-                              ? "border-green-500 text-green-700 bg-green-50"
-                              : simulation.status === "running"
-                                ? "border-blue-500 text-blue-700 bg-blue-50"
-                                : simulation.status === "pending"
-                                  ? "border-yellow-500 text-yellow-700 bg-yellow-50"
-                                  : "border-red-500 text-red-700 bg-red-50"
-                          }`}
-                        >
-                          {simulation.status.charAt(0).toUpperCase() +
-                            simulation.status.slice(1)}
-                        </span>
+                      <td className="py-3.5 px-4">
+                        <StatusTag status={simulation.status} />
                       </td>
-                      <td className="px-6 py-4 text-sm">
-                        {alpha != null ? (
-                          <span className="font-medium text-foreground">
-                            &alpha; = {alpha}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
+                      <td className="py-3.5 px-4 text-right tabular-nums text-gray-600">
+                        {alpha != null ? alpha : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="py-3.5 px-4 text-right tabular-nums text-gray-600">
+                        {metrics?.total_rounds_completed ?? (
+                          <span className="text-gray-300">—</span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-sm text-foreground">
-                        {metrics?.total_rounds_completed ?? "?"}
+                      <td className="py-3.5 px-4 text-right tabular-nums text-gray-600">
+                        {numClients || <span className="text-gray-300">—</span>}
                       </td>
-                      <td className="px-6 py-4 text-sm text-foreground">
-                        {numClients || "—"}
+                      <td className="py-3.5 px-4 text-right tabular-nums font-medium text-gray-900">
+                        {avgAccuracy ? (
+                          `${(avgAccuracy * 100).toFixed(1)}%`
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
                       </td>
-                      <td className="px-6 py-4 text-sm text-foreground">
-                        {avgAccuracy
-                          ? `${(avgAccuracy * 100).toFixed(1)}%`
-                          : "—"}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-foreground">
+                      <td className="py-3.5 px-4 text-right tabular-nums text-gray-500">
                         {simulation.duration
                           ? formatDuration(simulation.duration)
                           : simulation.started_at
-                            ? "In progress..."
-                            : "—"}
+                            ? "In progress…"
+                            : <span className="text-gray-300">—</span>}
                       </td>
-                      <td className="px-6 py-4 text-sm text-foreground">
+                      <td className="py-3.5 px-4 text-right tabular-nums text-gray-400">
                         {simulation.started_at
                           ? formatDateTime(simulation.started_at)
-                          : "Not started"}
+                          : <span className="text-gray-300">—</span>}
                       </td>
-                      <td className="px-6 py-4 text-sm">
+                      <td className="py-3.5 px-4 text-right">
                         <ActionDropdown
                           simulation={simulation}
                           onView={handleView}

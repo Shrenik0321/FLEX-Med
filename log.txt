@@ -1,0 +1,656 @@
+[Script] Starting Flex-Med Simulation at Sat Mar 14 11:40:51 PM UTC 2026...
+[Script] Simulation ID: 30
+[Script] Training config env vars exported
+[Script] FLEX_MED_DIRICHLET_ALPHA=1.5
+[Script] FLEX_MED_MINORITY_BOOST=0.9
+[Script] FLEX_MED_CONSENSUS_MOMENTUM=0.35
+[Script] FLEX_MED_DISTILL_WEIGHT=0.8
+[Pre-flight] Expected clients:       3
+[Pre-flight] pyproject num-supernodes: 3
+[Pre-flight] client_data.json clients: 3
+[Pre-flight] All checks passed. Starting FL...
+2026-03-14 23:41:03.206663: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-03-14 23:41:03.226465: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:467] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1773531663.249047  197557 cuda_dnn.cc:8579] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+E0000 00:00:1773531663.255976  197557 cuda_blas.cc:1407] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+W0000 00:00:1773531663.273636  197557 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1773531663.273770  197557 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1773531663.273820  197557 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1773531663.273866  197557 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+2026-03-14 23:41:03.278897: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+Loading project configuration... 
+Success
+2026-03-14 23:41:11.464608: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:467] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1773531671.486346  197645 cuda_dnn.cc:8579] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+E0000 00:00:1773531671.493123  197645 cuda_blas.cc:1407] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+W0000 00:00:1773531671.509352  197645 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1773531671.509465  197645 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1773531671.509533  197645 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1773531671.509582  197645 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+/usr/local/lib/python3.12/dist-packages/supabase/_sync/client.py:309: DeprecationWarning: The 'timeout' parameter is deprecated. Please configure it in the http client instead.
+  return SyncPostgrestClient(
+/usr/local/lib/python3.12/dist-packages/supabase/_sync/client.py:309: DeprecationWarning: The 'verify' parameter is deprecated. Please configure it in the http client instead.
+  return SyncPostgrestClient(
+INFO :      [FL] Pre-initializing Dirichlet partitioner...
+INFO :      [FL] Partitioner initialized: 3 partitions, alpha=1.5
+INFO :      [DATA_HET] Saving data heterogeneity for 3 clients...
+INFO :      [DATA_HET] Client 0: 2532 samples (L:2014, H:518)
+INFO :      [DATA_HET] Saved for client 0: 2532 samples (L:2014, H:518)
+INFO :      [DATA_HET] Client 1: 3954 samples (L:2873, H:1081)
+INFO :      [DATA_HET] Saved for client 1: 3954 samples (L:2873, H:1081)
+INFO :      [DATA_HET] Client 2: 2288 samples (L:1728, H:560)
+INFO :      [DATA_HET] Saved for client 2: 2288 samples (L:1728, H:560)
+INFO :      [DATA_HET] Saved data heterogeneity for 3/3 clients
+INFO :      
+INFO :      ==========================================================================================
+INFO :      CLIENT DATA DISTRIBUTION SUMMARY
+INFO :      ==========================================================================================
+INFO :      Client 0 (Asiri-b0): Total=2532 | ALL=2014 ( 79.5%) | Healthy= 518 ( 20.5%) | Ratio=  3.9:1
+INFO :      Client 1 (Delmon-b1): Total=3954 | ALL=2873 ( 72.7%) | Healthy=1081 ( 27.3%) | Ratio=  2.7:1
+INFO :      Client 2 (Lanka-b2): Total=2288 | ALL=1728 ( 75.5%) | Healthy= 560 ( 24.5%) | Ratio=  3.1:1
+INFO :      ------------------------------------------------------------------------------------------
+INFO :      OVERALL: Total=8774 | Ratio=  3.1:1 | Dirichlet alpha=1.5, seed=42
+INFO :      ==========================================================================================
+INFO :      
+======================================================================
+[ROUND 1/10]
+======================================================================
+(pid=198518) 2026-03-14 23:41:36.083803: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:467] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+(pid=198518) WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+(pid=198518) E0000 00:00:1773531696.107166  198518 cuda_dnn.cc:8579] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+(pid=198518) E0000 00:00:1773531696.114073  198518 cuda_blas.cc:1407] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+(pid=198518) W0000 00:00:1773531696.138154  198518 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+(pid=198518) W0000 00:00:1773531696.138199  198518 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+(pid=198518) W0000 00:00:1773531696.138204  198518 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+(pid=198518) W0000 00:00:1773531696.138207  198518 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+(ClientAppActor pid=198521) /usr/local/lib/python3.12/dist-packages/supabase/_sync/client.py:309: DeprecationWarning: The 'timeout' parameter is deprecated. Please configure it in the http client instead.
+(ClientAppActor pid=198521)   return SyncPostgrestClient(
+(ClientAppActor pid=198521) /usr/local/lib/python3.12/dist-packages/supabase/_sync/client.py:309: DeprecationWarning: The 'verify' parameter is deprecated. Please configure it in the http client instead.
+(ClientAppActor pid=198521)   return SyncPostgrestClient(
+(pid=198523) 2026-03-14 23:41:37.176307: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:467] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered [repeated 5x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#log-deduplication for more options.)
+(pid=198523) WARNING: All log messages before absl::InitializeLog() is called are written to STDERR [repeated 5x across cluster]
+(pid=198523) E0000 00:00:1773531697.198623  198523 cuda_dnn.cc:8579] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered [repeated 5x across cluster]
+(pid=198523) E0000 00:00:1773531697.205272  198523 cuda_blas.cc:1407] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered [repeated 5x across cluster]
+(pid=198523) W0000 00:00:1773531697.221843  198523 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once. [repeated 20x across cluster]
+(ClientAppActor pid=198521) INFO :      [Freeze] Round 1/10: Stage 1 - Classifier only (2,818 params)
+(ClientAppActor pid=198521) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=198521) is multi-threaded, use of fork() may lead to deadlocks in the child.
+(ClientAppActor pid=198521)   self.pid = os.fork()
+
+[SERVER] Starting FL (10 rounds, lr=0.0005)
+[SERVER] 3 clients loaded
+
+============================================================
+[SERVER] Executing Federated Learning
+============================================================
+
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198521) ============================================================
+(ClientAppActor pid=198522) 
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198521) [Lanka-b2 (Partition 2)] ROUND 1 - Training Phase
+(ClientAppActor pid=198521) [Lanka-b2] [Strategy] Round 1/10: PHASE 1 - Head Only Warm-up
+(ClientAppActor pid=198521) [Lanka-b2] Round 1/10 (10%)
+(ClientAppActor pid=198521) [Lanka-b2] Classifier LR: 0.000500 | Backbone LR: 0.000000 (dynamic)
+(ClientAppActor pid=198521) [Lanka-b2] Phase 1: Knowledge Distillation
+(ClientAppActor pid=198523) [Asiri-b0] Distillation Loss: 0.0055
+(ClientAppActor pid=198523) [Asiri-b0] Private Training
+(ClientAppActor pid=198523) ============================================================ [repeated 5x across cluster]
+(ClientAppActor pid=198523) [Asiri-b0 (Partition 0)] ROUND 1 - Training Phase [repeated 2x across cluster]
+(ClientAppActor pid=198523) [Asiri-b0] [Strategy] Round 1/10: PHASE 1 - Head Only Warm-up [repeated 2x across cluster]
+(ClientAppActor pid=198523) [Asiri-b0] Round 1/10 (10%) [repeated 2x across cluster]
+(ClientAppActor pid=198523) [Asiri-b0] Classifier LR: 0.000500 | Backbone LR: 0.000000 (dynamic) [repeated 2x across cluster]
+(ClientAppActor pid=198523) [Asiri-b0] Phase 1: Knowledge Distillation [repeated 2x across cluster]
+(ClientAppActor pid=198521) [Lanka-b2] Distillation Loss: 0.0060
+(ClientAppActor pid=198521) [Lanka-b2] Private Training
+(ClientAppActor pid=198522) [Delmon-b1] Distillation Loss: 0.0019
+(ClientAppActor pid=198522) [Delmon-b1] Private Training
+(ClientAppActor pid=198523) [Asiri-b0] Train Loss: 0.6593, Acc: 62.30%, Val Loss: 0.5355, Val Acc: 80.97% (2151 samples, 253.7s)
+(ClientAppActor pid=198523) [Asiri-b0] Balanced Accuracy: 57.49%
+(ClientAppActor pid=198523) [Asiri-b0] Model saved
+(ClientAppActor pid=198521) [Lanka-b2] Train Loss: 0.6040, Acc: 69.96%, Val Loss: 0.6547, Val Acc: 60.17% (1944 samples, 307.4s)
+(ClientAppActor pid=198521) [Lanka-b2] Balanced Accuracy: 65.71%
+(ClientAppActor pid=198521) [Lanka-b2] Model saved
+(ClientAppActor pid=198523) [Asiri-b0] Round 1 Complete
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198521) [Lanka-b2] Round 1 Complete
+(ClientAppActor pid=198522) [Delmon-b1] Train Loss: 0.5824, Acc: 73.41%, Val Loss: 0.5287, Val Acc: 80.05% (3360 samples, 480.9s)
+(ClientAppActor pid=198522) [Delmon-b1] Balanced Accuracy: 78.46%
+(ClientAppActor pid=198522) [Delmon-b1] Model saved
+(ClientAppActor pid=198522) [Delmon-b1] Round 1 Complete
+(ClientAppActor pid=198522) 
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+INFO :      [BEST] New best avg accuracy 74.70% at round 1
+INFO :      
+======================================================================
+[ROUND 2/10]
+======================================================================
+(ClientAppActor pid=198523) /usr/local/lib/python3.12/dist-packages/supabase/_sync/client.py:309: DeprecationWarning: The 'timeout' parameter is deprecated. Please configure it in the http client instead. [repeated 2x across cluster]
+(ClientAppActor pid=198523)   return SyncPostgrestClient( [repeated 4x across cluster]
+(ClientAppActor pid=198523) /usr/local/lib/python3.12/dist-packages/supabase/_sync/client.py:309: DeprecationWarning: The 'verify' parameter is deprecated. Please configure it in the http client instead. [repeated 2x across cluster]
+(ClientAppActor pid=198521) INFO :      [Freeze] Round 2/10: Stage 1 - Classifier only (2,562 params) [repeated 3x across cluster]
+(ClientAppActor pid=198523) /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=198523) is multi-threaded, use of fork() may lead to deadlocks in the child. [repeated 2x across cluster]
+(ClientAppActor pid=198523)   self.pid = os.fork() [repeated 2x across cluster]
+(ClientAppActor pid=198522) INFO :      [Freeze] Round 2/10: Stage 1 - Classifier only (2,562 params)
+(ClientAppActor pid=198523) INFO :      [Freeze] Round 2/10: Stage 1 - Classifier only (2,818 params)
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198521) ============================================================
+(ClientAppActor pid=198522) 
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198521) [Delmon-b1 (Partition 1)] ROUND 2 - Training Phase
+(ClientAppActor pid=198521) [Delmon-b1] Loaded model weights
+(ClientAppActor pid=198521) [Delmon-b1] [Strategy] Round 2/10: PHASE 1 - Head Only Warm-up
+(ClientAppActor pid=198521) [Delmon-b1] Round 2/10 (20%)
+(ClientAppActor pid=198521) [Delmon-b1] Classifier LR: 0.000500 | Backbone LR: 0.000000 (dynamic)
+(ClientAppActor pid=198521) [Delmon-b1] Phase 1: Knowledge Distillation
+(ClientAppActor pid=198523) ============================================================ [repeated 5x across cluster]
+(ClientAppActor pid=198523) [Lanka-b2 (Partition 2)] ROUND 2 - Training Phase [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Asiri-b0] Loaded model weights
+(ClientAppActor pid=198522) [Asiri-b0] [Strategy] Round 2/10: PHASE 1 - Head Only Warm-up
+(ClientAppActor pid=198522) [Asiri-b0] Round 2/10 (20%)
+(ClientAppActor pid=198522) [Asiri-b0] Classifier LR: 0.000500 | Backbone LR: 0.000000 (dynamic)
+(ClientAppActor pid=198522) [Asiri-b0] Phase 1: Knowledge Distillation
+(ClientAppActor pid=198523) [Lanka-b2] Loaded model weights
+(ClientAppActor pid=198523) [Lanka-b2] [Strategy] Round 2/10: PHASE 1 - Head Only Warm-up
+(ClientAppActor pid=198523) [Lanka-b2] Round 2/10 (20%)
+(ClientAppActor pid=198523) [Lanka-b2] Classifier LR: 0.000500 | Backbone LR: 0.000000 (dynamic)
+(ClientAppActor pid=198523) [Lanka-b2] Phase 1: Knowledge Distillation
+(ClientAppActor pid=198522) [Asiri-b0] Distillation Loss: 0.0172
+(ClientAppActor pid=198522) [Asiri-b0] Private Training
+(ClientAppActor pid=198521) [Delmon-b1] Distillation Loss: 0.0109
+(ClientAppActor pid=198521) [Delmon-b1] Private Training
+(ClientAppActor pid=198523) [Lanka-b2] Distillation Loss: 0.0145
+(ClientAppActor pid=198523) [Lanka-b2] Private Training
+(ClientAppActor pid=198522) [Asiri-b0] Train Loss: 0.6303, Acc: 67.41%, Val Loss: 0.5283, Val Acc: 81.36% (2151 samples, 256.0s)
+(ClientAppActor pid=198522) [Asiri-b0] Balanced Accuracy: 61.96%
+(ClientAppActor pid=198522) [Asiri-b0] Model saved
+(ClientAppActor pid=198523) [Lanka-b2] Train Loss: 0.5609, Acc: 75.13%, Val Loss: 0.6195, Val Acc: 65.84% (1944 samples, 318.4s)
+(ClientAppActor pid=198523) [Lanka-b2] Balanced Accuracy: 67.22%
+(ClientAppActor pid=198523) [Lanka-b2] Model saved
+(ClientAppActor pid=198522) [Asiri-b0] Round 2 Complete
+(ClientAppActor pid=198522) 
+(ClientAppActor pid=198521) [Delmon-b1] Train Loss: 0.5344, Acc: 77.10%, Val Loss: 0.4986, Val Acc: 82.83% (3360 samples, 447.9s)
+(ClientAppActor pid=198521) [Delmon-b1] Balanced Accuracy: 80.42%
+(ClientAppActor pid=198521) [Delmon-b1] Model saved
+(ClientAppActor pid=198523) [Lanka-b2] Round 2 Complete
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198521) [Delmon-b1] Round 2 Complete
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+INFO :      [BEST] New best avg accuracy 76.89% at round 2
+INFO :      
+======================================================================
+[ROUND 3/10]
+======================================================================
+(ClientAppActor pid=198521) INFO :      [Freeze] Round 3/10: Stage 1 - Classifier only (2,562 params)
+(ClientAppActor pid=198523) INFO :      [Freeze] Round 3/10: Stage 1 - Classifier only (2,562 params)
+(ClientAppActor pid=198522) INFO :      [Freeze] Round 3/10: Stage 1 - Classifier only (2,818 params)
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198521) ============================================================
+(ClientAppActor pid=198522) 
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198521) [Asiri-b0 (Partition 0)] ROUND 3 - Training Phase
+(ClientAppActor pid=198521) [Asiri-b0] Loaded model weights
+(ClientAppActor pid=198521) [Asiri-b0] [Strategy] Round 3/10: PHASE 1 - Head Only Warm-up
+(ClientAppActor pid=198521) [Asiri-b0] Round 3/10 (30%)
+(ClientAppActor pid=198521) [Asiri-b0] Classifier LR: 0.000500 | Backbone LR: 0.000000 (dynamic)
+(ClientAppActor pid=198521) [Asiri-b0] Phase 1: Knowledge Distillation
+(ClientAppActor pid=198522) ============================================================ [repeated 5x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2 (Partition 2)] ROUND 3 - Training Phase [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2] Loaded model weights [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2] [Strategy] Round 3/10: PHASE 1 - Head Only Warm-up [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2] Round 3/10 (30%) [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2] Classifier LR: 0.000500 | Backbone LR: 0.000000 (dynamic) [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2] Phase 1: Knowledge Distillation [repeated 2x across cluster]
+(ClientAppActor pid=198523) [Delmon-b1] Distillation Loss: 0.0130
+(ClientAppActor pid=198523) [Delmon-b1] Private Training
+(ClientAppActor pid=198522) [Lanka-b2] Distillation Loss: 0.0158 [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2] Private Training [repeated 2x across cluster]
+(ClientAppActor pid=198521) [Asiri-b0] Train Loss: 0.6168, Acc: 69.25%, Val Loss: 0.5271, Val Acc: 81.36% (2151 samples, 259.5s)
+(ClientAppActor pid=198521) [Asiri-b0] Balanced Accuracy: 64.36%
+(ClientAppActor pid=198521) [Asiri-b0] Model saved
+(ClientAppActor pid=198522) [Lanka-b2] Train Loss: 0.5445, Acc: 76.44%, Val Loss: 0.6056, Val Acc: 67.59% (1944 samples, 295.0s)
+(ClientAppActor pid=198522) [Lanka-b2] Balanced Accuracy: 68.35%
+(ClientAppActor pid=198523) [Delmon-b1] Train Loss: 0.5215, Acc: 78.10%, Val Loss: 0.4891, Val Acc: 84.18% (3360 samples, 347.4s)
+(ClientAppActor pid=198522) [Lanka-b2] Model saved
+(ClientAppActor pid=198523) [Delmon-b1] Balanced Accuracy: 81.23%
+(ClientAppActor pid=198523) [Delmon-b1] Model saved
+(ClientAppActor pid=198521) [Asiri-b0] Round 3 Complete
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198523) [Delmon-b1] Round 3 Complete
+(ClientAppActor pid=198522) [Lanka-b2] Round 3 Complete
+(ClientAppActor pid=198522) 
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+INFO :      [BEST] New best avg accuracy 78.37% at round 3
+INFO :      
+======================================================================
+[ROUND 4/10]
+======================================================================
+(ClientAppActor pid=198523) INFO :      [Freeze] Round 4/10: Stage 1 - Classifier only (2,562 params)
+(ClientAppActor pid=198521) INFO :      [Freeze] Round 4/10: Stage 1 - Classifier only (2,818 params) [repeated 2x across cluster]
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198521) ============================================================
+(ClientAppActor pid=198522) 
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198523) [Delmon-b1 (Partition 1)] ROUND 4 - Training Phase
+(ClientAppActor pid=198523) [Delmon-b1] Loaded model weights
+(ClientAppActor pid=198523) [Delmon-b1] [Strategy] Round 4/10: PHASE 1 - Head Only Warm-up
+(ClientAppActor pid=198523) [Delmon-b1] Round 4/10 (40%)
+(ClientAppActor pid=198523) [Delmon-b1] Classifier LR: 0.000500 | Backbone LR: 0.000000 (dynamic)
+(ClientAppActor pid=198523) [Delmon-b1] Phase 1: Knowledge Distillation
+(ClientAppActor pid=198521) ============================================================ [repeated 5x across cluster]
+(ClientAppActor pid=198521) [Lanka-b2 (Partition 2)] ROUND 4 - Training Phase [repeated 2x across cluster]
+(ClientAppActor pid=198521) [Lanka-b2] Loaded model weights [repeated 2x across cluster]
+(ClientAppActor pid=198521) [Lanka-b2] [Strategy] Round 4/10: PHASE 1 - Head Only Warm-up [repeated 2x across cluster]
+(ClientAppActor pid=198521) [Lanka-b2] Round 4/10 (40%) [repeated 2x across cluster]
+(ClientAppActor pid=198521) [Lanka-b2] Classifier LR: 0.000500 | Backbone LR: 0.000000 (dynamic) [repeated 2x across cluster]
+(ClientAppActor pid=198521) [Lanka-b2] Phase 1: Knowledge Distillation [repeated 2x across cluster]
+(ClientAppActor pid=198523) [Delmon-b1] Distillation Loss: 0.0139
+(ClientAppActor pid=198523) [Delmon-b1] Private Training
+(ClientAppActor pid=198522) [Asiri-b0] Distillation Loss: 0.0187
+(ClientAppActor pid=198522) [Asiri-b0] Private Training
+(ClientAppActor pid=198521) [Lanka-b2] Distillation Loss: 0.0167
+(ClientAppActor pid=198521) [Lanka-b2] Private Training
+(ClientAppActor pid=198522) [Asiri-b0] Train Loss: 0.6078, Acc: 70.64%, Val Loss: 0.5269, Val Acc: 81.63% (2151 samples, 250.2s)
+(ClientAppActor pid=198522) [Asiri-b0] Balanced Accuracy: 64.83%
+(ClientAppActor pid=198522) [Asiri-b0] Model saved
+(ClientAppActor pid=198521) [Lanka-b2] Train Loss: 0.5344, Acc: 77.19%, Val Loss: 0.5990, Val Acc: 68.75% (1944 samples, 311.2s)
+(ClientAppActor pid=198521) [Lanka-b2] Balanced Accuracy: 69.12%
+(ClientAppActor pid=198523) [Delmon-b1] Train Loss: 0.5142, Acc: 78.90%, Val Loss: 0.4847, Val Acc: 84.26% (3360 samples, 376.1s)
+(ClientAppActor pid=198521) [Lanka-b2] Model saved
+(ClientAppActor pid=198522) [Asiri-b0] Round 4 Complete
+(ClientAppActor pid=198522) 
+(ClientAppActor pid=198523) [Delmon-b1] Balanced Accuracy: 81.23%
+(ClientAppActor pid=198523) [Delmon-b1] Model saved
+(ClientAppActor pid=198523) [Delmon-b1] Round 4 Complete
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198521) [Lanka-b2] Round 4 Complete
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+INFO :      [BEST] New best avg accuracy 78.76% at round 4
+INFO :      
+======================================================================
+[ROUND 5/10]
+======================================================================
+(ClientAppActor pid=198521) INFO :      [Freeze] Round 5/10: Stage 1 - Classifier only (2,562 params)
+(ClientAppActor pid=198523) INFO :      [Freeze] Round 5/10: Stage 1 - Classifier only (2,562 params)
+(ClientAppActor pid=198522) INFO :      [Freeze] Round 5/10: Stage 1 - Classifier only (2,818 params)
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198521) ============================================================
+(ClientAppActor pid=198522) 
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198521) [Asiri-b0 (Partition 0)] ROUND 5 - Training Phase
+(ClientAppActor pid=198521) [Asiri-b0] Loaded model weights
+(ClientAppActor pid=198521) [Asiri-b0] [Strategy] Round 5/10: PHASE 1 - Head Only Warm-up
+(ClientAppActor pid=198521) [Asiri-b0] Round 5/10 (50%)
+(ClientAppActor pid=198521) [Asiri-b0] Classifier LR: 0.000500 | Backbone LR: 0.000000 (dynamic)
+(ClientAppActor pid=198521) [Asiri-b0] Phase 1: Knowledge Distillation
+(ClientAppActor pid=198522) ============================================================ [repeated 5x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2 (Partition 2)] ROUND 5 - Training Phase [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2] Loaded model weights [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2] [Strategy] Round 5/10: PHASE 1 - Head Only Warm-up [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2] Round 5/10 (50%) [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2] Classifier LR: 0.000500 | Backbone LR: 0.000000 (dynamic) [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2] Phase 1: Knowledge Distillation [repeated 2x across cluster]
+(ClientAppActor pid=198523) [Delmon-b1] Distillation Loss: 0.0145
+(ClientAppActor pid=198523) [Delmon-b1] Private Training
+(ClientAppActor pid=198521) [Asiri-b0] Distillation Loss: 0.0194
+(ClientAppActor pid=198521) [Asiri-b0] Private Training
+(ClientAppActor pid=198522) [Lanka-b2] Distillation Loss: 0.0176
+(ClientAppActor pid=198522) [Lanka-b2] Private Training
+(ClientAppActor pid=198521) [Asiri-b0] Train Loss: 0.6013, Acc: 71.20%, Val Loss: 0.5271, Val Acc: 81.63% (2151 samples, 257.8s)
+(ClientAppActor pid=198521) [Asiri-b0] Balanced Accuracy: 65.31%
+(ClientAppActor pid=198521) [Asiri-b0] Model saved
+(ClientAppActor pid=198522) [Lanka-b2] Train Loss: 0.5273, Acc: 78.11%, Val Loss: 0.5953, Val Acc: 69.33% (1944 samples, 300.1s)
+(ClientAppActor pid=198523) [Delmon-b1] Train Loss: 0.5092, Acc: 79.27%, Val Loss: 0.4823, Val Acc: 83.92% (3360 samples, 374.6s)
+(ClientAppActor pid=198522) [Lanka-b2] Balanced Accuracy: 68.93%
+(ClientAppActor pid=198522) [Lanka-b2] Model saved
+(ClientAppActor pid=198523) [Delmon-b1] Balanced Accuracy: 80.93%
+(ClientAppActor pid=198523) [Delmon-b1] Model saved
+(ClientAppActor pid=198521) [Asiri-b0] Round 5 Complete
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198523) [Delmon-b1] Round 5 Complete
+(ClientAppActor pid=198522) [Lanka-b2] Round 5 Complete
+(ClientAppActor pid=198522) 
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+WARNING :   Client 0: Loss increasing for 2 consecutive rounds (overfitting)
+INFO :      [BEST] Round 5 avg accuracy 78.62% (best: 78.76% at round 4)
+INFO :      
+======================================================================
+[ROUND 6/10]
+======================================================================
+(ClientAppActor pid=198522) INFO :      [Freeze] Round 6/10: Stage 1 - Classifier only (2,562 params)
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198521) ============================================================
+(ClientAppActor pid=198522) 
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198522) [Asiri-b0 (Partition 0)] ROUND 6 - Training Phase
+(ClientAppActor pid=198522) [Asiri-b0] Loaded model weights
+(ClientAppActor pid=198522) [Asiri-b0] [Strategy] Round 6/10: PHASE 1 - Head Only Warm-up
+(ClientAppActor pid=198522) [Asiri-b0] Round 6/10 (60%)
+(ClientAppActor pid=198522) [Asiri-b0] Classifier LR: 0.000500 | Backbone LR: 0.000000 (dynamic)
+(ClientAppActor pid=198522) [Asiri-b0] Phase 1: Knowledge Distillation
+(ClientAppActor pid=198523) [Delmon-b1] Distillation Loss: 0.0151
+(ClientAppActor pid=198523) [Delmon-b1] Private Training
+(ClientAppActor pid=198523) ============================================================ [repeated 5x across cluster]
+(ClientAppActor pid=198523) [Delmon-b1 (Partition 1)] ROUND 6 - Training Phase [repeated 2x across cluster]
+(ClientAppActor pid=198523) [Delmon-b1] Loaded model weights [repeated 2x across cluster]
+(ClientAppActor pid=198521) [Lanka-b2] [Strategy] Round 6/10: PHASE 1 - Head Only Warm-up [repeated 2x across cluster]
+(ClientAppActor pid=198521) [Lanka-b2] Round 6/10 (60%) [repeated 2x across cluster]
+(ClientAppActor pid=198521) [Lanka-b2] Classifier LR: 0.000500 | Backbone LR: 0.000000 (dynamic) [repeated 2x across cluster]
+(ClientAppActor pid=198521) [Lanka-b2] Phase 1: Knowledge Distillation [repeated 2x across cluster]
+(ClientAppActor pid=198521) [Lanka-b2] Distillation Loss: 0.0183 [repeated 2x across cluster]
+(ClientAppActor pid=198521) [Lanka-b2] Private Training [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Asiri-b0] Train Loss: 0.5963, Acc: 71.94%, Val Loss: 0.5274, Val Acc: 81.63% (2151 samples, 252.2s)
+(ClientAppActor pid=198522) [Asiri-b0] Balanced Accuracy: 65.62%
+(ClientAppActor pid=198522) [Asiri-b0] Model saved
+(ClientAppActor pid=198521) [Lanka-b2] Train Loss: 0.5218, Acc: 78.60%, Val Loss: 0.5930, Val Acc: 69.77% (1944 samples, 311.7s)
+(ClientAppActor pid=198521) [Lanka-b2] Balanced Accuracy: 69.51%
+(ClientAppActor pid=198523) [Delmon-b1] Train Loss: 0.5055, Acc: 79.70%, Val Loss: 0.4807, Val Acc: 83.92% (3360 samples, 374.0s)
+(ClientAppActor pid=198521) [Lanka-b2] Model saved
+(ClientAppActor pid=198522) [Asiri-b0] Round 6 Complete
+(ClientAppActor pid=198522) 
+(ClientAppActor pid=198523) [Delmon-b1] Balanced Accuracy: 80.93%
+(ClientAppActor pid=198523) [Delmon-b1] Model saved
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198523) [Delmon-b1] Round 6 Complete
+(ClientAppActor pid=198521) [Lanka-b2] Round 6 Complete
+(ClientAppActor pid=198521) 
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+WARNING :   Client 0: Loss increasing for 2 consecutive rounds (overfitting)
+INFO :      [BEST] New best avg accuracy 78.81% at round 6
+INFO :      
+======================================================================
+[ROUND 7/10]
+======================================================================
+(ClientAppActor pid=198521) INFO :      [Freeze] Round 7/10: Stage 2 - 25% backbone block (1,131,954 params)
+(ClientAppActor pid=198521) INFO :      [Freeze] Round 6/10: Stage 1 - Classifier only (2,818 params) [repeated 2x across cluster]
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198521) ============================================================
+(ClientAppActor pid=198522) 
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198521) [Asiri-b0 (Partition 0)] ROUND 7 - Training Phase
+(ClientAppActor pid=198521) [Asiri-b0] Loaded model weights
+(ClientAppActor pid=198521) [Asiri-b0] [Strategy] Round 7/10: PHASE 2 - 25% Backbone (Soft Refinement)
+(ClientAppActor pid=198521) [Asiri-b0] Round 7/10 (70%)
+(ClientAppActor pid=198521) [Asiri-b0] Classifier LR: 0.000300 | Backbone LR: 0.000015 (dynamic)
+(ClientAppActor pid=198521) [Asiri-b0] Phase 1: Knowledge Distillation
+(ClientAppActor pid=198522) ============================================================ [repeated 5x across cluster]
+(ClientAppActor pid=198521) [Asiri-b0] Distillation Loss: 0.0164
+(ClientAppActor pid=198521) [Asiri-b0] Private Training
+(ClientAppActor pid=198522) [Lanka-b2 (Partition 2)] ROUND 7 - Training Phase [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2] Loaded model weights [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2] [Strategy] Round 7/10: PHASE 2 - 25% Backbone (Soft Refinement) [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2] Round 7/10 (70%) [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2] Classifier LR: 0.000300 | Backbone LR: 0.000015 (dynamic) [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2] Phase 1: Knowledge Distillation [repeated 2x across cluster]
+(ClientAppActor pid=198523) [Delmon-b1] Distillation Loss: 0.0138
+(ClientAppActor pid=198523) [Delmon-b1] Private Training
+(ClientAppActor pid=198522) [Lanka-b2] Distillation Loss: 0.0174
+(ClientAppActor pid=198522) [Lanka-b2] Private Training
+(ClientAppActor pid=198521) [Asiri-b0] Train Loss: 0.5865, Acc: 72.32%, Val Loss: 0.5130, Val Acc: 80.97% (2151 samples, 270.7s)
+(ClientAppActor pid=198521) [Asiri-b0] Balanced Accuracy: 70.49%
+(ClientAppActor pid=198521) [Asiri-b0] Model saved
+(ClientAppActor pid=198522) [Lanka-b2] Train Loss: 0.5138, Acc: 78.88%, Val Loss: 0.5225, Val Acc: 78.49% (1944 samples, 318.4s)
+(ClientAppActor pid=198521) [Asiri-b0] Round 7 Complete
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198522) [Lanka-b2] Balanced Accuracy: 73.47%
+(ClientAppActor pid=198522) [Lanka-b2] Model saved
+(ClientAppActor pid=198523) [Delmon-b1] Train Loss: 0.5005, Acc: 80.09%, Val Loss: 0.4836, Val Acc: 82.41% (3360 samples, 389.6s)
+(ClientAppActor pid=198523) [Delmon-b1] Balanced Accuracy: 81.36%
+(ClientAppActor pid=198523) [Delmon-b1] Model saved
+(ClientAppActor pid=198522) [Lanka-b2] Round 7 Complete
+(ClientAppActor pid=198522) 
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198523) [Delmon-b1] Round 7 Complete
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+WARNING :   Client 0: Loss increasing for 2 consecutive rounds (overfitting)
+INFO :      [BEST] New best avg accuracy 81.31% at round 7
+INFO :      
+======================================================================
+[ROUND 8/10]
+======================================================================
+(ClientAppActor pid=198523) INFO :      [Freeze] Round 8/10: Stage 2 - 25% backbone block (1,131,954 params) [repeated 3x across cluster]
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198521) ============================================================
+(ClientAppActor pid=198522) 
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198523) [Asiri-b0 (Partition 0)] ROUND 8 - Training Phase
+(ClientAppActor pid=198523) [Asiri-b0] Loaded model weights
+(ClientAppActor pid=198523) [Asiri-b0] [Strategy] Round 8/10: PHASE 2 - 25% Backbone (Soft Refinement)
+(ClientAppActor pid=198523) [Asiri-b0] Round 8/10 (80%)
+(ClientAppActor pid=198523) [Asiri-b0] Classifier LR: 0.000300 | Backbone LR: 0.000015 (dynamic)
+(ClientAppActor pid=198523) [Asiri-b0] Phase 1: Knowledge Distillation
+(ClientAppActor pid=198523) [Asiri-b0] Distillation Loss: 0.0150
+(ClientAppActor pid=198523) [Asiri-b0] Private Training
+(ClientAppActor pid=198522) ============================================================ [repeated 5x across cluster]
+(ClientAppActor pid=198522) [Delmon-b1 (Partition 1)] ROUND 8 - Training Phase [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Delmon-b1] Loaded model weights [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Delmon-b1] [Strategy] Round 8/10: PHASE 2 - 25% Backbone (Soft Refinement) [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Delmon-b1] Round 8/10 (80%) [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Delmon-b1] Classifier LR: 0.000300 | Backbone LR: 0.000015 (dynamic) [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Delmon-b1] Phase 1: Knowledge Distillation [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Delmon-b1] Distillation Loss: 0.0143
+(ClientAppActor pid=198522) [Delmon-b1] Private Training
+(ClientAppActor pid=198521) [Lanka-b2] Distillation Loss: 0.0157
+(ClientAppActor pid=198521) [Lanka-b2] Private Training
+(ClientAppActor pid=198523) [Asiri-b0] Train Loss: 0.5637, Acc: 74.22%, Val Loss: 0.5129, Val Acc: 80.71% (2151 samples, 228.7s)
+(ClientAppActor pid=198523) [Asiri-b0] Balanced Accuracy: 71.73%
+(ClientAppActor pid=198523) [Asiri-b0] Model saved
+(ClientAppActor pid=198523) [Asiri-b0] Round 8 Complete
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198521) [Lanka-b2] Train Loss: 0.4855, Acc: 80.92%, Val Loss: 0.5046, Val Acc: 80.81% (1944 samples, 315.0s)
+(ClientAppActor pid=198521) [Lanka-b2] Balanced Accuracy: 74.22%
+(ClientAppActor pid=198521) [Lanka-b2] Model saved
+(ClientAppActor pid=198522) [Delmon-b1] Train Loss: 0.4841, Acc: 81.58%, Val Loss: 0.4794, Val Acc: 82.49% (3360 samples, 452.1s)
+(ClientAppActor pid=198522) [Delmon-b1] Balanced Accuracy: 81.36%
+(ClientAppActor pid=198522) [Delmon-b1] Model saved
+(ClientAppActor pid=198521) [Lanka-b2] Round 8 Complete
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198522) 
+(ClientAppActor pid=198522) [Delmon-b1] Round 8 Complete
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+WARNING :   Client 0: Accuracy declining for 2 consecutive rounds
+WARNING :   Client 0: Loss increasing for 2 consecutive rounds (overfitting)
+INFO :      [BEST] New best avg accuracy 81.55% at round 8
+INFO :      
+======================================================================
+[ROUND 9/10]
+======================================================================
+(ClientAppActor pid=198522) INFO :      [Freeze] Round 9/10: Stage 2 - 25% backbone block (1,131,954 params) [repeated 3x across cluster]
+(ClientAppActor pid=198521) INFO :      [Freeze] Round 9/10: Stage 2 - 25% backbone block (1,978,322 params)
+(ClientAppActor pid=198523) INFO :      [Freeze] Round 9/10: Stage 2 - 25% backbone block (2,390,170 params)
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198521) ============================================================
+(ClientAppActor pid=198522) 
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198522) [Asiri-b0 (Partition 0)] ROUND 9 - Training Phase
+(ClientAppActor pid=198522) [Asiri-b0] Loaded model weights
+(ClientAppActor pid=198522) [Asiri-b0] [Strategy] Round 9/10: PHASE 2 - 25% Backbone (Soft Refinement)
+(ClientAppActor pid=198522) [Asiri-b0] Round 9/10 (90%)
+(ClientAppActor pid=198522) [Asiri-b0] Classifier LR: 0.000300 | Backbone LR: 0.000015 (dynamic)
+(ClientAppActor pid=198522) [Asiri-b0] Phase 1: Knowledge Distillation
+(ClientAppActor pid=198523) ============================================================ [repeated 5x across cluster]
+(ClientAppActor pid=198523) [Lanka-b2 (Partition 2)] ROUND 9 - Training Phase [repeated 2x across cluster]
+(ClientAppActor pid=198521) [Delmon-b1] Loaded model weights
+(ClientAppActor pid=198521) [Delmon-b1] [Strategy] Round 9/10: PHASE 2 - 25% Backbone (Soft Refinement)
+(ClientAppActor pid=198521) [Delmon-b1] Round 9/10 (90%)
+(ClientAppActor pid=198521) [Delmon-b1] Classifier LR: 0.000300 | Backbone LR: 0.000015 (dynamic)
+(ClientAppActor pid=198521) [Delmon-b1] Phase 1: Knowledge Distillation
+(ClientAppActor pid=198523) [Lanka-b2] Loaded model weights
+(ClientAppActor pid=198523) [Lanka-b2] [Strategy] Round 9/10: PHASE 2 - 25% Backbone (Soft Refinement)
+(ClientAppActor pid=198523) [Lanka-b2] Round 9/10 (90%)
+(ClientAppActor pid=198523) [Lanka-b2] Classifier LR: 0.000300 | Backbone LR: 0.000015 (dynamic)
+(ClientAppActor pid=198523) [Lanka-b2] Phase 1: Knowledge Distillation
+(ClientAppActor pid=198522) [Asiri-b0] Distillation Loss: 0.0146
+(ClientAppActor pid=198522) [Asiri-b0] Private Training
+(ClientAppActor pid=198521) [Delmon-b1] Distillation Loss: 0.0156
+(ClientAppActor pid=198521) [Delmon-b1] Private Training
+(ClientAppActor pid=198523) [Lanka-b2] Distillation Loss: 0.0147
+(ClientAppActor pid=198523) [Lanka-b2] Private Training
+(ClientAppActor pid=198522) [Asiri-b0] Train Loss: 0.5428, Acc: 76.17%, Val Loss: 0.5154, Val Acc: 80.05% (2151 samples, 263.1s)
+(ClientAppActor pid=198522) [Asiri-b0] Balanced Accuracy: 72.98%
+(ClientAppActor pid=198522) [Asiri-b0] Model saved
+(ClientAppActor pid=198523) [Lanka-b2] Train Loss: 0.4566, Acc: 83.46%, Val Loss: 0.4889, Val Acc: 82.56% (1944 samples, 318.7s)
+(ClientAppActor pid=198522) [Asiri-b0] Round 9 Complete
+(ClientAppActor pid=198522) 
+(ClientAppActor pid=198523) [Lanka-b2] Balanced Accuracy: 74.78%
+(ClientAppActor pid=198523) [Lanka-b2] Model saved
+(ClientAppActor pid=198521) [Delmon-b1] Train Loss: 0.4696, Acc: 82.59%, Val Loss: 0.4773, Val Acc: 82.32% (3360 samples, 482.0s)
+(ClientAppActor pid=198523) [Lanka-b2] Round 9 Complete
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198521) [Delmon-b1] Balanced Accuracy: 81.01%
+(ClientAppActor pid=198521) [Delmon-b1] Model saved
+(ClientAppActor pid=198521) [Delmon-b1] Round 9 Complete
+(ClientAppActor pid=198521) 
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+WARNING :   Client 0: Accuracy declining for 2 consecutive rounds
+WARNING :   Client 0: Loss increasing for 2 consecutive rounds (overfitting)
+INFO :      [BEST] New best avg accuracy 81.61% at round 9
+INFO :      
+======================================================================
+[ROUND 10/10]
+======================================================================
+(ClientAppActor pid=198521) INFO :      [Freeze] Round 10/10: Stage 2 - 25% backbone block (1,131,954 params)
+(ClientAppActor pid=198523) INFO :      [Freeze] Round 10/10: Stage 2 - 25% backbone block (1,978,322 params)
+(ClientAppActor pid=198522) INFO :      [Freeze] Round 10/10: Stage 2 - 25% backbone block (2,390,170 params)
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198521) ============================================================
+(ClientAppActor pid=198522) 
+(ClientAppActor pid=198523) 
+(ClientAppActor pid=198521) [Asiri-b0 (Partition 0)] ROUND 10 - Training Phase
+(ClientAppActor pid=198521) [Asiri-b0] Loaded model weights
+(ClientAppActor pid=198521) [Asiri-b0] [Strategy] Round 10/10: PHASE 2 - 25% Backbone (Soft Refinement)
+(ClientAppActor pid=198521) [Asiri-b0] Round 10/10 (100%)
+(ClientAppActor pid=198521) [Asiri-b0] Classifier LR: 0.000300 | Backbone LR: 0.000015 (dynamic)
+(ClientAppActor pid=198521) [Asiri-b0] Phase 1: Knowledge Distillation
+(ClientAppActor pid=198522) ============================================================ [repeated 5x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2 (Partition 2)] ROUND 10 - Training Phase [repeated 2x across cluster]
+(ClientAppActor pid=198522) [Lanka-b2] Loaded model weights [repeated 2x across cluster]
+(ClientAppActor pid=198523) [Delmon-b1] [Strategy] Round 10/10: PHASE 2 - 25% Backbone (Soft Refinement)
+(ClientAppActor pid=198523) [Delmon-b1] Round 10/10 (100%)
+(ClientAppActor pid=198523) [Delmon-b1] Classifier LR: 0.000300 | Backbone LR: 0.000015 (dynamic)
+(ClientAppActor pid=198523) [Delmon-b1] Phase 1: Knowledge Distillation
+(ClientAppActor pid=198522) [Lanka-b2] [Strategy] Round 10/10: PHASE 2 - 25% Backbone (Soft Refinement)
+(ClientAppActor pid=198522) [Lanka-b2] Round 10/10 (100%)
+(ClientAppActor pid=198522) [Lanka-b2] Classifier LR: 0.000300 | Backbone LR: 0.000015 (dynamic)
+(ClientAppActor pid=198522) [Lanka-b2] Phase 1: Knowledge Distillation
+(ClientAppActor pid=198521) [Asiri-b0] Distillation Loss: 0.0146
+(ClientAppActor pid=198521) [Asiri-b0] Private Training
+(ClientAppActor pid=198522) [Lanka-b2] Distillation Loss: 0.0161
+(ClientAppActor pid=198522) [Lanka-b2] Private Training
+(ClientAppActor pid=198523) [Delmon-b1] Distillation Loss: 0.0173
+(ClientAppActor pid=198523) [Delmon-b1] Private Training
+(ClientAppActor pid=198521) [Asiri-b0] Train Loss: 0.5228, Acc: 77.94%, Val Loss: 0.5197, Val Acc: 79.00% (2151 samples, 260.7s)
+(ClientAppActor pid=198521) [Asiri-b0] Balanced Accuracy: 72.46%
+(ClientAppActor pid=198521) [Asiri-b0] Model saved
+(ClientAppActor pid=198522) [Lanka-b2] Train Loss: 0.4270, Acc: 85.73%, Val Loss: 0.4836, Val Acc: 82.41% (1944 samples, 325.7s)
+(ClientAppActor pid=198522) [Lanka-b2] Balanced Accuracy: 75.38%
+(ClientAppActor pid=198522) [Lanka-b2] Model saved
+(ClientAppActor pid=198521) [Asiri-b0] Round 10 Complete
+(ClientAppActor pid=198521) 
+(ClientAppActor pid=198522) 
+(ClientAppActor pid=198522) [Lanka-b2] Round 10 Complete
+(ClientAppActor pid=198523) [Delmon-b1] Train Loss: 0.4556, Acc: 83.62%, Val Loss: 0.4763, Val Acc: 82.74% (3360 samples, 488.8s)
+(ClientAppActor pid=198523) [Delmon-b1] Balanced Accuracy: 81.08%
+(ClientAppActor pid=198523) [Delmon-b1] Model saved
+(ClientAppActor pid=198523) [Delmon-b1] Round 10 Complete
+(ClientAppActor pid=198523) 
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+WARNING :   Client 0: Accuracy declining for 2 consecutive rounds
+WARNING :   Client 0: Loss increasing for 2 consecutive rounds (overfitting)
+WARNING :   Client 1: Accuracy declining for 2 consecutive rounds
+INFO :      [BEST] Round 10 avg accuracy 80.97% (best: 81.61% at round 9)
+INFO :      [BEST] Restoring best models from round 9 (avg accuracy: 81.61%)
+INFO :      [BEST] Restored Asiri-b0.pt from round 9
+INFO :      [BEST] Restored Delmon-b1.pt from round 9
+INFO :      [BEST] Restored Lanka-b2.pt from round 9
+INFO :      
+======================================================================
+[GLOBAL] Final Federated Model Evaluation
+======================================================================
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+INFO :      [EVAL] Overall: 72.5% | Leukemia: 81.0% | Healthy: 64.1% | Gap: 16.9%
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+INFO :      [EVAL] Overall: 72.8% | Leukemia: 88.7% | Healthy: 56.9% | Gap: 31.8%
+WARNING :   [EVAL] Class imbalance detected! Gap: 31.8%
+/usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=197645) is multi-threaded, use of fork() may lead to deadlocks in the child.
+  self.pid = os.fork()
+INFO :      [EVAL] Overall: 74.4% | Leukemia: 80.5% | Healthy: 68.2% | Gap: 12.3%
+INFO :      Strategy execution finished in 7806.58s
+
+============================================================
+[SERVER] Federated Learning Complete
+============================================================
+
+  Consensus saved: /content/drive/MyDrive/College/FLEX-Med/backend/final_consensus.npy
+  Summary saved: /content/drive/MyDrive/College/FLEX-Med/backend/training_summary.json
+
+[SERVER] Training complete!
+
+2026-03-15 01:51:38,519 - INFO - 
+======================================================================
+INFO:inference_logger:
+======================================================================
+2026-03-15 01:51:38,521 - INFO - Federated Learning Simulation COMPLETED Successfully
+INFO:inference_logger:Federated Learning Simulation COMPLETED Successfully
+2026-03-15 01:51:38,521 - INFO - ======================================================================
+INFO:inference_logger:======================================================================
+^C

@@ -47,7 +47,7 @@ async def inference(
                 "Healthy": 0.13,
                 "ALL (Leukemia)": 0.87
             },
-            "model": "MobileNetV2",
+            "model": "EfficientNetB0",
             "model_path": "/path/to/model.pt",
             "device": "cpu"
         }

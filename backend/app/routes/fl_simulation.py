@@ -108,6 +108,7 @@ async def start_fl(
         "local_epochs": system_config.get("local_epochs", 1),
         "lr": system_config.get("learning_rate", 0.0005),
         "lr_decay": system_config.get("lr_decay", 0.90),
+        "weight_decay": system_config.get("weight_decay", 0.02),
         "distill_lr": system_config.get("distill_lr", 0.0005),
         "distill_epochs": system_config.get("distill_epochs", 1),
         "temperature": system_config.get("temperature", 4.0),
@@ -127,6 +128,7 @@ async def start_fl(
         "distill_decay_rate": system_config.get("distill_decay_rate", 0.18),
         "train_loss_weight": system_config.get("train_loss_weight", 0.72),
         "distill_loss_weight": system_config.get("distill_loss_weight", 0.28),
+        "weight_decay": system_config.get("weight_decay", 0.02),
     }
 
     # Build dataset paths config

@@ -47,14 +47,16 @@ COMMON_TRANSFORM = Compose([
 ])
 
 PRIVATE_TRAIN_TRANSFORM = Compose([
-    transforms.Resize((IMG_SIZE, IMG_SIZE)),
-    transforms.RandomHorizontalFlip(p=0.5),
-    transforms.RandomVerticalFlip(p=0.3),
-    transforms.RandomRotation(15),
-    transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
-    transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.0, hue=0.0),
-    ToTensor(),
-    Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    transforms.Resize((IMG_SIZE, IMG_SIZE)), # Standardize resolution
+    transforms.RandomHorizontalFlip(p=0.5), # Handle arbitrary orientation
+    transforms.RandomVerticalFlip(p=0.5),   # Cells aren't axis-aligned
+    transforms.RandomRotation(15),           # Slight angular variations
+    transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)), # Prep jitter
+    transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.0, hue=0.0), # Staining variations
+    transforms.GaussianBlur(kernel_size=5, sigma=(0.1, 1.0)), # Microscope focus jitter
+    ToTensor(), # Convert to tensor (Required before RandomErasing)
+    transforms.RandomErasing(p=0.5, scale=(0.02, 0.1), ratio=(0.3, 3.3), value=0), # Slide debris
+    Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]), # ImageNet standards
 ])
 
 class TransformOverrideSubset(torch.utils.data.Dataset):
@@ -221,7 +223,7 @@ def validate_training(model, valloader, criterion, device):
     accuracy = correct / total if total > 0 else 0.0
     return avg_loss, accuracy
 
-def train(model, trainloader, epochs, base_lr, phase_multiplier, device,
+def train(model, trainloader, epochs, classifier_lr, backbone_lr, device,
           valloader=None, server_round: int = 1, total_rounds: int = 10):
 
     if trainloader is None:
@@ -232,21 +234,36 @@ def train(model, trainloader, epochs, base_lr, phase_multiplier, device,
     # Standard CrossEntropyLoss with label smoothing (WRS handles class balance)
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
-    # Separate classifier and backbone parameters for Discriminative LRs
-    classifier_params = []
-    backbone_params = []
+    # Separate parameters into four groups for Discriminative LRs + Weight Decay optimization
+    # Rule: Exclude 1D parameters (biases and BN layers) from weight decay.
+    classifier_decay = []
+    classifier_no_decay = []
+    backbone_decay = []
+    backbone_no_decay = []
+
     for name, param in model.named_parameters():
-        if param.requires_grad:
-            if "classifier" in name or "fc" in name:
-                classifier_params.append(param)
+        if not param.requires_grad:
+            continue
+            
+        is_classifier = "classifier" in name or "fc" in name
+        if is_classifier:
+            if len(param.shape) == 1:
+                classifier_no_decay.append(param)
             else:
-                backbone_params.append(param)
+                classifier_decay.append(param)
+        else:
+            if len(param.shape) == 1:
+                backbone_no_decay.append(param)
+            else:
+                backbone_decay.append(param)
     
     optimizer = torch.optim.AdamW([
-        {"params": classifier_params, "lr": base_lr},
-        {"params": backbone_params, "lr": base_lr * phase_multiplier}
-    ], betas=(0.9, 0.999), weight_decay=WEIGHT_DECAY)
-    
+        {"params": classifier_decay, "lr": classifier_lr, "weight_decay": WEIGHT_DECAY},
+        {"params": classifier_no_decay, "lr": classifier_lr, "weight_decay": 0.0},
+        {"params": backbone_decay, "lr": backbone_lr, "weight_decay": WEIGHT_DECAY * 2.0},
+        {"params": backbone_no_decay, "lr": backbone_lr, "weight_decay": 0.0}
+    ], betas=(0.9, 0.999))
+
     has_validation = valloader is not None
 
     total_train_loss, total_val_loss = 0.0, 0.0
@@ -365,8 +382,8 @@ def test(model, testloader, device, return_detailed=False):
     return loss, accuracy
 
 # <----------------------------- KNOWLEDGE DISTILLATION : Distill consensus knowledge into local model using KL divergence with adaptive weighting. ----------------------------->
-def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr, temperature,
-                      phase_multiplier=1.0, current_round=1, total_rounds=10, adaptive=True):
+def distill_knowledge(model, public_loader, consensus_logits, device, epochs, classifier_lr, backbone_lr, temperature,
+                      current_round=1, total_rounds=10, adaptive=True):
     base_weight = DISTILL_WEIGHT_BASE
     decay_rate = DISTILL_DECAY_RATE
     weight_decay = WEIGHT_DECAY
@@ -383,21 +400,37 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, lr
     model.train()
     model.apply(set_bn_eval)
     
-    # Separate classifier and backbone parameters for Discriminative LRs
-    classifier_params = []
-    backbone_params = []
+    # Separate parameters into four groups for Discriminative LRs + Weight Decay optimization
+    # Rule: Exclude 1D parameters (biases and BN layers) from weight decay.
+    classifier_decay = []
+    classifier_no_decay = []
+    backbone_decay = []
+    backbone_no_decay = []
+
     for name, param in model.named_parameters():
-        if param.requires_grad:
-            if "classifier" in name or "fc" in name:
-                classifier_params.append(param)
+        if not param.requires_grad:
+            continue
+            
+        is_classifier = "classifier" in name or "fc" in name
+        if is_classifier:
+            if len(param.shape) == 1:
+                classifier_no_decay.append(param)
             else:
-                backbone_params.append(param)
+                classifier_decay.append(param)
+        else:
+            if len(param.shape) == 1:
+                backbone_no_decay.append(param)
+            else:
+                backbone_decay.append(param)
                 
+    # Optimzer called to updated weights as the model tries to match the conensus value
     optimizer = torch.optim.AdamW([
-        {"params": classifier_params, "lr": lr},
-        {"params": backbone_params, "lr": lr * phase_multiplier}
-    ], betas=(0.9, 0.999), weight_decay=weight_decay)
-    
+        {"params": classifier_decay, "lr": classifier_lr, "weight_decay": weight_decay},
+        {"params": classifier_no_decay, "lr": classifier_lr, "weight_decay": 0.0},
+        {"params": backbone_decay, "lr": backbone_lr, "weight_decay": weight_decay * 2.0},
+        {"params": backbone_no_decay, "lr": backbone_lr, "weight_decay": 0.0}
+    ], betas=(0.9, 0.999))
+
     consensus_tensor = torch.from_numpy(consensus_logits).float()
 
     total_loss, idx = 0.0, 0
@@ -439,6 +472,7 @@ def compute_consensus(
     logits_list: List[np.ndarray], client_metrics: List[Dict], client_configs: List[Dict],
     server_round: int,
     temperature: float = 4.0,
+    previous_consensus: Optional[np.ndarray] = None,
 ) -> Tuple[Optional[np.ndarray], Dict]:
     if not logits_list:
         return None, {"error": "No client logits provided"}
@@ -456,7 +490,11 @@ def compute_consensus(
 
     total_samples = sum(raw_weights)
     normalized_weights = [w / total_samples for w in raw_weights]
-    consensus_logits = np.average(logits_list, axis=0, weights=normalized_weights)
+    
+    # Current weighted average
+    current_avg_logits = np.average(logits_list, axis=0, weights=normalized_weights)
+    
+    consensus_logits = current_avg_logits
 
     weight_breakdown = []
     for i in range(num_clients):
@@ -483,6 +521,8 @@ class FLEXMedStrategy(Strategy):
         self.client_configs = load_client_config(config_path)
         self.num_clients = len(self.client_configs)
         self.client_history = {}
+        self.previous_consensus_logits = None
+        self.total_rounds = 0
 
 # <----------------------------- HELPER METHODS ----------------------------->
     # Evaluate all clients on their private validation sets
@@ -630,13 +670,12 @@ class FLEXMedStrategy(Strategy):
                         self.best_avg_accuracy = avg_acc
                         self.best_round = current_round
                         log(INFO, f"[BEST] New best avg accuracy {avg_acc:.2%} at round {current_round}")
-                        # NOTE: Best model checkpoint saving commented out for now
-                        # for client_cfg in self.client_configs:
-                        #     src = client_cfg.get('model_path', '')
-                        #     if src and os.path.exists(src):
-                        #         base, ext = os.path.splitext(src)
-                        #         dst = f"{base}_best{ext}"
-                        #         shutil.copy2(src, dst)
+                        for client_cfg in self.client_configs:
+                            src = client_cfg.get('model_path', '')
+                            if src and os.path.exists(src):
+                                base, ext = os.path.splitext(src)
+                                dst = f"{base}_best{ext}"
+                                shutil.copy2(src, dst)
                     else:
                         log(INFO, f"[BEST] Round {current_round} avg accuracy {avg_acc:.2%} "
                                   f"(best: {self.best_avg_accuracy:.2%} at round {self.best_round})")
@@ -644,21 +683,20 @@ class FLEXMedStrategy(Strategy):
             except Exception as e:
                 log(WARNING, f"[ROUND {current_round}] Validation evaluation failed: {e}")
 
-        # NOTE: Best model restore commented out — post-FL eval uses final round models
         # <----------------------------- Restore best model checkpoints before final evaluation ----------------------------->
-        # if self.best_round > 0 and self.best_round < num_rounds:
-        #     log(INFO, f"[BEST] Restoring best models from round {self.best_round} "
-        #               f"(avg accuracy: {self.best_avg_accuracy:.2%})")
-        #     for client_cfg in self.client_configs:
-        #         src = client_cfg.get('model_path', '')
-        #         if src:
-        #             base, ext = os.path.splitext(src)
-        #             best_path = f"{base}_best{ext}"
-        #             if os.path.exists(best_path):
-        #                 shutil.copy2(best_path, src)
-        #                 log(INFO, f"[BEST] Restored {os.path.basename(src)} from round {self.best_round}")
-        # else:
-        #     log(INFO, f"[BEST] Final round {num_rounds} was the best — no restore needed")
+        if self.best_round > 0 and self.best_round < num_rounds:
+            log(INFO, f"[BEST] Restoring best models from round {self.best_round} "
+                      f"(avg accuracy: {self.best_avg_accuracy:.2%})")
+            for client_cfg in self.client_configs:
+                src = client_cfg.get('model_path', '')
+                if src:
+                    base, ext = os.path.splitext(src)
+                    best_path = f"{base}_best{ext}"
+                    if os.path.exists(best_path):
+                        shutil.copy2(best_path, src)
+                        log(INFO, f"[BEST] Restored {os.path.basename(src)} from round {self.best_round}")
+        else:
+            log(INFO, f"[BEST] Final round {num_rounds} was the best — no restore needed")
 
         log(INFO, f"\n{'='*70}\n[GLOBAL] Final Federated Model Evaluation\n{'='*70}")
 
@@ -697,8 +735,13 @@ class FLEXMedStrategy(Strategy):
 
         consensus_logits, aggregation_metadata = compute_consensus(
             logits_list, client_metrics_list, self.client_configs[:len(logits_list)],
-            server_round
+            server_round, 
+            previous_consensus=self.previous_consensus_logits,
         )
+
+        # Update state for next round
+        if consensus_logits is not None:
+            self.previous_consensus_logits = consensus_logits
 
         if consensus_logits is None:
             return None, {}, {}

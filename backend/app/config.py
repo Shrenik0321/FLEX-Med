@@ -177,7 +177,6 @@ class Settings(BaseSettings):
         env_path = os.getenv("MODEL_PATH")
         if env_path:
             return Path(env_path)
-        return self.models_path / "Durdans-mobilenet-cnmc.pt"
 
     device: str = os.getenv("DEVICE", "cpu")
     class_names: List[str] = ["ALL (Leukemia)", "Healthy"]
@@ -195,12 +194,12 @@ class Settings(BaseSettings):
     focal_gamma: float = float(os.getenv("FLEX_MED_FOCAL_GAMMA", "2.0"))
 
     # Minority Class Boost (for Focal Loss clamping/adjustment)
-    minority_boost: float = float(os.getenv("FLEX_MED_MINORITY_BOOST", "0.80"))
+    minority_boost: float = float(os.getenv("FLEX_MED_MINORITY_BOOST", "0.90"))
 
     # Knowledge distillation configuration
     distill_weight_base: float = float(os.getenv("FLEX_MED_DISTILL_WEIGHT", "0.80"))
-    distill_decay_rate: float = float(os.getenv("FLEX_MED_DISTILL_DECAY", "0.18"))
-    weight_decay: float = 0.05
+    distill_decay_rate: float = float(os.getenv("FLEX_MED_DISTILL_DECAY", "0.10"))
+    weight_decay: float = float(os.getenv("FLEX_MED_WEIGHT_DECAY", "0.02"))
 
     # ------------------------------------------------------------------------
     # Dirichlet Partitioning Configuration (Runtime Data Heterogeneity)

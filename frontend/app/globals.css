@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -8,7 +9,7 @@
   --flex-red-hover: rgba(184, 0, 40, 0.12);
 
   /* Light mode only - minimal design tokens */
-  --background: #ffffff;
+  --background: #f9fafb;
   --foreground: #0a0a0a;
   --card: #ffffff;
   --card-foreground: #0a0a0a;

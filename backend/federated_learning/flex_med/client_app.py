@@ -16,9 +16,9 @@ from flex_med.task import (
     train as train_fn, NUM_CLASSES
 )
 from flex_med.utils.helpers import (
-    apply_freeze_strategy,load_model_weights,
+    apply_freeze_strategy, load_model_weights,
     get_display_id, save_model, load_model_for_client,
-    compute_per_class_accuracy
+    compute_per_class_accuracy, freeze_backbone, unfreeze_fraction_of_last_block
 )
 
 app = ClientApp()
@@ -61,43 +61,32 @@ def train(msg: Message, context: Context):
 
     model.to(device)
 
-    # <-------------------------------------- APPLY FREEZE STRATEGY -------------------------------------->
-    if model_type:
-        model = apply_freeze_strategy(model, model_type, server_round, total_rounds)
-        freeze_backbone = (server_round <= 3)
-        phase = "Phase 1 - Backbone FROZEN" if freeze_backbone else "Phase 2 - Fine-tuning"
-        print(f"[{display_id}] [Freeze] Round {server_round}/{total_rounds}: {phase}")
-
-    # <-------------------------------------- PRIVATE TRAINING -------------------------------------->
+    # <-------------------------------------- FREEZE/UNFREEZE STRATEGY -------------------------------------->
     base_lr = msg.content["config"]["lr"]
-
-    # --- Cosine Annealing Schedule ---
-    # Gradually lowers LR from base_lr -> lr_min following a half-cosine curve.
-    # Slow drop in early (frozen) rounds, fast drop in late (unfrozen) rounds.
-    lr_min = base_lr * 0.05  # Floor: 5% of max (e.g. 0.001 -> 0.00005)
-    t = server_round - 1     # 0-indexed round
-    decayed_lr = lr_min + 0.5 * (base_lr - lr_min) * (1.0 + math.cos(math.pi * t / total_rounds))
-
     progress = server_round / total_rounds
 
-    if progress <= 0.2:
-        phase_multiplier = 1.0      # Stage 1: Classifier only (Backbone frozen)
-        phase_name = "S1"
-    elif progress <= 0.4:
-        phase_multiplier = 0.30     # Stage 2: 25% of final block (3e-4 / 1e-3)
-        phase_name = "S2"
-    elif progress <= 0.6:
-        phase_multiplier = 0.10     # Stage 3: 50% of final block (3e-4 / 1e-3)
-        phase_name = "S3"
-    elif progress <= 0.8:
-        phase_multiplier = 0.05     # Stage 4: 75% of final block (1e-4 / 1e-3)
-        phase_name = "S4"
+    # Applying the 4-stage unfreeze strategy
+    model = apply_freeze_strategy(model, model_type, server_round, total_rounds)
+
+    # Discriminative learning where each part of the network has a different learning rate
+    phase = "INITIALIZING"
+    if server_round <= 6:
+        # Stage 1: Extended Head Only Warm-up (R1-R6)
+        classifier_lr = base_lr
+        backbone_lr = 0.0
+        phase = "PHASE 1 - Head Only Warm-up"
     else:
-        phase_multiplier = 0.01     # Stage 5: 100% of final block (5e-5 / 1e-3)
-        phase_name = "S5"
+        # Stage 2: 25% Backbone with Soft Refinement (R7-R10)
+        # We drop backbone LR to 0.03x to prevent peaking too early (Round 8 in log9)
+        classifier_lr = base_lr * 0.6  # Fixed throughout R7-10
+        backbone_lr = base_lr * 0.03   # Fixed throughout R7-10
+        phase = "PHASE 2 - 25% Backbone (Soft Refinement)"
+
+    print(f"[{display_id}] [Strategy] Round {server_round}/{total_rounds}: {phase}")
+    # print(f"[{display_id}] [Freeze] Round {server_round}/{total_rounds}: {phase}") # Removed old freeze log
 
     print(f"[{display_id}] Round {server_round}/{total_rounds} ({progress:.0%})")
-    print(f"[{display_id}] Base LR: {decayed_lr:.6f} | Backbone Multiplier: {phase_multiplier} ({phase_name})")
+    print(f"[{display_id}] Classifier LR: {classifier_lr:.6f} | Backbone LR: {backbone_lr:.6f} (dynamic)")
 
     # <-------------------------------------- KNOWLEDGE DISTILLATION -------------------------------------->
     distill_loss = 0.0
@@ -114,8 +103,7 @@ def train(msg: Message, context: Context):
                 distill_loss = distill_knowledge(
                     model=model, public_loader=public_loader, consensus_logits=consensus_logits,
                     device=device, epochs=context.run_config["distill-epochs"], 
-                    lr=context.run_config["distill-lr"], temperature=context.run_config["temperature"],
-                    phase_multiplier=phase_multiplier,
+                    classifier_lr=classifier_lr, backbone_lr=backbone_lr, temperature=context.run_config["temperature"],
                     current_round=server_round, total_rounds=total_rounds, adaptive=True
                 )
                 print(f"[{display_id}] Distillation Loss: {distill_loss:.4f}")
@@ -134,7 +122,7 @@ def train(msg: Message, context: Context):
     start_time = time.time()
     train_loss, val_loss, train_accuracy, val_accuracy = train_fn(
         model=model, trainloader=trainloader, epochs=context.run_config["local-epochs"],
-        base_lr=decayed_lr, phase_multiplier=phase_multiplier, device=device,
+        classifier_lr=classifier_lr, backbone_lr=backbone_lr, device=device,
         valloader=valloader, server_round=server_round, total_rounds=total_rounds
     )
     training_time = time.time() - start_time

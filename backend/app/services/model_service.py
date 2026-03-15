@@ -23,8 +23,8 @@ MODEL_CACHE: Dict[str, "ModelBundle"] = {}
 # Model type to canonical name mapping
 MODEL_TYPE_NAMES = {
     "efficientnet_b0": "EfficientNetB0",
-    "mobilenet_v2": "MobileNetV2",
-    "densenet121": "DenseNet121",
+    "efficientnet_b1": "EfficientNetB1",
+    "efficientnet_b2": "EfficientNetB2",
 }
 
 
@@ -52,20 +52,20 @@ def select_model(model_path: Path) -> Tuple[torch.nn.Module, str]:
     """Pick architecture based on filename convention. Returns (model, model_name)."""
     name = model_path.name.lower()
 
-    # Check for model type in filename
-    if "mobilenet" in name:
-        model = get_model_by_type('mobilenet_v2')
-        model_name = "MobileNetV2"
+    # Check for model type in filename — check specific variants before generic prefix
+    if "efficientnet_b2" in name:
+        model = get_model_by_type('efficientnet_b2')
+        model_name = "EfficientNetB2"
+    elif "efficientnet_b1" in name:
+        model = get_model_by_type('efficientnet_b1')
+        model_name = "EfficientNetB1"
     elif "efficientnet" in name:
         model = get_model_by_type('efficientnet_b0')
         model_name = "EfficientNetB0"
-    elif "densenet" in name:
-        model = get_model_by_type('densenet121')
-        model_name = "DenseNet121"
     else:
-        # Default fallback to MobileNetV2 (lightweight)
-        model = get_model_by_type('mobilenet_v2')
-        model_name = "MobileNetV2"
+        # Default fallback to EfficientNet-B0 (lightweight)
+        model = get_model_by_type('efficientnet_b0')
+        model_name = "EfficientNetB0"
 
     return model, model_name
 
@@ -76,28 +76,16 @@ def adapt_state_dict(model: torch.nn.Module, state_dict: Dict[str, torch.Tensor]
     """
     new_state_dict = state_dict.copy()
     
-    # Check for MobileNet/EfficientNet (classifier.1.weight -> classifier.1.1.weight)
-    if any(x in model_name for x in ["MobileNet", "EfficientNet"]):
+    # Check for EfficientNet (classifier.1.weight -> classifier.1.1.weight)
+    if "EfficientNet" in model_name:
         if "classifier.1.weight" in state_dict and "classifier.1.1.weight" not in state_dict:
-             # Check if model has Sequential classifier[1]
-             if hasattr(model, "classifier") and isinstance(model.classifier[1], torch.nn.Sequential):
+            if hasattr(model, "classifier") and isinstance(model.classifier[1], torch.nn.Sequential):
                 print(f"[Model Service] Adapting legacy {model_name} checkpoint: classifier.1 -> classifier.1.1")
                 new_state_dict["classifier.1.1.weight"] = state_dict["classifier.1.weight"]
                 new_state_dict["classifier.1.1.bias"] = state_dict["classifier.1.bias"]
                 del new_state_dict["classifier.1.weight"]
                 del new_state_dict["classifier.1.bias"]
 
-    # Check for DenseNet (classifier.weight -> classifier.0.weight)
-    elif "DenseNet" in model_name:
-        if "classifier.weight" in state_dict and "classifier.0.weight" not in state_dict:
-             # Check if model has Sequential classifier
-             if hasattr(model, "classifier") and isinstance(model.classifier, torch.nn.Sequential):
-                print(f"[Model Service] Adapting legacy DenseNet checkpoint: classifier -> classifier.0")
-                new_state_dict["classifier.0.weight"] = state_dict["classifier.weight"]
-                new_state_dict["classifier.0.bias"] = state_dict["classifier.bias"]
-                del new_state_dict["classifier.weight"]
-                del new_state_dict["classifier.bias"]
-                
     return new_state_dict
 
 

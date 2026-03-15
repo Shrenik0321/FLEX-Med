@@ -26,8 +26,8 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'model_type') THEN
         CREATE TYPE model_type AS ENUM (
             'efficientnet_b0',
-            'densenet121',
-            'mobilenet_v2'
+            'efficientnet_b1',
+            'efficientnet_b2'
         );
     END IF;
 
@@ -64,8 +64,16 @@ CREATE INDEX idx_clients_status ON clients(status);
 CREATE INDEX idx_clients_model_type ON clients(model_type);
 
 -- ------------------------------------------
--- 3. FL_SIMULATIONS TABLE
+-- fl_simulations TABLE
 -- ------------------------------------------
+-- configs JSONB structure:
+-- {
+--   "num_rounds": 10,
+--   "local_epochs": 1,
+--   "learning_rate": 0.001,
+--   "weight_decay": 0.02,
+--   ...
+-- }
 -- aggregate_metrics JSONB structure:
 -- {
 --   "rounds": [
@@ -187,6 +195,7 @@ CREATE TABLE system_config (
 -- Single configuration — no presets. dirichlet_alpha is a direct top-level field.
 INSERT INTO system_config (config) VALUES ('{
     "dirichlet_alpha": 1.5,
+    "consensus_momentum": 0.35,
     "minority_boost": 0.90,
     "distill_weight_base": 0.80,
     "distill_decay_rate": 0.10,
@@ -200,7 +209,7 @@ INSERT INTO system_config (config) VALUES ('{
     "batch_size": 32,
     "distill_lr": 0.0005,
     "distill_epochs": 1,
-    "temperature": 4.0,
+    "temperature": 3.0,
     "dirichlet_seed": 42,
     "dirichlet_min_partition_size": 400,
     "public_anchor_dataset_path": "/content/drive/MyDrive/College/FLEX-Med/backend/datasets/cnmc/cnmc_public_anchor",

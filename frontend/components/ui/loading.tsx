@@ -1,6 +1,5 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface LoadingProps {
@@ -10,19 +9,19 @@ interface LoadingProps {
   fullScreen?: boolean;
 }
 
+const sizeMap = {
+  sm: "h-5 w-5 border-2",
+  md: "h-8 w-8 border-2",
+  lg: "h-10 w-10 border-2",
+  xl: "h-14 w-14 border-[3px]",
+};
+
 export function Loading({
   className,
   size = "md",
   text,
   fullScreen = false,
 }: LoadingProps) {
-  const sizeClasses = {
-    sm: "h-4 w-4 border-2",
-    md: "h-8 w-8 border-2",
-    lg: "h-12 w-12 border-3",
-    xl: "h-16 w-16 border-4",
-  };
-
   const loader = (
     <div
       className={cn(
@@ -30,38 +29,21 @@ export function Loading({
         className,
       )}
     >
-      <div className="relative">
-        <Loader2
-          className={cn(
-            "animate-spin text-primary/80",
-            size === "sm" && "h-4 w-4",
-            size === "md" && "h-8 w-8",
-            size === "lg" && "h-12 w-12",
-            size === "xl" && "h-16 w-16",
-          )}
-        />
-        {/* Subtle pulse background */}
-        <div
-          className={cn(
-            "absolute inset-0 rounded-full bg-primary/10 animate-pulse",
-            size === "sm" && "scale-150",
-            size === "md" && "scale-125",
-            size === "lg" && "scale-110",
-            size === "xl" && "scale-105",
-          )}
-        />
-      </div>
+      <div
+        className={cn(
+          "rounded-full border-gray-100 border-t-[#b80028] animate-spin",
+          sizeMap[size],
+        )}
+      />
       {text && (
-        <span className="text-sm font-medium text-muted-foreground animate-pulse">
-          {text}
-        </span>
+        <span className="text-sm font-medium text-gray-400">{text}</span>
       )}
     </div>
   );
 
   if (fullScreen) {
     return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/60 backdrop-blur-sm transition-all duration-300">
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white/70 backdrop-blur-sm">
         {loader}
       </div>
     );
