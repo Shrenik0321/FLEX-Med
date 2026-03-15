@@ -432,12 +432,12 @@ def unfreeze_fraction_of_last_block(model, model_type: str, fraction: float):
 
     return model
 
-PHASE2_START_ROUND = 6  # All architectures: Phase 1 rounds 1-5, Phase 2 rounds 6-10
+PHASE2_START_ROUND = 4  # All architectures: Phase 1 rounds 1-3, Phase 2 rounds 4-10
 
 def apply_freeze_strategy(model, model_type: str, server_round: int, total_rounds: int = 10):
     """2-stage progressive unfreezing strategy.
-    Phase 1 (R1-5): Classifier head only — backbone frozen.
-    Phase 2 (R6-10): 25% of final backbone block unfrozen.
+    Phase 1 (R1-3): Classifier head only — backbone frozen.
+    Phase 2 (R4-10): 25% of final backbone block unfrozen.
     """
     from flwr.common import log
     from logging import INFO

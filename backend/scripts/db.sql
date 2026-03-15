@@ -64,14 +64,14 @@ CREATE INDEX idx_clients_status ON clients(status);
 CREATE INDEX idx_clients_model_type ON clients(model_type);
 
 -- Client inserts ordered by partition assignment (insertion order = partition_id):
---   partition 0 (2532 samples, 3.9:1 ratio) → B1 (needs most capacity for hardest imbalance)
+--   partition 0 (2532 samples, 3.9:1 ratio) → B0 (testing smallest model on hardest imbalance)
 --   partition 1 (3954 samples, 2.7:1 ratio) → B2 (most data supports largest model)
---   partition 2 (2288 samples, 3.1:1 ratio) → B0 (smallest model on smallest dataset)
+--   partition 2 (2288 samples, 3.1:1 ratio) → B1 (mid-capacity model on smallest dataset)
 -- NOTE: fl_simulation.py fetches clients with no ORDER BY — relies on insertion order (id ASC).
 INSERT INTO clients (client_name, model_type, model_path, status) VALUES
-    ('Delmon', 'efficientnet_b1', '/content/drive/MyDrive/College/FLEX-Med/backend/federated_learning/models/Delmon-b1.pt', 'Active'),
+    ('Asiri',  'efficientnet_b0', '/content/drive/MyDrive/College/FLEX-Med/backend/federated_learning/models/Asiri-b0.pt',  'Active'),
     ('Lanka',  'efficientnet_b2', '/content/drive/MyDrive/College/FLEX-Med/backend/federated_learning/models/Lanka-b2.pt',  'Active'),
-    ('Asiri',  'efficientnet_b0', '/content/drive/MyDrive/College/FLEX-Med/backend/federated_learning/models/Asiri-b0.pt',  'Active');
+    ('Delmon', 'efficientnet_b1', '/content/drive/MyDrive/College/FLEX-Med/backend/federated_learning/models/Delmon-b1.pt', 'Active');
 
 -- ------------------------------------------
 -- fl_simulations TABLE

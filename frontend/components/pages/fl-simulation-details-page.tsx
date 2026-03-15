@@ -1138,6 +1138,9 @@ export default function FLSimulationDetailsPage({
                 value={formatDuration(simulation.duration)}
               />
             )}
+            {bestModelRound && (
+              <StatPill label="Best" value={`R${bestModelRound}`} />
+            )}
             <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
               Completed
             </span>
@@ -1359,6 +1362,14 @@ export default function FLSimulationDetailsPage({
                 value={pct(postFlStats.worst.acc)}
                 sub={postFlStats.worst.name}
               />
+              {bestModelRound && (
+                <KpiCard
+                  label="Best model"
+                  value={`Round ${bestModelRound}`}
+                  sub="Used for evaluation"
+                  highlight="green"
+                />
+              )}
             </div>
 
             {/* Comparison table */}
@@ -1637,7 +1648,7 @@ export default function FLSimulationDetailsPage({
             <ChartCard title="Loss" sub="Validation vs training loss per round">
               <Line
                 data={lossChartData}
-                options={lineOptions(lossLimits, false)}
+                options={lineOptions(lossLimits, false, bestModelRound)}
               />
             </ChartCard>
             <ChartCard
