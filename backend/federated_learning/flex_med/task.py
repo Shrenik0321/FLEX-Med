@@ -54,6 +54,7 @@ PRIVATE_TRAIN_TRANSFORM = Compose([
     transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)), # Prep jitter
     transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.0, hue=0.0), # Staining variations
     transforms.GaussianBlur(kernel_size=5, sigma=(0.1, 1.0)), # Microscope focus jitter
+    transforms.RandomGrayscale(p=0.2),   
     ToTensor(), # Convert to tensor (Required before RandomErasing)
     transforms.RandomErasing(p=0.5, scale=(0.02, 0.1), ratio=(0.3, 3.3), value=0), # Slide debris
     Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]), # ImageNet standards

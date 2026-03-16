@@ -432,7 +432,8 @@ def unfreeze_fraction_of_last_block(model, model_type: str, fraction: float):
 
     return model
 
-PHASE2_START_ROUND = 4  # All architectures: Phase 1 rounds 1-3, Phase 2 rounds 4-10
+PHASE2_START_ROUND = 4  # Phase 1: R1-3, Phase 2: R4-6, Phase 3: R7-10
+PHASE3_START_ROUND = 7
 
 def apply_freeze_strategy(model, model_type: str, server_round: int, total_rounds: int = 10):
     """2-stage progressive unfreezing strategy.
@@ -449,11 +450,16 @@ def apply_freeze_strategy(model, model_type: str, server_round: int, total_round
         # Phase 1: Head Only Warm-up
         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         log(INFO, f"[Freeze] Round {server_round}/{total_rounds}: Stage 1 - Classifier only ({trainable_params:,} params)")
-    else:
+    elif server_round < PHASE3_START_ROUND:
         # Phase 2: 25% Backbone Refinement
         model = unfreeze_fraction_of_last_block(model, model_type, fraction=0.25)
         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         log(INFO, f"[Freeze] Round {server_round}/{total_rounds}: Stage 2 - 25% backbone block ({trainable_params:,} params)")
+    else:
+        # Phase 3: 50% Backbone Refinement
+        model = unfreeze_fraction_of_last_block(model, model_type, fraction=0.50)
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        log(INFO, f"[Freeze] Round {server_round}/{total_rounds}: Stage 3 - 50% backbone block ({trainable_params:,} params)")
 
     return model
 
