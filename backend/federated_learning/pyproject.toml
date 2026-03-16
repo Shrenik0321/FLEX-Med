@@ -32,11 +32,15 @@ clientapp = "flex_med.client_app:app"
 
 [tool.flwr.app.config]
 num-server-rounds = 10
-local-epochs = 1
+fraction-train = 1.0
+fraction-evaluate = 1.0
+local-epochs = 2
 batch-size = 32
-lr = 0.001
-distill-epochs = 1
-temperature = 4.0
+lr = 0.0005
+lr-decay = 0.9
+distill-lr = 0.0005
+distill-epochs = 2
+temperature = 3.0
 
 [tool.flwr.federations]
 default = "local-simulation"
@@ -48,6 +52,10 @@ num-partitions = 3
 [tool.flwr.federations.remote-federation]
 address = "<SUPERLINK-ADDRESS>:<PORT>"
 insecure = true
+
+[tool.flwr.app.federations.default.options]
+num-supernodes = 3
+num-partitions = 3
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
