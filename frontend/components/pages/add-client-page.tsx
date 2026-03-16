@@ -38,7 +38,6 @@ export default function AddClientPage({ onBack }: AddClientPageProps) {
       toast.success("Client registered successfully!", { id: toastId });
       onBack();
     } catch (err) {
-      console.error(err);
       toast.error(err instanceof Error ? err.message : "An error occurred", {
         id: toastId,
       });

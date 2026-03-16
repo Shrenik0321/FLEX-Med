@@ -297,7 +297,7 @@ def get_model_by_type(model_type: str, use_pretrained: bool = True, dropout_rate
 
 def get_initial_dropout_rate(model_type: str) -> float:
     """Get default dropout rate for model architecture."""
-    rates = {'efficientnet_b0': 0.40, 'efficientnet_b1': 0.40, 'efficientnet_b2': 0.35}
+    rates = {'efficientnet_b0': 0.40, 'efficientnet_b1': 0.40, 'efficientnet_b2': 0.45}
     return rates.get(model_type.lower(), 0.3)
 
 def add_dropout_to_classifier(model, model_type: str, dropout_rate: float = 0.3):
@@ -436,9 +436,10 @@ PHASE2_START_ROUND = 4  # Phase 1: R1-3, Phase 2: R4-6, Phase 3: R7-10
 PHASE3_START_ROUND = 7
 
 def apply_freeze_strategy(model, model_type: str, server_round: int, total_rounds: int = 10):
-    """2-stage progressive unfreezing strategy.
+    """3-phase progressive unfreezing strategy.
     Phase 1 (R1-3): Classifier head only — backbone frozen.
-    Phase 2 (R4-10): 25% of final backbone block unfrozen.
+    Phase 2 (R4-6): 25% of final backbone block unfrozen.
+    Phase 3 (R7+):  50% of final backbone block unfrozen (capped to prevent overfitting).
     """
     from flwr.common import log
     from logging import INFO

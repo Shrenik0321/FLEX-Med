@@ -38,15 +38,6 @@ def get_clients(supabase: SupabaseClient = Depends(get_supabase_client)):
     cleaned_data = [fix_client_data(c) for c in response.data]
     return cleaned_data
 
-@router.get("/clients/{client_id}", response_model=Client)
-def get_client(client_id: int, supabase: SupabaseClient = Depends(get_supabase_client)):
-    response = supabase.from_("clients").select("*").eq("id", client_id).execute()
-    if not response.data:
-        raise HTTPException(status_code=404, detail="Client not found")
-    
-    # Fix incompatible data
-    return fix_client_data(response.data[0])
-
 @router.post("/clients", response_model=Client)
 def create_client(client: ClientCreate, supabase: SupabaseClient = Depends(get_supabase_client)):
     """
@@ -70,13 +61,6 @@ def create_client(client: ClientCreate, supabase: SupabaseClient = Depends(get_s
 
     return response.data[0]
 
-@router.put("/clients/{client_id}", response_model=Client)
-def update_client(client_id: int, client: ClientCreate, supabase: SupabaseClient = Depends(get_supabase_client)):
-    response = supabase.from_("clients").update(jsonable_encoder(client)).eq("id", client_id).execute()
-    if not response.data:
-        raise HTTPException(status_code=404, detail="Client not found")
-    return response.data[0]
-
 @router.delete("/clients/{client_id}")
 def delete_client(client_id: int, supabase: SupabaseClient = Depends(get_supabase_client)):
     """
@@ -89,66 +73,3 @@ def delete_client(client_id: int, supabase: SupabaseClient = Depends(get_supabas
         raise HTTPException(status_code=404, detail="Client not found")
     return {"ok": True}
 
-
-@router.get("/clients/{client_id}/metrics-history")
-def get_client_metrics_history(
-    client_id: int,
-    supabase: SupabaseClient = Depends(get_supabase_client)
-):
-    """
-    Get the full metrics history for a specific client across all simulations.
-
-    Returns a list of all simulations this client participated in, with their metrics.
-    Useful for tracking client performance over time.
-    """
-    try:
-        # First verify client exists
-        client_response = supabase.from_("clients").select("*").eq("id", client_id).execute()
-        if not client_response.data:
-            raise HTTPException(status_code=404, detail="Client not found")
-
-        client = client_response.data[0]
-
-        # Fetch all metrics for this client across simulations
-        metrics_response = supabase.from_("client_simulation_metrics") \
-            .select("*, fl_simulations(id, created_at, configs, status)") \
-            .eq("client_id", client_id) \
-            .order("created_at", desc=True) \
-            .execute()
-
-        history = []
-        for record in metrics_response.data or []:
-            simulation = record.get("fl_simulations", {})
-            metrics = record.get("metrics", {})
-
-            # Extract key metrics for quick reference
-            # Note: pre_fl no longer stored - we use theoretical baseline (0.5 accuracy for binary classification)
-            post_fl = metrics.get("global", {}).get("post_fl", {})
-
-            history.append({
-                "simulation_id": simulation.get("id"),
-                "simulation_created_at": simulation.get("created_at"),
-                "simulation_status": simulation.get("status"),
-                "client_status": record.get("status"),
-                "num_rounds": len(metrics.get("rounds", [])),
-                "pre_fl_accuracy": None,  # No longer stored - baseline is 0.5 (random chance)
-                "post_fl_accuracy": post_fl.get("accuracy"),
-                "improvement_accuracy": None,  # Calculated from round progression instead
-                "pre_fl_loss": None,  # No longer stored - baseline is ln(2) ≈ 0.693
-                "post_fl_loss": post_fl.get("loss"),
-                "full_metrics": metrics  # Include full metrics for detailed view
-            })
-
-        return {
-            "client_id": client_id,
-            "client_name": client.get("client_name"),
-            "model_type": client.get("model_type"),
-            "total_simulations": len(history),
-            "history": history
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching metrics history for client {client_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))

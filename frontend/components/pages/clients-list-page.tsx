@@ -176,8 +176,8 @@ export default function ClientsListPage({
         if (!response.ok) throw new Error("Failed to fetch");
         const data = await response.json();
         setClients(data);
-      } catch (error) {
-        console.error("Failed to fetch clients:", error);
+      } catch {
+        // handled silently; UI shows empty state
       } finally {
         setIsLoading(false);
       }
@@ -194,14 +194,13 @@ export default function ClientsListPage({
     setIsDeleting(true);
     try {
       const response = await fetch(
-        `http://localhost:8000/api/clients/${deleteModal.clientId}`,
+        `${API_BASE_PATH}/clients/${deleteModal.clientId}`,
         { method: "DELETE" },
       );
       if (!response.ok) throw new Error("Failed to delete");
       setClients((prev) => prev.filter((c) => c.id !== deleteModal.clientId));
       setDeleteModal({ isOpen: false, clientId: null, clientName: "" });
-    } catch (error) {
-      console.error("Failed to delete client:", error);
+    } catch {
       toast.error("Failed to delete client. Please try again.");
     } finally {
       setIsDeleting(false);
@@ -213,7 +212,7 @@ export default function ClientsListPage({
       {isLoading ? (
         <Loading className="min-h-[400px]" text="Loading clients…" />
       ) : (
-        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {clients.length === 0 ? (
             <EmptyState
               title="No clients found"
@@ -223,7 +222,7 @@ export default function ClientsListPage({
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100">
+                <tr className="border-b border-gray-200 bg-gray-50/60">
                   {["Name", "Status", "Model", "Created", ""].map((h) => (
                     <th
                       key={h}
@@ -241,7 +240,7 @@ export default function ClientsListPage({
                   <tr
                     key={client.id}
                     onClick={() => onSelectClient(client)}
-                    className="cursor-pointer border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition-colors"
+                    className="cursor-pointer border-b border-gray-100 last:border-0 hover:bg-gray-100 transition-colors"
                   >
                     <td className="py-3.5 px-4 font-semibold text-gray-900">
                       {client.client_name}

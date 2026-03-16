@@ -19,7 +19,6 @@ def main(grid: Grid, context: Context) -> None:
     num_rounds: int = context.run_config["num-server-rounds"]
     lr: float = context.run_config["lr"]
     local_epochs: int = context.run_config.get("local-epochs", 1)
-    server_round: int = context.run_config.get("round", 1)
     batch_size: int = context.run_config.get("batch-size", 32)
 
     print(f"\n[SERVER] Starting FL ({num_rounds} rounds, lr={lr})")
@@ -29,7 +28,7 @@ def main(grid: Grid, context: Context) -> None:
     print(f"[SERVER] {len(client_configs)} clients loaded")
 
     # <-------------------------------------- LOAD PUBLIC ANCHOR DATASET -------------------------------------->
-    public_loader = load_public_dataset(batch_size=batch_size, round_num=server_round, total_rounds=num_rounds)
+    public_loader = load_public_dataset(batch_size=batch_size)
     num_samples = len(public_loader.dataset)
 
     initial_consensus = np.zeros((num_samples, NUM_CLASSES), dtype=np.float32) # creates an array of arrays [[0,0] * num_samples]

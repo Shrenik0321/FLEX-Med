@@ -116,8 +116,7 @@ export default function FLHistoryPage({
         if (!response.ok) throw new Error("Failed to fetch simulations");
         const data: FLSimulation[] = await response.json();
         setSimulations(data);
-      } catch (error) {
-        console.error("Error fetching simulations:", error);
+      } catch {
         toast.error("Failed to load simulation history");
       } finally {
         setLoading(false);
@@ -140,7 +139,7 @@ export default function FLHistoryPage({
       {loading ? (
         <Loading className="min-h-[400px]" text="Loading simulations…" />
       ) : (
-        <div className="bg-white rounded-xl border border-gray-300 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {simulations.length === 0 ? (
             <EmptyState
               title="No simulations found"
@@ -150,7 +149,7 @@ export default function FLHistoryPage({
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-300">
+                <tr className="border-b border-gray-200 bg-gray-50/60">
                   {[
                     "ID",
                     "Status",
@@ -185,7 +184,7 @@ export default function FLHistoryPage({
                     <tr
                       key={simulation.id}
                       onClick={() => onSelectSimulation(simulation)}
-                      className="cursor-pointer border-b border-gray-200 last:border-0 hover:bg-gray-50/60 transition-colors"
+                      className="cursor-pointer border-b border-gray-100 last:border-0 hover:bg-gray-100 transition-colors"
                     >
                       <td className="py-3.5 px-4 font-semibold text-gray-900 tabular-nums">
                         #{simulation.id}

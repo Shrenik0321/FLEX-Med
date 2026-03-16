@@ -1,22 +1,31 @@
 {
-  "simulation_id": 3,
+  "simulation_id": null,
   "clients": [
     {
       "id": 1,
       "created_at": "2026-01-27T17:04:05.693597+00:00",
       "client_name": "Asiri",
-      "model_type": "resnet18",
+      "model_type": "efficientnet_b0",
       "status": "Inactive",
-      "model_path": "/content/drive/MyDrive/College/FLEX-Med/models/Asiri_resnet18.pt",
+      "model_path": "/content/drive/MyDrive/College/FLEX-Med/models/Asiri-b0.pt",
       "metrics": "{}"
     },
     {
       "id": 2,
-      "created_at": "2026-01-27T17:04:18.259889+00:00",
-      "client_name": "Durdans",
-      "model_type": "mobilenet_v2",
+      "created_at": "2026-01-27T17:04:18.259899+00:00",
+      "client_name": "Lanka",
+      "model_type": "efficientnet_b2",
       "status": "Inactive",
-      "model_path": "/content/drive/MyDrive/College/FLEX-Med/models/Durdans.pt",
+      "model_path": "/content/drive/MyDrive/College/FLEX-Med/models/Lanka-b2.pt",
+      "metrics": "{}"
+    },
+    {
+      "id": 3,
+      "created_at": "2026-01-27T17:04:30.123456+00:00",
+      "client_name": "Delmon",
+      "model_type": "efficientnet_b1",
+      "status": "Inactive",
+      "model_path": "/content/drive/MyDrive/College/FLEX-Med/models/Delmon-b1.pt",
       "metrics": "{}"
     }
   ]

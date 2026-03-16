@@ -24,34 +24,6 @@ async def inference(
     supabase: SupabaseClient = Depends(get_supabase_client),
     settings: Settings = Depends(get_settings)
 ):
-    """
-    Unified inference endpoint: Prediction.
-
-    Processes an uploaded blood cell microscopy image and returns:
-    - Prediction (Healthy vs ALL/Leukemia)
-    - Confidence score
-    - All class probabilities
-
-    Args:
-        file: Uploaded blood cell microscopy image (JPEG/PNG)
-
-    Returns:
-        JSON response with prediction
-
-    Example Response:
-        {
-            "prediction": "ALL (Leukemia)",
-            "confidence": 0.87,
-            "class": 1,
-            "all_probabilities": {
-                "Healthy": 0.13,
-                "ALL (Leukemia)": 0.87
-            },
-            "model": "EfficientNetB0",
-            "model_path": "/path/to/model.pt",
-            "device": "cpu"
-        }
-    """
     try:
         logger.info(f"Received inference request for client ID {client_id}, file: {file.filename}")
 

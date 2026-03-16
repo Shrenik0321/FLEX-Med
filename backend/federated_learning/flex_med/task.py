@@ -19,11 +19,11 @@ from flwr.server import Grid
 from flwr_datasets.partitioner import DirichletPartitioner
 from datasets import Dataset
 from flex_med.utils.config import (
-    BASE_PATH, CLIENT_INFO_FILE_PATH, DATASET_FILE_PATH,
+    CLIENT_INFO_FILE_PATH,
     PUBLIC_ANCHOR_DATASET_PATH, PUBLIC_TEST_DATASET_PATH, LOCAL_TRAIN_DATASET_PATH,
-    MODEL_CHECKPOINT_FILE_PATH, GRAPHS_OUTPUT_DIR, NUM_CLASSES, IMG_SIZE,
+    NUM_CLASSES, IMG_SIZE,
     DIRICHLET_ALPHA, DIRICHLET_SEED, DIRICHLET_MIN_PARTITION_SIZE,
-    FOCAL_GAMMA, MINORITY_BOOST, WEIGHT_DECAY, DISTILL_WEIGHT_BASE, DISTILL_DECAY_RATE
+    MINORITY_BOOST, WEIGHT_DECAY, DISTILL_WEIGHT_BASE, DISTILL_DECAY_RATE
 )
 from flex_med.utils.helpers import (
     sanitize_client_paths,
@@ -108,7 +108,7 @@ def create_dirichlet_partitioner(
     return partitioner, full_dataset
 
 # Load the public anchor dataset for consensus generation.
-def load_public_dataset(batch_size=32, round_num=1, total_rounds=10):
+def load_public_dataset(batch_size=32):
     if not os.path.exists(PUBLIC_ANCHOR_DATASET_PATH):
         raise FileNotFoundError(f"Public data not found at {PUBLIC_ANCHOR_DATASET_PATH}")
 

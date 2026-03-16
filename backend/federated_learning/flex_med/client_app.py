@@ -8,7 +8,6 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="torchvision.transforms._functional_pil")
 warnings.filterwarnings("ignore", message=".*'mode' parameter is deprecated.*")
 import random
-import math
 from flex_med.utils.config import CLIENT_INFO_FILE_PATH, DIRICHLET_SEED
 from flex_med.task import (
     load_private_dataset,
@@ -101,7 +100,7 @@ def train(msg: Message, context: Context):
                 print(f"[{display_id}] Phase 1: Knowledge Distillation")
 
                 #  Load public dataset for logit generation
-                public_loader = load_public_dataset(batch_size=context.run_config["batch-size"], round_num=server_round, total_rounds=total_rounds)
+                public_loader = load_public_dataset(batch_size=context.run_config["batch-size"])
 
                 #  Perform knowledge distillation
                 distill_loss = distill_knowledge(
@@ -146,7 +145,7 @@ def train(msg: Message, context: Context):
         print(f"[{display_id}] Save failed: {e}")
 
     # <-------------------------------------- GENERATE PUBLIC LOGITS -------------------------------------->
-    public_loader = load_public_dataset(batch_size=context.run_config["batch-size"], round_num=server_round, total_rounds=total_rounds)
+    public_loader = load_public_dataset(batch_size=context.run_config["batch-size"])
     public_logits = get_public_logits(model, public_loader, device)
 
     print(f"[{display_id}] Round {server_round} Complete\n")

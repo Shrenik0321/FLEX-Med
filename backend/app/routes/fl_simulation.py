@@ -32,25 +32,6 @@ async def start_fl(
     supabase: SupabaseClient = Depends(get_supabase_client),
     settings: Settings = Depends(get_settings)
 ):
-    """
-    Start a new federated learning simulation.
-
-    This endpoint:
-    1. Fetches clients from the database (optionally filtered by client_ids)
-    2. Creates a simulation record to track the FL run
-    3. Forwards the request to the FL orchestrator (Colab/ngrok)
-    4. Updates simulation status based on orchestrator response
-
-    Request Body:
-        - client_ids: Optional list of client IDs to participate (if None, all clients are used)
-        - dataset: Optional dataset selection
-        - config: Optional FL configuration overrides
-
-    Returns:
-        - message: Success/error message
-        - simulation_id: ID of the created simulation record
-        - orchestrator_response: Response from FL orchestrator
-    """
     # Parse request body
     selected_client_ids = request.client_ids if request else None
     dataset = request.dataset if request else None
@@ -291,14 +272,6 @@ async def create_simulation(
     simulation_data: FLSimulationCreate,
     supabase: SupabaseClient = Depends(get_supabase_client)
 ):
-    """
-    Create a new FL simulation record.
-
-    This endpoint is typically called before starting an FL run to track
-    the simulation configuration and status.
-
-    Note: This is a standalone CRUD endpoint. For running FL, use /start_fl or /start_fl_simulation.
-    """
     data = {
         "configs": simulation_data.configs,
         "status": SimulationStatus.PENDING.value,
@@ -319,13 +292,6 @@ async def list_simulations(
     limit: int = 50,
     supabase: SupabaseClient = Depends(get_supabase_client)
 ):
-    """
-    List all FL simulations, ordered by creation date (newest first).
-
-    Args:
-        status: Optional filter by status (pending, running, completed, failed)
-        limit: Maximum number of results to return (default: 50)
-    """
     try:
         query = supabase.from_("fl_simulations").select("*")
 
@@ -347,11 +313,6 @@ async def get_simulation(
     simulation_id: int,
     supabase: SupabaseClient = Depends(get_supabase_client)
 ):
-    """
-    Get a specific FL simulation by ID.
-
-    Returns the full simulation record including configs, metrics, and timing info.
-    """
     try:
         response = supabase.from_("fl_simulations").select("*").eq("id", simulation_id).execute()
         if not response.data:
@@ -369,12 +330,6 @@ async def update_simulation(
     update_data: FLSimulationUpdate,
     supabase: SupabaseClient = Depends(get_supabase_client)
 ):
-    """
-    Update an FL simulation record.
-
-    Allows updating status, metrics, error messages, and timing information.
-    Only provided fields will be updated (null fields are ignored).
-    """
     # Convert to dict, exclude None values
     data = update_data.model_dump(exclude_none=True)
 
@@ -402,17 +357,6 @@ async def complete_simulation(
     simulation_id: int,
     supabase: SupabaseClient = Depends(get_supabase_client)
 ):
-    """
-    Mark a simulation as completed and compute final aggregate metrics.
-
-    This endpoint:
-    1. Fetches the simulation record
-    2. Fetches all participating client metrics
-    3. Computes aggregate metrics (averages, std, round-by-round)
-    4. Updates simulation with final metrics, completion time, and duration
-
-    Should be called after FL orchestrator completes training.
-    """
     try:
         # Fetch simulation record
         sim_response = supabase.from_("fl_simulations").select("*").eq("id", simulation_id).execute()

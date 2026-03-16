@@ -6,17 +6,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea"; // Assuming this exists, if not I will fallback to textarea
+import { Textarea } from "@/components/ui/textarea";
 import { Loading } from "@/components/ui/loading";
 
 export default function PublicDatasetPage() {
   const [datasetName, setDatasetName] = useState("");
   const [datasetDescription, setDatasetDescription] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // Check if Textarea component exists, otherwise use basic textarea
-  // Since I haven't checked for Textarea component, I'll stick to basic textarea with shadcn classes for safety or check first.
-  // Actually, I'll stick to the existing textarea classes but wrapped in a better structure.
 
   const handleSubmit = async () => {
     if (!datasetName) {
@@ -29,7 +25,6 @@ export default function PublicDatasetPage() {
 
     try {
       // Simulate API call
-      console.log("Uploading dataset", { datasetName, datasetDescription });
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
       toast.success("Dataset uploaded successfully!", { id: toastId });
