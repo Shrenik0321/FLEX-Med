@@ -170,8 +170,6 @@ def load_private_dataset(partition_id: int, num_partitions: int, batch_size=32,
     train_labels = [full_dataset.targets[client_indices[i]] for i in train_indices]
     class_counts = np.bincount(train_labels, minlength=NUM_CLASSES)
 
-    # Power-based rebalancing: MINORITY_BOOST controls how much to rebalance
-    # 0.0 = natural distribution, 0.5 = square-root, 1.0 = full inverse-frequency (50/50)
     class_weights = 1.0 / np.maximum(class_counts, 1) ** MINORITY_BOOST
     sample_weights = [class_weights[label] for label in train_labels]
 
@@ -235,8 +233,6 @@ def train(model, trainloader, epochs, classifier_lr, backbone_lr, device,
     # Standard CrossEntropyLoss with label smoothing (WRS handles class balance)
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
-    # Separate parameters into four groups for Discriminative LRs + Weight Decay optimization
-    # Rule: Exclude 1D parameters (biases and BN layers) from weight decay.
     classifier_decay = []
     classifier_no_decay = []
     backbone_decay = []
@@ -286,7 +282,6 @@ def train(model, trainloader, epochs, classifier_lr, backbone_lr, device,
             loss = criterion(outputs, labels)
             loss.backward()
             
-            # STABILITY FIX: Tighten gradient clipping to prevent fine-tuning explosions
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
             
             optimizer.step()

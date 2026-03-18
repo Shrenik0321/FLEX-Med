@@ -409,10 +409,10 @@ def unfreeze_fraction_of_last_block(model, model_type: str, fraction: float):
     last_block = None
 
     if model_type.startswith('efficientnet'):
-        # Unfreeze the final 1x1 conv + BN layer (Bridge to classifier)
-        # This layer is critical for adapting ImageNet features to medical images.
-        for param in model.features[-1].parameters():
-            param.requires_grad = True
+        for module in model.features[-1].modules():
+            if not isinstance(module, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
+                for param in module.parameters(recurse=False):
+                    param.requires_grad = True
         last_block = model.features[-2]  # Stage 7 (last MBConv stage)
 
     if last_block is not None:
@@ -427,19 +427,22 @@ def unfreeze_fraction_of_last_block(model, model_type: str, fraction: float):
 
         for i, child in enumerate(children):
             if i >= unfreeze_start_idx:
-                for param in child.parameters(recurse=True):  # recurse=True (default): all params in block
-                    param.requires_grad = True
+                for module in child.modules():
+                    # Skip BatchNorm layers to keep statistics stable
+                    if isinstance(module, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
+                        continue
+                    # Enable gradients for other parameters (Convs, Linear, etc)
+                    for param in module.parameters(recurse=False):
+                        param.requires_grad = True
 
     return model
 
-PHASE2_START_ROUND = 4  # Phase 1: R1-3, Phase 2: R4-6, Phase 3: R7-10
-PHASE3_START_ROUND = 7
+PHASE2_START_ROUND = 5  # Phase 1: R1-4
 
 def apply_freeze_strategy(model, model_type: str, server_round: int, total_rounds: int = 10):
-    """3-phase progressive unfreezing strategy.
-    Phase 1 (R1-3): Classifier head only — backbone frozen.
-    Phase 2 (R4-6): 25% of final backbone block unfrozen.
-    Phase 3 (R7+):  50% of final backbone block unfrozen (capped to prevent overfitting).
+    """2-phase progressive unfreezing strategy (Testing).
+    Phase 1 (R1-4): Classifier head only — backbone frozen.
+    Phase 2 (R5+): ~50% of final backbone block unfrozen (1 MBConv module).
     """
     from flwr.common import log
     from logging import INFO
@@ -451,16 +454,11 @@ def apply_freeze_strategy(model, model_type: str, server_round: int, total_round
         # Phase 1: Head Only Warm-up
         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         log(INFO, f"[Freeze] Round {server_round}/{total_rounds}: Stage 1 - Classifier only ({trainable_params:,} params)")
-    elif server_round < PHASE3_START_ROUND:
-        # Phase 2: 25% Backbone Refinement
-        model = unfreeze_fraction_of_last_block(model, model_type, fraction=0.25)
-        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        log(INFO, f"[Freeze] Round {server_round}/{total_rounds}: Stage 2 - 25% backbone block ({trainable_params:,} params)")
     else:
-        # Phase 3: 50% Backbone Refinement
+        # Phase 2: 50% Backbone Refinement
         model = unfreeze_fraction_of_last_block(model, model_type, fraction=0.50)
         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        log(INFO, f"[Freeze] Round {server_round}/{total_rounds}: Stage 3 - 50% backbone block ({trainable_params:,} params)")
+        log(INFO, f"[Freeze] Round {server_round}/{total_rounds}: Stage 2 - 50% backbone block ({trainable_params:,} params)")
 
     return model
 

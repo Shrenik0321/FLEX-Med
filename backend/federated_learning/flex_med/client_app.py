@@ -68,24 +68,20 @@ def train(msg: Message, context: Context):
     model = apply_freeze_strategy(model, model_type, server_round, total_rounds)
 
     # Discriminative learning rates — Phase transitions
-    from flex_med.utils.helpers import PHASE2_START_ROUND, PHASE3_START_ROUND
+    from flex_med.utils.helpers import PHASE2_START_ROUND
 
     phase = "INITIALIZING"
+
     if server_round < PHASE2_START_ROUND:
-        # Phase 1: Head Only Warm-up
+        # Phase 1: Classifier Head Only (R1-4)
         classifier_lr = base_lr
         backbone_lr = 0.0
-        phase = "PHASE 1 - Head Only Warm-up"
-    elif server_round < PHASE3_START_ROUND:
-        # Phase 2: 25% Backbone with Soft Refinement
+        phase = "PHASE 1 - Classifier Head Only (R1-4)"
+    else:
+        # Phase 2: 50% Backbone Refinement (R5+)
         classifier_lr = base_lr * 0.6
         backbone_lr = base_lr * 0.03
-        phase = "PHASE 2 - 25% Backbone (Soft Refinement)"
-    else:
-        # Phase 3: 50% Backbone with Moderate Refinement
-        classifier_lr = base_lr * 0.5
-        backbone_lr = base_lr * 0.02
-        phase = "PHASE 3 - 50% Backbone (Moderate Refinement)"
+        phase = "PHASE 2 - 50% Backbone Refinement (R5+)"
 
     print(f"[{display_id}] [Strategy] Round {server_round}/{total_rounds}: {phase}")
     print(f"[{display_id}] Round {server_round}/{total_rounds} ({progress:.0%})")
