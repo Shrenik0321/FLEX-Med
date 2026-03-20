@@ -384,7 +384,6 @@ def distill_knowledge(model, public_loader, consensus_logits, device, epochs, cl
     decay_rate = DISTILL_DECAY_RATE
     weight_decay = WEIGHT_DECAY
 
-    
     if adaptive and total_rounds > 1:
         progress = (current_round - 1) / (total_rounds - 1)
         adaptive_factor = np.exp(-decay_rate * progress)
