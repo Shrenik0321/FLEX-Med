@@ -454,13 +454,7 @@ function ConfusionMatrixCard({
   const { TP = 0, FN = 0, FP = 0, TN = 0 } = cm;
   const total = TP + FN + FP + TN;
 
-  const Cell = ({
-    value,
-    label,
-  }: {
-    value: number;
-    label: string;
-  }) => {
+  const Cell = ({ value, label }: { value: number; label: string }) => {
     const frac = total > 0 ? value / total : 0;
     // Standard red: hex #dc2626, rgb(220, 38, 38)
     const opacity = 0.04 + frac * 0.86;
@@ -474,8 +468,14 @@ function ConfusionMatrixCard({
         className={`rounded-lg border border-red-100/20 flex flex-col items-center justify-center gap-0.5 py-4 ${textColor} transition-colors duration-300 shadow-sm`}
         style={{ background: bg }}
       >
-        <span className="text-2xl font-bold tabular-nums tracking-tight">{value}</span>
-        <span className={`text-[10px] font-bold uppercase tracking-widest ${labelColor}`}>{label}</span>
+        <span className="text-2xl font-bold tabular-nums tracking-tight">
+          {value}
+        </span>
+        <span
+          className={`text-[10px] font-bold uppercase tracking-widest ${labelColor}`}
+        >
+          {label}
+        </span>
       </div>
     );
   };
@@ -741,19 +741,6 @@ export default function FLSimulationDetailsPage({
             ? vals.reduce((a, b) => a + b, 0) / vals.length
             : null;
         });
-      // balanced = avg of leukemia_acc and healthy_acc from validation
-      const avgBalanced = roundLabels.map((_, ri) => {
-        const vals: number[] = [];
-        clients.forEach((c) => {
-          const vr = clientMetricsMap.get(c.id)?.rounds?.[ri]?.validation;
-          if (vr?.leukemia_accuracy != null && vr?.healthy_accuracy != null) {
-            vals.push((vr.leukemia_accuracy + vr.healthy_accuracy) / 2);
-          }
-        });
-        return vals.length
-          ? vals.reduce((a, b) => a + b, 0) / vals.length
-          : null;
-      });
       return {
         labels: roundLabels,
         datasets: [
@@ -780,29 +767,12 @@ export default function FLSimulationDetailsPage({
             fill: false,
             spanGaps: true,
           },
-          {
-            label: "Balanced acc",
-            data: avgBalanced,
-            borderColor: BALANCED_COLOR,
-            backgroundColor: "rgba(217,119,6,0.05)",
-            tension: 0.35,
-            pointRadius: 3,
-            borderWidth: 1.5,
-            borderDash: [2, 3],
-            fill: false,
-            spanGaps: true,
-          },
         ],
       };
     }
     const cm = clientMetricsMap.get(parseInt(selectedClient));
     const rounds = cm?.rounds ?? [];
     const info = clients.find((c) => c.id === parseInt(selectedClient));
-    const balancedData = rounds.map((r) => {
-      const leuk = r.validation?.leukemia_accuracy;
-      const heal = r.validation?.healthy_accuracy;
-      return leuk != null && heal != null ? (leuk + heal) / 2 : null;
-    });
     return {
       labels: rounds.map((r) => `${r.round}`),
       datasets: [
@@ -829,18 +799,6 @@ export default function FLSimulationDetailsPage({
           fill: false,
           spanGaps: true,
         },
-        {
-          label: `${info?.client_name ?? "Client"} · balanced acc`,
-          data: balancedData,
-          borderColor: BALANCED_COLOR,
-          backgroundColor: "rgba(217,119,6,0.05)",
-          tension: 0.35,
-          pointRadius: 3,
-          borderWidth: 1.5,
-          borderDash: [2, 3],
-          fill: false,
-          spanGaps: true,
-        },
       ],
     };
   }, [clients, clientMetricsMap, roundLabels, selectedClient]);
@@ -854,79 +812,6 @@ export default function FLSimulationDetailsPage({
     );
     return smartYLimit(vals, 0.2, false, 0.05);
   }, [accChartData]);
-
-  // ---- Delta chart ----
-  /* const accDeltaChartData = useMemo(() => {
-    if (selectedClient === "all") {
-      const avgAccs = roundLabels.map((_, ri) => {
-        const vals: number[] = [];
-        clients.forEach((c) => {
-          const rd = clientMetricsMap.get(c.id)?.rounds?.[ri];
-          const v = rd?.validation?.accuracy ?? rd?.training?.train_accuracy;
-          if (v != null) vals.push(v);
-        });
-        return vals.length
-          ? vals.reduce((a, b) => a + b, 0) / vals.length
-          : null;
-      });
-      const deltas = avgAccs.slice(1).map((v, i) => {
-        const prev = avgAccs[i];
-        return v != null && prev != null ? v - prev : null;
-      });
-      return {
-        labels: roundLabels.slice(1),
-        datasets: [
-          {
-            label: "Δ accuracy",
-            data: deltas,
-            borderColor: VAL_COLOR,
-            backgroundColor: "rgba(29,78,216,0.05)",
-            tension: 0.35,
-            pointRadius: 3,
-            borderWidth: 2,
-            fill: true,
-            spanGaps: true,
-          },
-        ],
-      };
-    }
-    const cm = clientMetricsMap.get(parseInt(selectedClient));
-    const rounds = cm?.rounds ?? [];
-    const valAccs = rounds.map(
-      (r) => r.validation?.accuracy ?? r.training?.train_accuracy ?? null,
-    );
-    const deltas = valAccs.slice(1).map((v, i) => {
-      const prev = valAccs[i];
-      return v != null && prev != null ? v - prev : null;
-    });
-    const info = clients.find((c) => c.id === parseInt(selectedClient));
-    return {
-      labels: rounds.slice(1).map((r) => `${r.round}`),
-      datasets: [
-        {
-          label: `${info?.client_name ?? "Client"} · Δ`,
-          data: deltas,
-          borderColor: VAL_COLOR,
-          backgroundColor: "rgba(29,78,216,0.05)",
-          tension: 0.35,
-          pointRadius: 3,
-          borderWidth: 2,
-          fill: true,
-          spanGaps: true,
-        },
-      ],
-    };
-  }, [clients, clientMetricsMap, roundLabels, selectedClient]);
-
-  const deltaLimits = useMemo(() => {
-    const vals: number[] = [];
-    accDeltaChartData.datasets.forEach((ds) =>
-      ds.data.forEach((v) => {
-        if (v != null) vals.push(v as number);
-      }),
-    );
-    return smartYLimit(vals, 0.35, true, 0.05);
-  }, [accDeltaChartData]); */
 
   // ---- Data het chart ----
   const dataHetChart = useMemo(() => {
@@ -1034,20 +919,13 @@ export default function FLSimulationDetailsPage({
   // ---- Post-FL aggregates ----
   const postFlStats = useMemo(() => {
     const accs: number[] = [],
-      gaps: number[] = [],
-      balAccs: number[] = [];
+      gaps: number[] = [];
     let worst = { name: "", acc: 1 };
     clients.forEach((c) => {
       const pf = clientMetricsMap.get(c.id)?.global?.post_fl;
       if (!pf) return;
       accs.push(pf.accuracy);
       gaps.push(pf.class_gap ?? 0);
-      // balanced accuracy = avg of per-class accuracies
-      const leuk = pf.leukemia_accuracy ?? 0;
-      const heal = pf.healthy_accuracy ?? 0;
-      if (pf.leukemia_accuracy != null && pf.healthy_accuracy != null) {
-        balAccs.push((leuk + heal) / 2);
-      }
       if (pf.accuracy < worst.acc)
         worst = { name: c.client_name, acc: pf.accuracy };
     });
@@ -1056,7 +934,6 @@ export default function FLSimulationDetailsPage({
     return {
       avgAcc: avg(accs),
       avgGap: avg(gaps),
-      avgBalAcc: avg(balAccs),
       worst,
     };
   }, [clients, clientMetricsMap]);
@@ -1341,11 +1218,6 @@ export default function FLSimulationDetailsPage({
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
               <KpiCard label="Avg accuracy" value={pct(postFlStats.avgAcc)} />
               <KpiCard
-                label="Avg balanced acc"
-                value={pct(postFlStats.avgBalAcc)}
-                sub="Per-class avg"
-              />
-              <KpiCard
                 label="Avg class gap"
                 value={pct(postFlStats.avgGap)}
                 sub={gapSeverity(postFlStats.avgGap).label}
@@ -1380,7 +1252,6 @@ export default function FLSimulationDetailsPage({
                     {[
                       "Client",
                       "Accuracy",
-                      "Balanced acc",
                       "Class gap",
                       "Leukemia acc",
                       "Healthy acc",
@@ -1428,15 +1299,6 @@ export default function FLSimulationDetailsPage({
                         <td className="py-3.5 px-4 text-right font-semibold text-gray-900 tabular-nums">
                           {pct(pf.accuracy)}
                         </td>
-                        <td className="py-3.5 px-4 text-right tabular-nums text-amber-700 font-medium">
-                          {pf.leukemia_accuracy != null &&
-                          pf.healthy_accuracy != null
-                            ? pct(
-                                (pf.leukemia_accuracy + pf.healthy_accuracy) /
-                                  2,
-                              )
-                            : "—"}
-                        </td>
                         <td className="py-3.5 px-4 text-right">
                           <Tag className={sev.cls}>{pct(gap)}</Tag>
                         </td>
@@ -1477,21 +1339,6 @@ export default function FLSimulationDetailsPage({
               <KpiCard
                 label="Accuracy"
                 value={pct(selectedCM.global.post_fl.accuracy)}
-              />
-              <KpiCard
-                label="Balanced acc"
-                value={
-                  selectedCM.global.post_fl.leukemia_accuracy != null &&
-                  selectedCM.global.post_fl.healthy_accuracy != null
-                    ? pct(
-                        (selectedCM.global.post_fl.leukemia_accuracy +
-                          selectedCM.global.post_fl.healthy_accuracy) /
-                          2,
-                      )
-                    : "—"
-                }
-                sub="Per-class avg"
-                highlight="neutral"
               />
               <KpiCard
                 label="Class gap"
@@ -1660,12 +1507,6 @@ export default function FLSimulationDetailsPage({
                 options={lineOptions(accLimits, true, bestModelRound)}
               />
             </ChartCard>
-            {/* <ChartCard title="Accuracy delta" sub="Round-to-round change">
-              <Line
-                data={accDeltaChartData}
-                options={lineOptions(deltaLimits, true)}
-              />
-            </ChartCard> */}
           </div>
         </section>
       </div>
