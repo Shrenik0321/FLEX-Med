@@ -347,12 +347,6 @@ def test(model, testloader, device, return_detailed=False):
     specificity = healthy_acc
     class_gap = abs(healthy_acc - leukemia_acc)
 
-    try:
-        from sklearn.metrics import roc_auc_score
-        roc_auc = roc_auc_score(all_labels.numpy(), all_probs[:, 0].numpy())
-    except Exception:
-        roc_auc = (recall + specificity) / 2
-
     log(INFO, f"[EVAL] Overall: {accuracy:.1%} | Leukemia: {leukemia_acc:.1%} | Healthy: {healthy_acc:.1%} | Gap: {class_gap:.1%}")
     if class_gap > 0.3:
         log(WARNING, f"[EVAL] Class imbalance detected! Gap: {class_gap:.1%}")
@@ -362,7 +356,6 @@ def test(model, testloader, device, return_detailed=False):
             "loss": round(loss, 6), "accuracy": round(accuracy, 6),
             "precision": round(precision, 6), "recall": round(recall, 6),
             "f1_score": round(f1_score, 6), "specificity": round(specificity, 6),
-            "roc_auc": round(roc_auc, 6),
             "leukemia_accuracy": round(leukemia_acc, 6), "healthy_accuracy": round(healthy_acc, 6),
             "class_gap": round(class_gap, 6),
             "confusion_matrix": {"TP": TP, "FP": FP, "FN": FN, "TN": TN},
