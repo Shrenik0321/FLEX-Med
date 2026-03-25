@@ -333,18 +333,23 @@ def test(model, testloader, device, return_detailed=False):
     loss = total_loss / len(testloader) if len(testloader) > 0 else 0.0
     all_preds, all_labels, all_probs = torch.tensor(all_preds), torch.tensor(all_labels), torch.tensor(all_probs)
 
-    # Calculate confusion matrix
-    TP = ((all_preds == 0) & (all_labels == 0)).sum().item()
-    FP = ((all_preds == 0) & (all_labels == 1)).sum().item()
-    FN = ((all_preds == 1) & (all_labels == 0)).sum().item()
-    TN = ((all_preds == 1) & (all_labels == 1)).sum().item()
+    # Calculate confusion matrix (0 = Leukemia [Positive class], 1 = Healthy [Negative class])
+    TP = ((all_preds == 0) & (all_labels == 0)).sum().item()  # True Positive: Predicted Leukemia, Actual Leukemia
+    FP = ((all_preds == 0) & (all_labels == 1)).sum().item()  # False Positive: Predicted Leukemia, Actual Healthy
+    FN = ((all_preds == 1) & (all_labels == 0)).sum().item()  # False Negative: Predicted Healthy, Actual Leukemia
+    TN = ((all_preds == 1) & (all_labels == 1)).sum().item()  # True Negative: Predicted Healthy, Actual Healthy
 
-    leukemia_acc = TP / (TP + FN) if (TP + FN) > 0 else 0.0
-    healthy_acc = TN / (TN + FP) if (TN + FP) > 0 else 0.0
-    precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
-    recall = leukemia_acc
+    # Standard ML Metrics (Focusing on Leukemia detection)
+    recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0        # Also known as Sensitivity or True Positive Rate
+    specificity = TN / (TN + FP) if (TN + FP) > 0 else 0.0   # True Negative Rate
+    precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0     # Positive Predictive Value
+
+    # F1 Score: Harmonic mean of Precision and Recall
     f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
-    specificity = healthy_acc
+    
+    # Aliases for domain-specific logging and returning
+    leukemia_acc = recall
+    healthy_acc = specificity
     class_gap = abs(healthy_acc - leukemia_acc)
 
     log(INFO, f"[EVAL] Overall: {accuracy:.1%} | Leukemia: {leukemia_acc:.1%} | Healthy: {healthy_acc:.1%} | Gap: {class_gap:.1%}")
@@ -505,7 +510,7 @@ class FLEXMedStrategy(Strategy):
         self.total_rounds = 0
 
 # <----------------------------- HELPER METHODS ----------------------------->
-    # Evaluate all clients on their private validation sets
+    # Evaluate all clients on their private validation sets (pos class is class 0 (all) and healthy is class 1)
     def evaluate_all_clients_on_validation(self, device: torch.device) -> Dict:
         """Evaluate all clients on their private validation sets."""
         from sklearn.metrics import precision_recall_fscore_support
@@ -538,7 +543,7 @@ class FLEXMedStrategy(Strategy):
                 all_preds, all_labels = np.array(all_preds), np.array(all_labels)
                 accuracy = (all_preds == all_labels).mean()
                 loss = total_loss / len(all_labels)
-                precision, recall, f1, _ = precision_recall_fscore_support(all_labels, all_preds, average='binary', zero_division=0)
+                precision, recall, f1, _ = precision_recall_fscore_support(all_labels, all_preds, average='binary', pos_label=0, zero_division=0)
 
                 leukemia_mask, healthy_mask = (all_labels == 0), (all_labels == 1)
                 leukemia_acc = (all_preds[leukemia_mask] == all_labels[leukemia_mask]).mean() if leukemia_mask.any() else 0
