@@ -53,8 +53,6 @@ RUN_SIMULATION_SHELL_FILE_PATH = str(_settings.run_simulation_shell_file_path)
 TRAIN_LOSS_WEIGHT = _settings.train_loss_weight
 DISTILL_LOSS_WEIGHT = _settings.distill_loss_weight
 
-CONSENSUS_MOMENTUM = _settings.consensus_momentum
-
 # Dirichlet partitioning (runtime data heterogeneity)
 DIRICHLET_ALPHA = _settings.dirichlet_alpha
 DIRICHLET_SEED = _settings.dirichlet_seed

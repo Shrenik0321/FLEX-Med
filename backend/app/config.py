@@ -184,7 +184,6 @@ class Settings(BaseSettings):
     # FL Model Parameters
     num_classes: int = 2
     img_size: int = 256
-    consensus_momentum: float = float(os.getenv("FLEX_MED_CONSENSUS_MOMENTUM", "0.35"))
     train_loss_weight: float = float(os.getenv("FLEX_MED_TRAIN_LOSS_WEIGHT", "0.72"))
     distill_loss_weight: float = float(os.getenv("FLEX_MED_DISTILL_LOSS_WEIGHT", "0.28"))
 

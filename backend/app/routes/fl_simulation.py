@@ -104,7 +104,6 @@ async def start_fl(
         "minority_boost": system_config.get("minority_boost", 0.78),
         "focal_alpha": system_config.get("focal_alpha", 0.50),
         "focal_gamma": system_config.get("focal_gamma", 2.0),
-        "consensus_momentum": system_config.get("consensus_momentum", 0.35),
         "distill_weight_base": system_config.get("distill_weight_base", 0.80),
         "distill_decay_rate": system_config.get("distill_decay_rate", 0.18),
         "train_loss_weight": system_config.get("train_loss_weight", 0.72),

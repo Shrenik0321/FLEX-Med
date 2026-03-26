@@ -1109,15 +1109,6 @@ export default function FLSimulationDetailsPage({
                       ),
                     ],
                     [
-                      "Consensus momentum",
-                      String(
-                        simulation.configs.consensus_momentum ??
-                          simulation.configs.training_config
-                            ?.consensus_momentum ??
-                          "—",
-                      ),
-                    ],
-                    [
                       "Focal γ",
                       String(
                         simulation.configs.focal_gamma ??
