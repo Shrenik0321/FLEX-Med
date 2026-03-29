@@ -59,8 +59,6 @@ DIRICHLET_SEED = _settings.dirichlet_seed
 DIRICHLET_MIN_PARTITION_SIZE = _settings.dirichlet_min_partition_size
 
 # Per-architecture Focal Loss configuration
-FOCAL_ALPHA_DEFAULT = _settings.focal_alpha_default
-FOCAL_GAMMA = _settings.focal_gamma
 MINORITY_BOOST = _settings.minority_boost
 
 # Knowledge distillation configuration (for extreme heterogeneity)

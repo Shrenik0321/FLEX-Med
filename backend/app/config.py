@@ -187,11 +187,6 @@ class Settings(BaseSettings):
     train_loss_weight: float = float(os.getenv("FLEX_MED_TRAIN_LOSS_WEIGHT", "0.72"))
     distill_loss_weight: float = float(os.getenv("FLEX_MED_DISTILL_LOSS_WEIGHT", "0.28"))
 
-    # Per-architecture Focal Loss alpha is now computed dynamically per client
-    # fohcal_alpha_per_arch removed in favor of data-driven approach
-    focal_alpha_default: float = float(os.getenv("FLEX_MED_FOCAL_ALPHA", "0.50"))
-    focal_gamma: float = float(os.getenv("FLEX_MED_FOCAL_GAMMA", "2.0"))
-
     # Minority Class Boost (for Focal Loss clamping/adjustment)
     minority_boost: float = float(os.getenv("FLEX_MED_MINORITY_BOOST", "0.90"))
 
