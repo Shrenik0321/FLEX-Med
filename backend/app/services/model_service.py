@@ -7,16 +7,46 @@ from PIL import Image
 
 from app.config import Settings, get_settings
 
-# Make the local FL package importable (lives in ../federated_learning)
-BACKEND_ROOT = Path(__file__).resolve().parents[2]
-FED_LEARNING_PATH = BACKEND_ROOT / "federated_learning"
-if FED_LEARNING_PATH.exists():
-    sys.path.append(str(FED_LEARNING_PATH))
+import torchvision.models as models
+import torch.nn as nn
+from torchvision import transforms
 
-from flex_med.task import (  # type: ignore  # added to sys.path above
-    COMMON_TRANSFORM,
-    get_model_by_type,
-)
+IMG_SIZE = 256
+COMMON_TRANSFORM = transforms.Compose([
+    transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
+
+def get_initial_dropout_rate(model_type: str) -> float:
+    rates = {
+        "efficientnet_b0": 0.40,
+        "efficientnet_b1": 0.40,
+        "efficientnet_b2": 0.45,
+    }
+    return rates.get(model_type.lower(), 0.30)
+
+def get_model_by_type(model_type: str, num_classes: int = 2):
+    model_type = model_type.lower()
+    
+    if model_type == "efficientnet_b0":
+        model = models.efficientnet_b0(weights=models.EfficientNet_B0_Weights.DEFAULT)
+    elif model_type == "efficientnet_b1":
+        model = models.efficientnet_b1(weights=models.EfficientNet_B1_Weights.DEFAULT)
+    elif model_type == "efficientnet_b2":
+        model = models.efficientnet_b2(weights=models.EfficientNet_B2_Weights.DEFAULT)
+    else:
+        raise ValueError(f"Unsupported model type: {model_type}")
+
+    # Replace classifier head for binary classification with dropout
+    in_features = model.classifier[1].in_features
+    dropout = get_initial_dropout_rate(model_type)
+    model.classifier[1] = nn.Sequential(
+        nn.Dropout(p=dropout),
+        nn.Linear(in_features, num_classes),
+    )
+    
+    return model
 
 MODEL_CACHE: Dict[str, "ModelBundle"] = {}
 
@@ -133,14 +163,13 @@ def load_model(settings: Settings, model_path: Optional[Path] = None) -> ModelBu
     state_dict = adapt_state_dict(model, state_dict, model_name)
 
     try:
-        model.load_state_dict(state_dict)
+        model.load_state_dict(state_dict, strict=True)
     except RuntimeError as e:
-        # If strict loading fails, try non-strict but warn
         print(f"[Model Service] Strict loading failed for {model_name}: {e}")
-        print(f"[Model Service] Retrying with strict=False...")
-        keys = model.load_state_dict(state_dict, strict=False)
-        print(f"[Model Service] Missing keys: {keys.missing_keys}")
-        print(f"[Model Service] Unexpected keys: {keys.unexpected_keys}")
+        raise RuntimeError(
+            f"Checkpoint mismatch for {model_name}. The saved weights do not match the "
+            f"expected architecture. Ensure the model type matches the checkpoint."
+        ) from e
 
     model.eval()
     model.to(device)

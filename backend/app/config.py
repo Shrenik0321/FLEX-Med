@@ -76,22 +76,6 @@ class Settings(BaseSettings):
             self.base_path = self._default_base_path
 
     # ------------------------------------------------------------------------
-    # Federated Learning Directory Structure
-    # ------------------------------------------------------------------------
-    fl_dir: Path = backend_root / "federated_learning"
-    project_dir: Path = fl_dir
-
-    # Logs
-    simulation_log_path: Path = fl_dir / "flex_med" / "utils" / "simulation_run.log"
-
-    # Data & Config Files
-    client_info_file_path: Path = fl_dir / "flex_med" / "utils" / "client_data.json"
-    pyproject_path: Path = fl_dir / "pyproject.toml"
-
-    # Simulation Runner
-    run_simulation_shell_file_path: Path = fl_dir / "flex_med" / "utils" / "run_simulation.sh"
-
-    # ------------------------------------------------------------------------
     # Datasets (with environment variable overrides)
     # ------------------------------------------------------------------------
     @property
@@ -187,7 +171,7 @@ class Settings(BaseSettings):
     train_loss_weight: float = float(os.getenv("FLEX_MED_TRAIN_LOSS_WEIGHT", "0.72"))
     distill_loss_weight: float = float(os.getenv("FLEX_MED_DISTILL_LOSS_WEIGHT", "0.28"))
 
-    # Minority Class Boost (for Focal Loss clamping/adjustment)
+    # Minority Class Boost
     minority_boost: float = float(os.getenv("FLEX_MED_MINORITY_BOOST", "0.90"))
 
     # Knowledge distillation configuration

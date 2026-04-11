@@ -71,6 +71,16 @@ async def inference(
         try:
             label, confidence, class_idx, all_probs = bundle.predict(image)
             logger.info(f"Prediction: {label} ({confidence:.4f})")
+            
+            # 3.5 Generate Grad-CAM explanation
+            try:
+                from app.services.xai_service import generate_gradcam
+                gradcam_base64 = generate_gradcam(bundle.model, image, bundle.model_name, bundle.device)
+                logger.info("Grad-CAM generated successfully.")
+            except Exception as xai_e:
+                logger.warning(f"Grad-CAM generation failed: {xai_e}")
+                gradcam_base64 = None
+
         except Exception as e:
             logger.error(f"Prediction failed: {e}")
             raise HTTPException(
@@ -86,6 +96,7 @@ async def inference(
                 "confidence": confidence,
                 "class": class_idx,
                 "all_probabilities": all_probs,
+                "gradcam_image": gradcam_base64,
                 "client_id": client_id,
                 "model": bundle.model_name,
                 "model_path": str(client_model_path),

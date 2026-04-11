@@ -69,9 +69,9 @@ CREATE INDEX idx_clients_model_type ON clients(model_type);
 --   partition 2 (2288 samples, 3.1:1 ratio) → B1 (mid-capacity model on smallest dataset)
 -- NOTE: fl_simulation.py fetches clients with no ORDER BY — relies on insertion order (id ASC).
 INSERT INTO clients (client_name, model_type, model_path, status) VALUES
-    ('Asiri',  'efficientnet_b0', '/content/drive/MyDrive/College/FLEX-Med/backend/federated_learning/models/Asiri-b0.pt',  'Active'),
-    ('Lanka',  'efficientnet_b2', '/content/drive/MyDrive/College/FLEX-Med/backend/federated_learning/models/Lanka-b2.pt',  'Active'),
-    ('Delmon', 'efficientnet_b1', '/content/drive/MyDrive/College/FLEX-Med/backend/federated_learning/models/Delmon-b1.pt', 'Active');
+    ('Asiri',  'efficientnet_b0', '/content/drive/MyDrive/College/FLEX-Med/federated_learning/models/Asiri-b0.pt',  'Active'),
+    ('Lanka',  'efficientnet_b2', '/content/drive/MyDrive/College/FLEX-Med/federated_learning/models/Lanka-b2.pt',  'Active'),
+    ('Delmon', 'efficientnet_b1', '/content/drive/MyDrive/College/FLEX-Med/federated_learning/models/Delmon-b1.pt', 'Active');
 
 -- ------------------------------------------
 -- fl_simulations TABLE
@@ -218,9 +218,9 @@ INSERT INTO system_config (config) VALUES ('{
     "temperature": 3.0,
     "dirichlet_seed": 42,
     "dirichlet_min_partition_size": 400,
-    "public_anchor_dataset_path": "/content/drive/MyDrive/College/FLEX-Med/backend/datasets/cnmc/cnmc_public_anchor",
-    "public_test_dataset_path": "/content/drive/MyDrive/College/FLEX-Med/backend/datasets/cnmc/cnmc_public_test",
-    "local_train_dataset_path": "/content/drive/MyDrive/College/FLEX-Med/backend/datasets/cnmc/cnmc_local_train",
+    "public_anchor_dataset_path": "/content/drive/MyDrive/College/FLEX-Med/datasets/cnmc/cnmc_public_anchor",
+    "public_test_dataset_path": "/content/drive/MyDrive/College/FLEX-Med/datasets/cnmc/cnmc_public_test",
+    "local_train_dataset_path": "/content/drive/MyDrive/College/FLEX-Med/datasets/cnmc/cnmc_local_train",
     "ngrok_url": "https://intraspinal-agape-deidra.ngrok-free.dev"
 }'::jsonb);
 

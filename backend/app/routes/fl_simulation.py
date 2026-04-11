@@ -94,6 +94,9 @@ async def start_fl(
         "distill_epochs": system_config.get("distill_epochs", 1),
         "temperature": system_config.get("temperature", 4.0),
         "batch_size": system_config.get("batch_size", 32),
+        # Centralized baseline: trains each client independently (no FL) before Round 1
+        # Set to true in system_config when you want a baseline comparison stored in DB
+        "run_centralized_baseline": bool(system_config.get("run_centralized_baseline", False)),
     }
 
     # Build training strategy config
@@ -102,8 +105,6 @@ async def start_fl(
         "dirichlet_seed": system_config.get("dirichlet_seed", 42),
         "dirichlet_min_partition_size": system_config.get("dirichlet_min_partition_size", 400),
         "minority_boost": system_config.get("minority_boost", 0.78),
-        "focal_alpha": system_config.get("focal_alpha", 0.50),
-        "focal_gamma": system_config.get("focal_gamma", 2.0),
         "distill_weight_base": system_config.get("distill_weight_base", 0.80),
         "distill_decay_rate": system_config.get("distill_decay_rate", 0.18),
         "train_loss_weight": system_config.get("train_loss_weight", 0.72),

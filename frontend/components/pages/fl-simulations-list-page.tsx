@@ -7,7 +7,6 @@ import { API_BASE_PATH } from "@/utils";
 import {
   FLSimulation,
   parseMetrics,
-  formatDuration,
   formatDateTime,
 } from "@/types/fl-simulation";
 import { Loading } from "../ui/loading";
@@ -101,6 +100,45 @@ function StatusTag({ status }: { status: string }) {
   );
 }
 
+const tagPill =
+  "inline-flex items-center justify-center min-w-[2.25rem] px-2 py-0.5 rounded-md text-xs font-semibold border tabular-nums";
+
+function alphaHighlightClass(alpha: number): string | null {
+  if (Math.abs(alpha - 0.5) < 1e-6) {
+    return "text-violet-700 bg-violet-50 border-violet-200";
+  }
+  if (Math.abs(alpha - 1.0) < 1e-6) {
+    return "text-teal-700 bg-teal-50 border-teal-200";
+  }
+  if (Math.abs(alpha - 1.5) < 1e-6) {
+    return "text-orange-700 bg-orange-50 border-orange-200";
+  }
+  return null;
+}
+
+function AlphaTag({ alpha }: { alpha: number }) {
+  const cls = alphaHighlightClass(alpha);
+  const label = String(alpha);
+  if (cls) {
+    return <span className={`${tagPill} ${cls}`}>{label}</span>;
+  }
+  return <span className="text-gray-600 tabular-nums">{label}</span>;
+}
+
+const SEED_STYLES: Record<number, string> = {
+  7: "text-sky-700 bg-sky-50 border-sky-200",
+  42: "text-indigo-700 bg-indigo-50 border-indigo-200",
+  123: "text-fuchsia-700 bg-fuchsia-50 border-fuchsia-200",
+};
+
+function SeedTag({ seed }: { seed: number }) {
+  const cls = SEED_STYLES[seed];
+  if (cls) {
+    return <span className={`${tagPill} ${cls}`}>{seed}</span>;
+  }
+  return <span className="text-gray-500 tabular-nums">{seed}</span>;
+}
+
 export default function FLHistoryPage({
   onStartClick,
   onSelectSimulation,
@@ -153,18 +191,22 @@ export default function FLHistoryPage({
                   {[
                     "ID",
                     "Status",
-                    "α",
+                    "Alpha",
+                    "Seed",
                     "Rounds",
                     "Clients",
                     "Avg Accuracy",
-                    "Duration",
                     "Started",
                     "",
                   ].map((h) => (
                     <th
                       key={h}
                       className={`py-3 px-4 font-semibold uppercase tracking-wider text-xs text-gray-400 ${
-                        h === "ID" || h === "Status" ? "text-left" : h === "" ? "text-right" : "text-right"
+                        h === "ID" || h === "Status"
+                          ? "text-left"
+                          : h === ""
+                            ? "text-right"
+                            : "text-right"
                       }`}
                     >
                       {h}
@@ -175,10 +217,11 @@ export default function FLHistoryPage({
               <tbody>
                 {simulations.map((simulation) => {
                   const metrics = parseMetrics(simulation.aggregate_metrics);
-                  const avgAccuracy =
-                    metrics?.aggregate?.post_fl?.avg_accuracy;
+                  const avgAccuracy = metrics?.aggregate?.post_fl?.avg_accuracy;
                   const numClients = metrics?.total_clients || 0;
                   const alpha = simulation.configs?.dirichlet_alpha;
+                  const seed =
+                    simulation.configs?.training_config?.dirichlet_seed;
 
                   return (
                     <tr
@@ -192,8 +235,19 @@ export default function FLHistoryPage({
                       <td className="py-3.5 px-4">
                         <StatusTag status={simulation.status} />
                       </td>
-                      <td className="py-3.5 px-4 text-right tabular-nums text-gray-600">
-                        {alpha != null ? alpha : <span className="text-gray-300">—</span>}
+                      <td className="py-3.5 px-4 text-right">
+                        {alpha != null ? (
+                          <AlphaTag alpha={Number(alpha)} />
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        {seed != null ? (
+                          <SeedTag seed={Number(seed)} />
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-right tabular-nums text-gray-600">
                         {metrics?.total_rounds_completed ?? (
@@ -210,17 +264,12 @@ export default function FLHistoryPage({
                           <span className="text-gray-300">—</span>
                         )}
                       </td>
-                      <td className="py-3.5 px-4 text-right tabular-nums text-gray-500">
-                        {simulation.duration
-                          ? formatDuration(simulation.duration)
-                          : simulation.started_at
-                            ? "In progress…"
-                            : <span className="text-gray-300">—</span>}
-                      </td>
                       <td className="py-3.5 px-4 text-right tabular-nums text-gray-400">
-                        {simulation.started_at
-                          ? formatDateTime(simulation.started_at)
-                          : <span className="text-gray-300">—</span>}
+                        {simulation.started_at ? (
+                          formatDateTime(simulation.started_at)
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <ActionDropdown

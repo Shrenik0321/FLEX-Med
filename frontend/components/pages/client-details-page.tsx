@@ -21,16 +21,12 @@ export default function ClientDetailsPage({ client }: ClientDetailsPageProps) {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isRunningInference, setIsRunningInference] = useState(false);
   const [inferenceResult, setInferenceResult] = useState<any>(null);
-  const [gradcamImage, setGradcamImage] = useState<string | null>(null);
-  const [limeImage, setLimeImage] = useState<string | null>(null);
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setSelectedImage(file);
       setInferenceResult(null);
-      setGradcamImage(null);
-      setLimeImage(null);
       const reader = new FileReader();
       reader.onloadend = () => setImagePreview(reader.result as string);
       reader.readAsDataURL(file);
@@ -57,13 +53,6 @@ export default function ClientDetailsPage({ client }: ClientDetailsPageProps) {
       if (!response.ok) throw new Error("Inference failed");
 
       const result = await response.json();
-
-      if (result?.xai?.gradcam?.image_base64) {
-        setGradcamImage(`data:image/png;base64,${result.xai.gradcam.image_base64}`);
-      }
-      if (result?.xai?.lime?.image_base64) {
-        setLimeImage(`data:image/png;base64,${result.xai.lime.image_base64}`);
-      }
 
       setInferenceResult(result);
       toast.success("Inference completed successfully");
@@ -228,54 +217,17 @@ export default function ClientDetailsPage({ client }: ClientDetailsPageProps) {
                 </div>
               )}
 
-              {/* XAI Visualizations */}
-              {(gradcamImage || limeImage) && (
+              {inferenceResult.gradcam_image && (
                 <div className="rounded-xl border border-gray-100 bg-white p-5">
-                  <div className="flex items-center justify-between mb-5">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-gray-500">
-                      Explainability Modules
-                    </p>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border text-gray-600 bg-gray-50 border-gray-200">
-                      Model Reasoning
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    {gradcamImage && (
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium text-gray-700">
-                          Grad-CAM Heatmap
-                        </p>
-                        <div className="rounded-lg overflow-hidden border border-gray-100">
-                          <img
-                            src={gradcamImage}
-                            alt="Grad-CAM"
-                            className="w-full h-auto"
-                          />
-                        </div>
-                        <p className="text-xs text-gray-500 leading-relaxed">
-                          Visualizes regions with strongest gradient influence on
-                          the model's prediction.
-                        </p>
-                      </div>
-                    )}
-                    {limeImage && (
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium text-gray-700">
-                          LIME Local Features
-                        </p>
-                        <div className="rounded-lg overflow-hidden border border-gray-100">
-                          <img
-                            src={limeImage}
-                            alt="LIME"
-                            className="w-full h-auto"
-                          />
-                        </div>
-                        <p className="text-xs text-gray-500 leading-relaxed">
-                          Highlights superpixels contributing to the local
-                          classification via perturbation analysis.
-                        </p>
-                      </div>
-                    )}
+                  <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-3">
+                    Grad-CAM Explanation
+                  </p>
+                  <div className="rounded-lg overflow-hidden border border-gray-100 bg-gray-50 flex justify-center">
+                    <img
+                      src={`data:image/jpeg;base64,${inferenceResult.gradcam_image}`}
+                      alt="Grad-CAM Heatmap"
+                      className="w-full h-auto object-contain max-h-64"
+                    />
                   </div>
                 </div>
               )}
