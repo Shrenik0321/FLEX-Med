@@ -10,5 +10,6 @@ supabase
 pydantic-settings==2.6.1
 scikit-image==0.24.0
 python-dotenv==1.0.0
+requests
 grad-cam
 opencv-python-headless
